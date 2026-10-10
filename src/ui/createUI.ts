@@ -300,6 +300,8 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       lastFrame = frame;
       const paused = !!frame.paused;
       timeline.update(frame.timeline, { paused, previewTick: frame.previewTick ?? null });
+      // Timeline inspect / temporal preview: tutorial + hint cards step aside so the whole chamber reads.
+      hudLayer.classList.toggle('rx-inspecting', timeline.expanded || frame.previewTick != null);
       hud.update(frame, keybinds, settings.echoPalette, timeline.height);
       const dt = frame.dt ?? 0;
       const live = !paused && frame.state.status === 'playing' && ui.screen === null;

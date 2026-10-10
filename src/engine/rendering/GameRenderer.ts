@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { unitsToWorld, type ActorView, type EntityView, type LevelDefinition, type SimEvent, type SimView } from '../contracts';
+import { unitsToWorld, type ActorView, type EntityView, type LevelDefinition, type SimEvent, type SimView, type Timeline } from '../contracts';
 import { ActorVisual } from '../../graphics/animation/actorVisual';
+import { EchoIntentLayer } from '../../graphics/effects/echoIntents';
 import { createAmbientMotes } from '../../graphics/effects/particles';
 import { VfxSystem } from '../../graphics/effects/vfx';
 import { buildBackdrop, type Backdrop } from '../../graphics/environment/backdrop';
@@ -33,6 +34,16 @@ export interface GameRenderer {
   getQuality(): QualityLevel;
   setCameraMode(mode: CameraMode): void;
   getCameraMode(): CameraMode;
+  /**
+   * Screen framing (eased): `lift` raises the subject by a fraction of the viewport height so UI docked at the
+   * bottom never covers it, `shift` moves it right by a fraction of the width, `zoom` scales the follow distance.
+   */
+  setFraming(f: { lift?: number; shift?: number; zoom?: number }): void;
+  /**
+   * Timeline for the in-world echo intent badges (which echo will use which object, and when). Pass the current
+   * TemporalGame.getTimeline() each frame, or null to hide them (menus, attract mode).
+   */
+  setTimeline(timeline: Timeline | null): void;
   /** Plays the level-intro fly-in (also triggered automatically by setLevel unless disabled). */
   playIntro(): void;
   /** Camera yaw in 45° steps for `InputSampler.yawStep` (W = screen-up). */
@@ -70,6 +81,8 @@ class GameRendererImpl implements GameRenderer {
   private readonly levelRoot = new THREE.Group();
   private readonly actorRoot = new THREE.Group();
   private readonly fxRoot = new THREE.Group();
+  private readonly intents = new EchoIntentLayer();
+  private levelId = '';
   private readonly key: THREE.DirectionalLight;
   private readonly rim: THREE.DirectionalLight;
   private readonly hemi: THREE.HemisphereLight;
@@ -113,7 +126,7 @@ class GameRendererImpl implements GameRenderer {
     this.renderer.toneMappingExposure = 0.9;
     this.renderer.info.autoReset = false;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.domElement = this.renderer.domElement;
     this.domElement.style.display = 'block';
     this.domElement.style.width = '100%';
@@ -138,7 +151,7 @@ class GameRendererImpl implements GameRenderer {
     this.key.shadow.radius = 3;
     this.rim = new THREE.DirectionalLight(0x5fb6ff, 1.1);
     this.scene.add(this.hemi, this.key, this.key.target, this.rim, this.rim.target);
-    this.scene.add(this.levelRoot, this.actorRoot, this.fxRoot);
+    this.scene.add(this.levelRoot, this.actorRoot, this.fxRoot, this.intents.group);
 
     this.vfx = new VfxSystem(this.lib.sprite, this.q);
     this.wireVfx();
@@ -165,6 +178,7 @@ class GameRendererImpl implements GameRenderer {
   setLevel(level: LevelDefinition, initialState?: SimView): void {
     this.clearLevel();
     this.level = level;
+    this.levelId = level.id;
     const kit = buildKit(level, this.lib);
     this.kit = kit;
     this.levelRoot.add(kit.group);
@@ -329,6 +343,7 @@ class GameRendererImpl implements GameRenderer {
       this.hasFocus = true;
     }
     this.rig.update(dt, focus, this.focusVel);
+    this.intents.update(state, this.levelId, this.rig.camera, this.time);
 
     // grade uniforms
     const u = this.post.grade.uniforms;
@@ -457,6 +472,16 @@ class GameRendererImpl implements GameRenderer {
     else this.rig.mode = mode;
   }
 
+  setTimeline(timeline: Timeline | null): void {
+    this.intents.setTimeline(timeline);
+  }
+
+  setFraming(f: { lift?: number; shift?: number; zoom?: number }): void {
+    this.rig.viewLift = Math.min(0.3, Math.max(0, f.lift ?? 0));
+    this.rig.viewShift = Math.min(0.3, Math.max(-0.3, f.shift ?? 0));
+    this.rig.framingZoom = Math.min(2, Math.max(0.5, f.zoom ?? 1));
+  }
+
   getCameraMode(): CameraMode {
     return this.rig.mode;
   }
@@ -486,6 +511,7 @@ class GameRendererImpl implements GameRenderer {
     window.removeEventListener('resize', this.onResize);
     this.clearLevel();
     this.vfx.dispose();
+    this.intents.dispose();
     this.post.dispose();
     this.lib.dispose();
     this.envTex.dispose();

@@ -150,6 +150,19 @@ describe('time formatting and ruler', () => {
 });
 
 describe('track models', () => {
+  it('labels nested-loop copies apart from their echo and offsets them to their start tick', () => {
+    const tl = fakeTimeline();
+    const copy: TimelineTrack = { ...tl.tracks.find((t) => t.actorId === 'echo:2')!, actorId: 'echo:2.1' as TimelineTrack['actorId'], recursion: 1, startTick: 200, planned: [], actual: [], divergences: [] };
+    const tracks = buildTrackModels({ ...tl, currentTick: 260, tracks: [...tl.tracks, copy] });
+    const c = tracks.find((t) => t.key === 'echo:2.1')!;
+    expect(c.recursion).toBe(1);
+    expect(c.startTick).toBe(200);
+    expect(c.playedTicks).toBe(60);
+    // the copy sorts right after its echo
+    const keys = tracks.map((t) => t.key);
+    expect(keys.indexOf('echo:2.1')).toBe(keys.indexOf('echo:2') + 1);
+  });
+
   it('orders player first then echoes by index and derives marker states', () => {
     const tl = fakeTimeline();
     const tracks = buildTrackModels(tl, { hidden: new Set([4]), selectedEcho: 0 });

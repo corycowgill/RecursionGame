@@ -34,7 +34,8 @@ export function solutionFor(level: LevelDefinition): { echoes: TemporalLoop[]; f
  */
 export function withoutHiddenEchoes(view: SimView, hidden: ReadonlySet<string>): SimView {
   if (hidden.size === 0) return view;
-  return { ...view, actors: view.actors.filter((a) => !hidden.has(a.id)) } as SimView;
+  // nested-loop copies (`echo:<loop>.<k>`) hide with the echo they replay
+  return { ...view, actors: view.actors.filter((a) => !hidden.has(a.id) && !hidden.has(a.id.replace(/\.\d+$/, ''))) } as SimView;
 }
 
 /**

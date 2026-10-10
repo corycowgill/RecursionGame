@@ -333,8 +333,9 @@ export class TimelinePanel {
       const cls = `${t.visible ? '' : ' hidden-track'}${t.selected ? ' selected' : ''}`;
       labels.push(this.renderLabel(t, cls));
       const lane = h('div', { class: `rx-tl-lane${cls}`, style: `--c:${t.style.color};--soft:${t.style.soft}`, 'data-track': t.key });
-      const spanW = t.kind === 'player' ? contentFrac(t.durationTicks, max) : contentFrac(t.durationTicks, max);
-      const span = h('div', { class: 'rx-tl-span', style: `left:0;width:${(spanW * 100).toFixed(3)}%` });
+      const spanW = contentFrac(t.durationTicks, max);
+      const spanL = contentFrac(t.startTick, max);
+      const span = h('div', { class: `rx-tl-span${t.recursion ? ' copy' : ''}`, style: `left:${(spanL * 100).toFixed(3)}%;width:${(spanW * 100).toFixed(3)}%` });
       const played = h('div', { class: 'played' });
       span.append(played);
       if (t.kind === 'echo') span.append(h('i', { class: 'end' }));
@@ -376,7 +377,8 @@ export class TimelinePanel {
         : t.finishedAtTick !== null
           ? 'Idle'
           : 'Replay';
-    const name = isEcho ? `Echo ${t.echoIndex + 1}` : 'Player';
+    // Nested-loop copies replay the same recording later: "Echo 1 ↻2" (second body of echo 1).
+    const name = isEcho ? `Echo ${t.echoIndex + 1}${t.recursion ? ` \u21bb${t.recursion + 1}` : ''}` : 'Player';
     const label = h(
       'div',
       { class: `rx-tl-label${cls}`, style: `--c:${t.style.color}` },
@@ -387,7 +389,7 @@ export class TimelinePanel {
         html: `${esc(name)}<small style="${status === 'Paradox' ? 'color:var(--rx-coral)' : ''}">${status === 'Paradox' ? '! ' : ''}${status}</small>`,
       }),
     );
-    if (isEcho && this.expanded) {
+    if (isEcho && this.expanded && !t.recursion) {
       const idx = t.echoIndex;
       const loopId = t.loopId;
       const eye = h('button', {

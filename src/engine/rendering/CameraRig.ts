@@ -40,6 +40,15 @@ export class CameraRig {
   pitch = THREE.MathUtils.degToRad(43);
   baseDistance = 26;
   zoom = 1;
+  /**
+   * Fraction of the viewport height the framing is lifted by (screen-space, via a projection view offset) so the
+   * subject sits centred in the area left above the docked timeline. The app sets it from the timeline state.
+   */
+  viewLift = 0;
+  /** Horizontal framing shift as a fraction of the viewport width (positive moves the subject right). */
+  viewShift = 0;
+  /** Framing distance multiplier set by the app (e.g. a wider main-menu shot); multiplies the user's wheel zoom. */
+  framingZoom = 1;
 
   private readonly tx = new Damped(0, 0.32);
   private readonly ty = new Damped(0, 0.4);
@@ -47,6 +56,8 @@ export class CameraRig {
   private readonly dist = new Damped(26, 0.45);
   private readonly yawD = new Damped(0, 0.5);
   private readonly pitchD = new Damped(0, 0.5);
+  private readonly liftD = new Damped(0, 0.35);
+  private readonly shiftD = new Damped(0, 0.35);
   private readonly levelCentre = new THREE.Vector3();
   private levelRadius = 10;
   private introT = 1;
@@ -83,7 +94,8 @@ export class CameraRig {
     this.levelCentre.copy(centre);
     this.levelRadius = radius;
     this.yawStep = opts.yawStep ?? 0;
-    this.baseDistance = THREE.MathUtils.clamp(radius * 1.3, 16, 36) * (opts.zoom ?? 1);
+    // Close enough that the 1.8 m characters read as silhouettes (concept framing); wheel zoom widens it.
+    this.baseDistance = THREE.MathUtils.clamp(radius * 1.0, 15, 25) * (opts.zoom ?? 1);
     this.tx.snap(centre.x);
     this.ty.snap(centre.y);
     this.tz.snap(centre.z);
@@ -96,8 +108,13 @@ export class CameraRig {
   private overviewDistance(): number {
     const vfov = THREE.MathUtils.degToRad(this.camera.fov);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
-    const fit = Math.min(vfov, hfov);
-    return (this.levelRadius * 1.08) / Math.sin(fit / 2);
+    // The chamber is a flat footprint seen from above at `pitch`: its screen height is foreshortened by sin(pitch)
+    // (plus wall height). The lifted framing leaves (1 - 2·lift) of the height free above the docked timeline.
+    const free = Math.max(0.5, 1 - 2 * this.viewLift);
+    const pitch = this.pitch + THREE.MathUtils.degToRad(8);
+    const vertical = (this.levelRadius * Math.sin(pitch) + 2) / Math.sin((vfov * free) / 2);
+    const horizontal = this.levelRadius / Math.sin(hfov / 2);
+    return Math.max(vertical, horizontal) * 1.06;
   }
 
   playIntro(): void {
@@ -140,7 +157,7 @@ export class CameraRig {
           target = this.tmp.copy(this.blendFocus(focus)).add(this.lead);
         }
       } else target.copy(this.levelCentre);
-      distance = this.baseDistance * this.zoom;
+      distance = this.baseDistance * this.zoom * this.framingZoom;
     }
     const x = this.tx.step(target.x, dt);
     const y = this.ty.step(target.y, dt);
@@ -151,6 +168,13 @@ export class CameraRig {
     const cp = Math.cos(pt);
     this.camera.position.set(x - Math.sin(yw) * cp * d, y + Math.sin(pt) * d, z + Math.cos(yw) * cp * d);
     this.camera.lookAt(x, y, z);
+    const lift = this.liftD.step(this.viewLift, dt);
+    const shift = this.shiftD.step(this.viewShift, dt);
+    if (Math.abs(lift) > 1e-4 || Math.abs(shift) > 1e-4) {
+      const fh = 1000;
+      const fw = fh * this.camera.aspect;
+      this.camera.setViewOffset(fw, fh, -shift * fw, lift * fh, fw, fh);
+    } else if (this.camera.view?.enabled) this.camera.clearViewOffset();
     // keep near/far tight-ish for depth precision
     this.camera.near = Math.max(0.3, d * 0.04);
     this.camera.updateProjectionMatrix();
@@ -158,7 +182,7 @@ export class CameraRig {
 
   /** Follow target: mostly the player, pulled slightly toward the chamber centre for puzzle context. */
   private blendFocus(focus: THREE.Vector3): THREE.Vector3 {
-    const out = new THREE.Vector3().copy(focus).lerp(this.levelCentre, 0.22);
+    const out = new THREE.Vector3().copy(focus).lerp(this.levelCentre, 0.14);
     out.y = focus.y * 0.75 + this.levelCentre.y * 0.25 + 0.8;
     return out;
   }

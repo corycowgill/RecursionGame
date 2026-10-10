@@ -54,7 +54,7 @@ export const GradeShader = {
         uv.x += (n > 0.86 ? (n - 0.93) * 0.18 : 0.0) * uGlitch;
       }
       vec2 dir = (uv - 0.5);
-      float ca = 0.0025 + rw * 0.018 + uGlitch * 0.01;
+      float ca = 0.0007 * smoothstep(0.1, 0.5, length(dir)) + rw * 0.018 + uGlitch * 0.01; // lens fringe only toward the corners
       vec3 col;
       col.r = texture2D(tDiffuse, uv + dir * ca).r;
       col.g = texture2D(tDiffuse, uv).g;

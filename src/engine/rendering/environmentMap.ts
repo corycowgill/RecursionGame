@@ -22,6 +22,9 @@ export function createEnvironmentTexture(renderer: THREE.WebGLRenderer): THREE.T
           vec3 bot = vec3(0.05, 0.04, 0.035);
           vec3 c = mix(hor, top, smoothstep(0.0, 0.7, y));
           c = mix(c, bot, smoothstep(0.0, -0.25, y));
+          // warm vaulted-ceiling glow at 25–65° elevation: what up-facing metal mirrors under the 43° iso camera,
+          // so horizontal brass reads gold (not olive from the navy sky) and floors pick up the warm key
+          c += vec3(0.62, 0.44, 0.26) * smoothstep(0.3, 0.55, y) * (1.0 - smoothstep(0.82, 0.97, y)) * 0.6;
           c += vec3(0.9, 0.55, 0.25) * pow(max(dot(vP, normalize(vec3(-0.7, 0.2, 0.5))), 0.0), 8.0) * 0.8;
           gl_FragColor = vec4(c, 1.0);
         }`,

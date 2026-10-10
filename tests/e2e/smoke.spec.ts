@@ -154,6 +154,8 @@ test('every campaign level loads, renders and completes with its verified soluti
   await bootToMenu(page);
   const ids = await hook(page, (h) => h.levels);
   expect(ids.length).toBeGreaterThanOrEqual(3);
+  // SwiftShader needs ~25-40 s per chamber (load + frames + screenshot + solve): scale the budget with the campaign.
+  test.setTimeout(120_000 + ids.length * 75_000);
   for (let i = 0; i < ids.length; i++) {
     const id = await page.evaluate(`window.__RECURSION__.loadLevel(${i})`);
     expect(id).toBe(ids[i]);

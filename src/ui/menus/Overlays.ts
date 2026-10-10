@@ -149,7 +149,7 @@ export function createLevelComplete(stats: LevelCompleteStats, act: { onNext(): 
   const results =
     `<div class="rx-result"><div class="k">Time</div><div class="v">${formatTicks(r.ticks, true)}</div><div class="p ${r.withinParTime ? 'ok' : 'miss'}">${ok(r.withinParTime)}Par ${formatTicks(r.parTimeSeconds * 60)}</div></div>` +
     `<div class="rx-result"><div class="k">Echoes</div><div class="v">${r.echoesUsed}</div><div class="p ${r.withinParEchoes ? 'ok' : 'miss'}">${ok(r.withinParEchoes)}Par ${r.parEchoes}</div></div>` +
-    `<div class="rx-result"><div class="k">Best</div><div class="v">${best ? formatTicks(best.ticks) : formatTicks(r.ticks)}</div><div class="p">${best ? `${best.echoes} echo${best.echoes === 1 ? '' : 'es'}` : 'First clear'}</div></div>`;
+    `<div class="rx-result"><div class="k">Best</div><div class="v">${formatTicks(best ? best.ticks : r.ticks, true)}</div><div class="p">${best ? `${best.echoes} echo${best.echoes === 1 ? '' : 'es'}` : 'First clear'}</div></div>`;
   const actions = h('div', { class: 'actions' });
   if (stats.hasNext) actions.append(menuButton('Next chamber', 'next', act.onNext, act.sound, true, 'complete-next', false));
   actions.append(menuButton('Replay', 'restart', act.onReplay, act.sound, !stats.hasNext, 'complete-replay', false));

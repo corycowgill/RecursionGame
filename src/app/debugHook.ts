@@ -61,7 +61,8 @@ export interface DebugHook {
   loadLevel(idOrIndex: string | number): string;
   startLevel(idOrIndex: string | number): string;
   goMenu(): void;
-  runSolution(opts?: { instant?: boolean }): SolveResult;
+  /** `untilTick` (instant only) stops the final run at that tick, leaving the chamber mid-solve with echoes acting. */
+  runSolution(opts?: { instant?: boolean; untilTick?: number }): SolveResult;
   stepIdle(ticks: number): number;
   commit(): void;
   restart(): void;
@@ -128,7 +129,7 @@ export function installDebugHook(d: DebugHookDeps): DebugHook {
         return result();
       }
       d.setAutopilot(null);
-      const max = d.level.loopDurationTicks + 1;
+      const max = Math.min(d.level.loopDurationTicks + 1, opts.untilTick ?? Infinity);
       for (let i = 0; i < max && d.game.getState().status === 'playing'; i++) {
         const t = d.game.getState().tick;
         d.game.step(sol.final[t] ?? { ...IDLE_INPUT, tick: t });

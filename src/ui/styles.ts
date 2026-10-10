@@ -279,6 +279,7 @@ export const UI_CSS = /* css */ `
 .rx-onboard .dots { display: flex; justify-content: center; gap: .4em; margin-top: .8em; }
 .rx-onboard .dots i { width: .45em; height: .45em; transform: rotate(45deg); border: 1px solid var(--rx-gold-dim); }
 .rx-onboard .dots i.on { background: var(--rx-gold); border-color: var(--rx-gold); }
+.rx-inspecting .rx-onboard, .rx-inspecting .rx-hint { opacity: 0; visibility: hidden; transition: opacity .18s, visibility 0s .18s; }
 .rx-onboard .skip { position: absolute; right: .4em; top: .4em; }
 
 /* ---------- temporal timeline ---------- */
@@ -314,6 +315,7 @@ export const UI_CSS = /* css */ `
 .rx-tl-lane.hidden-track { opacity: .32; }
 .rx-tl-span { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 1px; background: var(--soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); }
 .rx-tl-span .played { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 55%, transparent), var(--c)); box-shadow: 0 0 10px color-mix(in srgb, var(--c) 70%, transparent); border-radius: 1px; }
+.rx-tl-span.copy { background: repeating-linear-gradient(90deg, var(--soft) 0 6px, transparent 6px 9px); }
 .rx-tl-span .end { position: absolute; right: -1px; top: -4px; bottom: -4px; width: 2px; background: var(--c); }
 .rx-tl-div-zone { position: absolute; top: 50%; height: 12px; transform: translateY(-50%); background: repeating-linear-gradient(135deg, rgba(255,107,94,.42) 0 3px, transparent 3px 7px); border-top: 1px solid rgba(255,107,94,.5); border-bottom: 1px solid rgba(255,107,94,.5); pointer-events: none; }
 .rx-mk { position: absolute; top: 50%; width: 1.15em; height: 1.15em; transform: translate(-50%, -50%) rotate(45deg); display: grid; place-items: center; border-radius: 2px; background: var(--c); color: #04101c; box-shadow: 0 0 8px color-mix(in srgb, var(--c) 70%, transparent); pointer-events: auto; }

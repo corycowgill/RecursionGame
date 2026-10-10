@@ -59,4 +59,17 @@ describe('app flow helpers', () => {
     expect(view.actors.some((a) => a.id === echoId)).toBe(true);
     expect(withoutHiddenEchoes(view, new Set())).toBe(view);
   });
+
+  it('hiding a nested-loop echo also hides its recursive copies (L08)', () => {
+    const l08 = LEVELS.find((l) => l.recursion)!;
+    const game = new TemporalGame(createDefaultRegistry());
+    game.loadLevel(l08);
+    game.setLoops(solutionFor(l08).echoes);
+    const view = game.getState();
+    const echoes = view.actors.filter((a) => a.kind === 'echo');
+    expect(echoes.length).toBeGreaterThanOrEqual(2);
+    const base = echoes.find((a) => !a.id.includes('.'))!;
+    const shown = withoutHiddenEchoes(view, new Set([base.id]));
+    expect(shown.actors.filter((a) => a.kind === 'echo')).toHaveLength(0);
+  });
 });

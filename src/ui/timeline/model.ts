@@ -152,6 +152,10 @@ export interface TrackModel {
   divergedAt: number | null;
   visible: boolean;
   selected: boolean;
+  /** Nested loops: recursive copy depth (>= 1) of loop `loopId`, or 0 for an ordinary track. */
+  recursion: number;
+  /** Tick this track starts replaying (copies of a nested loop start k·delay later); 0 otherwise. */
+  startTick: number;
 }
 
 const VERB_TEXT: Record<InteractionKind, string> = {
@@ -245,18 +249,20 @@ export function buildTrackModels(timeline: Timeline, opts: BuildTracksOptions = 
       loopId: tr.loopId,
       style,
       durationTicks: tr.durationTicks,
-      playedTicks: isPlayer ? tr.durationTicks : Math.min(now, tr.durationTicks),
+      playedTicks: isPlayer ? tr.durationTicks : Math.max(0, Math.min(now - (tr.startTick ?? 0), tr.durationTicks)),
       finishedAtTick: tr.finishedAtTick,
       markers,
       divergences,
       divergedAt: divergences.length ? Math.min(...divergences.map((d) => d.tick)) : null,
       visible: isPlayer || tr.loopId === null || !hidden.has(tr.loopId),
-      selected: !isPlayer && opts.selectedEcho === tr.echoIndex,
+      selected: !isPlayer && opts.selectedEcho === tr.echoIndex && tr.recursion === undefined,
+      recursion: tr.recursion ?? 0,
+      startTick: tr.startTick ?? 0,
     };
     if (isPlayer) player = model;
     else out.push(model);
   }
-  out.sort((a, b) => a.echoIndex - b.echoIndex);
+  out.sort((a, b) => a.echoIndex - b.echoIndex || a.recursion - b.recursion);
   return player ? [player, ...out] : out;
 }
 

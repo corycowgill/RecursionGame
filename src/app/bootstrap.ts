@@ -291,12 +291,12 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
     audio.setMusicState('menu');
   }
 
-  /** Main-menu backdrop: the real simulation replaying a chamber's verified solution, seen from the overview camera. */
+  /** Main-menu backdrop: the real simulation replaying a chamber's verified solution, the camera tracking the run. */
   function startAttract(l: LevelDefinition): void {
     loadLevel(l);
     attractLevel = l;
     restartAttract();
-    renderer.setCameraMode('overview');
+    renderer.setCameraMode('follow');
   }
 
   function restartAttract(): void {
@@ -527,14 +527,19 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
         alpha = 1;
       }
     }
+    // Framing: keep the subject clear of the docked timeline (and of the title column on the main menu).
+    if (mode === 'menu') renderer.setFraming({ lift: 0.04, shift: 0.17, zoom: 1.45 });
+    else renderer.setFraming({ lift: ui.timelineExpanded ? 0.16 : mode === 'playing' ? 0.06 : 0 });
+    const timeline = mode === 'playing' || mode === 'intro' || mode === 'complete' ? game.getTimeline() : null;
+    renderer.setTimeline(mode === 'playing' && !rewindFrames.length ? timeline : null);
     renderer.render(withoutHiddenEchoes(view, hiddenEchoes), withoutHiddenEchoes(prev, hiddenEchoes), alpha, events, dt);
     keyboard.sampler.yawStep = renderer.getCameraYawStep();
 
-    if (mode === 'playing' || mode === 'intro' || mode === 'complete') {
+    if (timeline) {
       ui.update({
         level,
         state: live,
-        timeline: game.getTimeline(),
+        timeline,
         paused: pauseOpen || inspectHold,
         prompt: mode === 'playing' ? predictInteraction(level, live) : null,
         objective: getObjectiveStatus(level, live),

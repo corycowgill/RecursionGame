@@ -119,6 +119,12 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
         const pick = (n >>> 16) % 20;
         const fmat = pick < 2 ? lib.floorGrate : pick < 4 ? lib.floorEmblem : lib.floorTile;
         b.add(tileGeo, fmat, { x: cx, y: top - 0.13, z: cz }, { cast: false, rotY: ((n >>> 4) % 4) * (Math.PI / 2), color: new THREE.Color(v * (1 + warm * 0.04), v, v * (1 - warm * 0.04)) });
+      } else if (t.kind === 'wall' && cls(c, r) === 'none') {
+        // solid mass behind the chamber walls: dark exterior deck plating (seen from the overview camera) instead
+        // of a bare foundation top
+        const n = cellHash(c, r);
+        const v = 0.34 + ((n % 1000) / 1000) * 0.08;
+        b.add(tileGeo, (n >>> 16) % 7 === 0 ? lib.floorGrate : lib.floorTile, { x: cx, y: top - 0.13, z: cz }, { cast: false, rotY: ((n >>> 4) % 4) * (Math.PI / 2), color: new THREE.Color(v * 0.94, v, v * 1.1) });
       }
       // edges toward void/lower ground: brass lip + amber strip on the exposed face
       for (let d = 0; d < 4; d++) {
