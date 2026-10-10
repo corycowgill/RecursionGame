@@ -346,21 +346,180 @@ export function floorEmblemTextures(size = 512): PBRSet {
 }
 
 /**
- * Wall panel (one tile wide, one tile tall; walls stack two): dark gunmetal frame, one large painted ivory
- * panel with a recessed inner field, brass band, ribbed gunmetal skirting.
+ * Wall module (one tile wide x one full wall tall; the library maps it with repeat (1, 0.5) so each 2 m x 4 m
+ * face shows exactly one module): gunmetal frieze under the cap, a tall painted ivory panel with a recessed
+ * field, brass band, a slate-blue painted lower panel split in two, a dark seam and ribbed gunmetal skirting.
+ * Canvas top = wall top.
  */
 export function wallPanelTextures(size = 512): PBRSet {
   const p = new Painter(size, false);
   const u = size / 64;
-  p.rect(0, 0, size, size, { color: '#272b31', height: 40, rough: 0.55, metal: 0.7, ao: 0.6 });
-  p.rect(u * 5, u * 4, u * 54, u * 33, { color: '#c2bcae', height: 215, rough: 0.5, metal: 0.12, bevel: Math.round(u * 1.8) });
-  p.rect(u * 11, u * 10, u * 42, u * 21, { color: '#aea898', height: 190, rough: 0.55, metal: 0.12, bevel: Math.round(u * 1.0) });
-  p.line(u * 32, u * 10, u * 32, u * 31, u * 0.35, SEAM);
-  p.rect(0, u * 39.5, size, u * 2, { color: '#c39443', height: 235, rough: 0.28, metal: 1 });
-  p.rect(u * 3, u * 44, u * 58, u * 17, { color: '#33373e', height: 190, rough: 0.42, metal: 0.75, bevel: Math.round(u * 1.2) });
-  for (let i = 0; i < 7; i++) p.line(u * (9 + i * 7.6), u * 46, u * (9 + i * 7.6), u * 59, u * 0.6, { color: '#1d2025', height: 120, rough: 0.6, metal: 0.6 });
-  p.grime(23, 0.12, 0.18);
+  p.rect(0, 0, size, size, { color: '#22262c', height: 40, rough: 0.55, metal: 0.7, ao: 0.6 });
+  // frieze + brass line
+  p.rect(0, 0, size, u * 3.2, { color: '#2c3138', height: 120, rough: 0.5, metal: 0.75 });
+  p.rect(0, u * 3.4, size, u * 0.8, { color: '#c39443', height: 230, rough: 0.3, metal: 1 });
+  // tall ivory panel
+  p.rect(u * 3.5, u * 5.5, u * 57, u * 25, { color: '#c9c3b5', height: 215, rough: 0.48, metal: 0.1, bevel: Math.round(u * 1.6) });
+  p.rect(u * 8, u * 9, u * 48, u * 18, { color: '#b9b3a4', height: 192, rough: 0.52, metal: 0.1, bevel: Math.round(u * 0.9) });
+  p.line(u * 32, u * 9, u * 32, u * 27, u * 0.3, SEAM);
+  for (const x of [5.5, 58.5]) for (const y of [7.5, 28.5]) p.bolt(u * x, u * y, u * 0.55, '#8d8678');
+  // brass band
+  p.rect(0, u * 31.6, size, u * 1.3, { color: '#c39443', height: 238, rough: 0.28, metal: 1 });
+  // slate lower panels
+  for (const x of [3.5, 32.5]) {
+    p.rect(u * x, u * 34.5, u * 28, u * 15.5, { color: '#4f5761', height: 200, rough: 0.5, metal: 0.35, bevel: Math.round(u * 1.2) });
+    p.rect(u * (x + 3), u * 37.5, u * 22, u * 9.5, { color: '#454c55', height: 182, rough: 0.55, metal: 0.4, bevel: Math.round(u * 0.8) });
+  }
+  // seam + ribbed skirting
+  p.rect(0, u * 51.5, size, u * 1, { color: '#121418', height: 30, rough: 0.9, metal: 0.2 });
+  p.rect(u * 1.5, u * 53.5, u * 61, u * 9.5, { color: '#30353c', height: 190, rough: 0.42, metal: 0.75, bevel: Math.round(u * 1.0) });
+  for (let i = 0; i < 9; i++) p.line(u * (5 + i * 6.75), u * 55, u * (5 + i * 6.75), u * 61.5, u * 0.55, { color: '#1d2025', height: 120, rough: 0.6, metal: 0.6 });
+  p.grime(23, 0.1, 0.12);
   return p.build(2.6);
+}
+
+/** Floor variant: four raised quadrant plates around a brass cross inlay and boss (panel variation). */
+export function floorPlateTextures(size = 512): PBRSet {
+  const p = new Painter(size, false);
+  const u = size / 64;
+  floorBase(p, u, size);
+  const tones = ['#85817a', '#7d7972', '#817d75', '#7a766f'];
+  [
+    [5, 5],
+    [33.5, 5],
+    [5, 33.5],
+    [33.5, 33.5],
+  ].forEach(([x, y], i) => {
+    p.rect(u * x!, u * y!, u * 25.5, u * 25.5, { color: tones[i]!, height: 214, rough: 0.58 + i * 0.015, metal: 0.2, bevel: Math.round(u * 1.4) });
+    for (let k = 0; k < 5; k++) p.line(u * (x! + 4), u * (y! + 5 + k * 4), u * (x! + 21.5), u * (y! + 5 + k * 4), u * 0.25, { color: '#6c6861', height: 196, rough: 0.62, metal: 0.2 });
+  });
+  const brass = { color: '#b48a45', height: 222, rough: 0.32, metal: 1 };
+  p.rect(u * 31.2, u * 5, u * 1.6, u * 54, brass);
+  p.rect(u * 5, u * 31.2, u * 54, u * 1.6, brass);
+  p.rect(u * 28.5, u * 28.5, u * 7, u * 7, { color: '#3a3c40', height: 200, rough: 0.4, metal: 0.8, bevel: Math.round(u * 1.2) });
+  p.bolt(u * 32, u * 32, u * 1.4, '#b48a45');
+  p.grime(43, 0.16, 0.16);
+  return p.build(2.6);
+}
+
+/** Hanging banner cloth (RGBA, V-notched hem): deep navy with gold border, bands and a chronometer emblem. */
+export function bannerTexture(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 512;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('2D canvas unavailable');
+  g.clearRect(0, 0, 256, 512);
+  const x0 = 0;
+  const w = 256;
+  g.save();
+  g.beginPath();
+  g.moveTo(x0, 0);
+  g.lineTo(x0 + w, 0);
+  g.lineTo(x0 + w, 440);
+  g.lineTo(x0 + w / 2, 506);
+  g.lineTo(x0, 440);
+  g.closePath();
+  g.clip();
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#16283d');
+  grad.addColorStop(1, '#0d1726');
+  g.fillStyle = grad;
+  g.fillRect(x0, 0, w, 512);
+  // vertical cloth folds
+  for (let i = 0; i < 6; i++) {
+    const fx = x0 + (i + 0.5) * (w / 6);
+    const fg = g.createLinearGradient(fx - 20, 0, fx + 20, 0);
+    fg.addColorStop(0, 'rgba(0,0,0,0)');
+    fg.addColorStop(0.5, i % 2 ? 'rgba(0,0,0,0.22)' : 'rgba(120,160,200,0.08)');
+    fg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = fg;
+    g.fillRect(fx - 20, 0, 40, 512);
+  }
+  g.strokeStyle = '#c99a48';
+  g.lineWidth = 10;
+  g.beginPath();
+  g.moveTo(x0 + 10, 0);
+  g.lineTo(x0 + 10, 436);
+  g.lineTo(x0 + w / 2, 496);
+  g.lineTo(x0 + w - 10, 436);
+  g.lineTo(x0 + w - 10, 0);
+  g.stroke();
+  g.fillStyle = '#c99a48';
+  g.fillRect(x0, 34, w, 8);
+  g.fillRect(x0, 380, w, 6);
+  // chronometer emblem: ring, ticks, hourglass
+  const cx = x0 + w / 2;
+  const cy = 210;
+  g.lineWidth = 9;
+  g.beginPath();
+  g.arc(cx, cy, 72, 0, Math.PI * 2);
+  g.stroke();
+  g.lineWidth = 3;
+  g.beginPath();
+  g.arc(cx, cy, 56, 0, Math.PI * 2);
+  g.stroke();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    g.lineWidth = i % 3 === 0 ? 6 : 3;
+    g.beginPath();
+    g.moveTo(cx + Math.cos(a) * 76, cy + Math.sin(a) * 76);
+    g.lineTo(cx + Math.cos(a) * (i % 3 === 0 ? 98 : 88), cy + Math.sin(a) * (i % 3 === 0 ? 98 : 88));
+    g.stroke();
+  }
+  g.beginPath();
+  g.moveTo(cx - 26, cy - 36);
+  g.lineTo(cx + 26, cy - 36);
+  g.lineTo(cx - 26, cy + 36);
+  g.lineTo(cx + 26, cy + 36);
+  g.closePath();
+  g.fill();
+  g.restore();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Holographic text panel (white glyphs + frame on black; tinted and made additive by the material). */
+export function hologramTexture(text: string): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 256;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('2D canvas unavailable');
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 1024, 256);
+  g.strokeStyle = 'rgba(255,255,255,0.75)';
+  g.lineWidth = 4;
+  // bracket frame
+  for (const [x, dir] of [
+    [28, 1],
+    [996, -1],
+  ] as const) {
+    g.beginPath();
+    g.moveTo(x + dir * 40, 40);
+    g.lineTo(x, 40);
+    g.lineTo(x, 216);
+    g.lineTo(x + dir * 40, 216);
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(255,255,255,0.35)';
+  g.fillRect(90, 196, 844, 3);
+  g.fillRect(90, 58, 220, 3);
+  g.fillStyle = '#fff';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  let px = 112;
+  g.font = `600 ${px}px Orbitron, Rajdhani, "Segoe UI", system-ui, sans-serif`;
+  while (px > 40 && g.measureText(text).width > 860) {
+    px -= 6;
+    g.font = `600 ${px}px Orbitron, Rajdhani, "Segoe UI", system-ui, sans-serif`;
+  }
+  g.fillText(text, 512, 132);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 /** Brushed brass/gold: subtle long streaks, tight rough variation. Used tiled on trims and fittings. */

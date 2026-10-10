@@ -26,6 +26,17 @@ export interface DebugHookDeps {
   restart(): void;
   dispose(): void;
   inputDebug(): Record<string, boolean>;
+  /** Hold the temporal preview (Q) at a tick, or release it (null). */
+  setPreview(tick: number | null): void;
+  forecastStats(): ForecastStats;
+}
+
+export interface ForecastStats {
+  samples: number;
+  version: number;
+  walkOns: number;
+  ghostPaths: number;
+  previewTick: number | null;
 }
 
 export interface SolveResult {
@@ -46,6 +57,8 @@ export interface SolveResult {
  *                                  instant (default) steps synchronously; otherwise the player is autopiloted at 60 Hz.
  *   stepIdle(n)                    advance n ticks with idle player input (synchronous)
  *   commit() / restart()           same as R / Shift+R
+ *   preview(tick|null)             hold the temporal preview (Q) frozen at a tick (ghost paths shown), or release it
+ *   forecastStats()                echo-forecast progress (samples, walk-on badges, ghost paths)
  */
 export interface DebugHook {
   readonly game: TemporalGame;
@@ -71,6 +84,8 @@ export interface DebugHook {
   progress(): unknown;
   /** Why gameplay input / the sim clock may be gated right now. */
   inputDebug(): Record<string, boolean>;
+  preview(tick: number | null): void;
+  forecastStats(): ForecastStats;
   dispose(): void;
 }
 
@@ -149,6 +164,8 @@ export function installDebugHook(d: DebugHookDeps): DebugHook {
     audioStats: () => d.audio.stats(),
     progress: () => d.save.data.progress,
     inputDebug: () => d.inputDebug(),
+    preview: (tick) => d.setPreview(tick),
+    forecastStats: () => d.forecastStats(),
     dispose: () => d.dispose(),
   };
   (window as unknown as { __RECURSION__?: DebugHook }).__RECURSION__ = hook;

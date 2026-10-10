@@ -1,24 +1,37 @@
 import * as THREE from 'three';
-import type { DecorDefinition, Dir4, LevelDefinition } from '../../engine/contracts';
+import type { Dir4, LevelDefinition } from '../../engine/contracts';
 import { PALETTE } from '../materials/palette';
 import type { MaterialLibrary } from '../materials/library';
+import { AnimatedParts, ClockworkGeometry, addClockworkRing } from './animatedParts';
 import { Batcher } from './batcher';
+import { DecorBuilder, planDecor, type DecorContext } from './decor';
+import { windowPaneMaterial } from './fxMaterials';
 import { parseGrid, T, type RenderGrid } from './grid';
+import { DX, DZ, WALL_H, archFrameGeometry, archPaneGeometry, cellHash, face, type Face } from './shapes';
+
+export { WALL_H, archFrameGeometry, archPaneGeometry, archGateGeometry, cellHash } from './shapes';
 
 /**
  * Modular environment kit. Builds the static chamber from the tile grid:
- *  floor tiles (beveled, panel seams, brass corners) · foundation slab + platform edges with brass lips and
- *  amber under-glow · wall modules (tall back/side walls with conduits and pilasters, glass partitions,
- *  low front parapets so the iso camera never loses the player) · pillars with gold banding · railings ·
- *  stairs for ramps · decor (conduits, observation arch windows, rings, lamps).
- * Everything static is batched into InstancedMeshes; animated decor is returned separately.
+ *  floor tiles (four slab variants, inset grate hatches, brass wall-edge inlays) · foundation slab + platform
+ *  edges with brass lips and amber under-glow · wall modules (tall back/side walls, each face a deterministic
+ *  pick from nine modules — conduit strips, observation windows, recessed panels, pipe clusters, gold-banded
+ *  columns, vents, arch niches, sconces, plain — over skirting and crown trims; glass partitions; low front
+ *  parapets so the iso camera never loses the player) · pillars with gold banding · railings · stairs for ramps
+ *  · authored decor (see decor.ts).
+ *
+ * Performance: everything static goes through the Batcher (one InstancedMesh per geometry/material pair).
+ * Plain boxes and cylinders share unit geometries scaled per instance (`cube`/`tube`), and every emissive trim
+ * uses the single `lib.glow` material with per-instance colour, so the kit stays at a few dozen draw calls no
+ * matter how much detail is placed. Moving decor goes through AnimatedParts (also instanced).
  */
 
-export const WALL_H = 4; // tall wall height (metres)
 const PARAPET_H = 0.62;
 const PARTITION_H = 1.15;
 const PARTITION_GLASS_H = 2.7;
 const FOUNDATION_DEPTH = 3.2;
+const NICHE_W = 1.0;
+const NICHE_H = 2.5;
 
 type WallClass = 'back' | 'side' | 'partition' | 'front' | 'none';
 
@@ -42,8 +55,12 @@ export interface BuiltKit {
   dispose(): void;
 }
 
-const DX = [0, 1, 0, -1];
-const DZ = [-1, 0, 1, 0];
+
+/** Wall-face modules. Order matters only for the deterministic pick (see `pickModule`). */
+const MODULES = ['plain', 'conduit', 'window', 'recessed', 'pipes', 'column', 'vent', 'niche', 'sconce'] as const;
+type WallModule = (typeof MODULES)[number];
+const BACK_WEIGHTS: Record<WallModule, number> = { plain: 2, conduit: 3, window: 2, recessed: 3, pipes: 2, column: 2, vent: 2, niche: 2, sconce: 2 };
+const SIDE_WEIGHTS: Record<WallModule, number> = { plain: 2, conduit: 3, window: 1, recessed: 3, pipes: 3, column: 2, vent: 2, niche: 0, sconce: 2 };
 
 export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit {
   const grid = parseGrid(level);
@@ -53,6 +70,9 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
   const extra = new THREE.Group();
   const ownedGeos: THREE.BufferGeometry[] = [];
   const ownedMats: THREE.Material[] = [];
+  const parts = new AnimatedParts();
+  const clock = new ClockworkGeometry();
+  const glow = (c: number, i: number) => lib.glowColor(c, i);
 
   const W = grid.width;
   const H = grid.height;
@@ -86,21 +106,17 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
       if (!touches) continue;
       const rowN = [cls(c - 1, r), cls(c + 1, r)].find((k) => k !== 'none');
       const colN = [cls(c, r - 1), cls(c, r + 1)].find((k) => k !== 'none');
-      let k = rowN ?? colN ?? 'side';
-      if (k === 'side' && rowN === undefined && colN === undefined) k = 'side';
-      classes[r * W + c] = k;
+      classes[r * W + c] = rowN ?? colN ?? 'side';
     }
+  const isTallWall = (c: number, r: number) => grid.isWall(c, r) && (cls(c, r) === 'back' || cls(c, r) === 'side');
+  const plan = planDecor(level, grid, isTallWall);
 
   // ---------- floors + foundation ----------
   const tileGeo = b.rbox(T - 0.035, 0.26, T - 0.035, 0.04, 2);
   const foundGeo = b.box(T, 1, T, 2);
-  const lipGeo = b.box(T, 0.09, 0.12);
-  const glowStripGeo = b.box(T * 0.94, 0.05, 0.04);
-  const edgeStripGeo = b.box(T + 0.01, 0.05, 0.04);
-  const underGlowGeo = b.box(T + 0.01, 0.06, 0.05);
-  const amber = lib.emissive(PALETTE.gold, 1.7);
-  const amberSoft = lib.emissive(PALETTE.warmLamp, 1.0);
-  const cyanStrip = lib.emissive(PALETTE.cyan, 1.35);
+  const amber = glow(PALETTE.gold, 1.7);
+  const amberSoft = glow(PALETTE.warmLamp, 1.0);
+  const cyanStrip = glow(PALETTE.cyan, 1.35);
 
   for (let r = 0; r < H; r++)
     for (let c = 0; c < W; c++) {
@@ -109,22 +125,43 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
       const cx = (c + 0.5) * T;
       const cz = (r + 0.5) * T;
       const top = t.h * T;
-      // foundation column (also forms raised plinths)
-      const depth = top + FOUNDATION_DEPTH;
-      b.add(foundGeo, lib.gunmetal, { x: cx, y: top - 0.2 - depth / 2, z: cz }, { scale: new THREE.Vector3(1, depth, 1), cast: false });
-      if (t.kind === 'floor' || t.kind === 'pillar' || t.kind === 'railing') {
+      // foundation column (also forms raised plinths); machinery pits open the top 1.1 m of a floor cell
+      const pit = t.kind === 'floor' && plan.pits.has(`${c},${r}`);
+      const fTop = pit ? top - 1.15 : top - 0.2;
+      const depth = fTop + FOUNDATION_DEPTH;
+      b.add(foundGeo, lib.gunmetal, { x: cx, y: fTop - depth / 2, z: cz }, { scale: new THREE.Vector3(1, depth, 1), cast: false });
+      if (pit) {
+        // decor draws the pit; nothing else on this cell's top
+      } else if (t.kind === 'floor' || t.kind === 'pillar' || t.kind === 'railing') {
         const n = cellHash(c, r);
-        const v = 0.9 + (n % 1000) / 1000 * 0.16;
+        const v = 0.9 + ((n % 1000) / 1000) * 0.16;
         const warm = ((n >>> 10) % 100) / 100;
         const pick = (n >>> 16) % 20;
-        const fmat = pick < 2 ? lib.floorGrate : pick < 4 ? lib.floorEmblem : lib.floorTile;
-        b.add(tileGeo, fmat, { x: cx, y: top - 0.13, z: cz }, { cast: false, rotY: ((n >>> 4) % 4) * (Math.PI / 2), color: new THREE.Color(v * (1 + warm * 0.04), v, v * (1 - warm * 0.04)) });
+        const quarter = ((n >>> 4) % 4) * (Math.PI / 2);
+        const fmat = pick < 2 ? lib.floorGrate : pick < 4 ? lib.floorEmblem : pick < 8 ? lib.floorPlate : lib.floorTile;
+        b.add(tileGeo, fmat, { x: cx, y: top - 0.13, z: cz }, { cast: false, rotY: quarter, color: new THREE.Color(v * (1 + warm * 0.04), v, v * (1 - warm * 0.04)) });
+        if (fmat === lib.floorGrate && t.kind === 'floor') {
+          // inset service hatch: raised brass frame around the glowing grate + corner lugs
+          const half = T * 0.33;
+          for (const s of [-1, 1]) {
+            b.cube(lib.brass, { x: cx + s * half, y: top + 0.012, z: cz }, 0.06, 0.03, half * 2 + 0.06, { cast: false });
+            b.cube(lib.brass, { x: cx, y: top + 0.012, z: cz + s * half }, half * 2 + 0.06, 0.03, 0.06, { cast: false });
+          }
+          for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.cube(lib.gunmetalDark, { x: cx + sx * half, y: top + 0.02, z: cz + sz * half }, 0.13, 0.04, 0.13, { cast: false });
+        }
+        // brass inlay along the foot of tall walls (concept: gold trim lines framing every walkway)
+        if (t.kind === 'floor')
+          for (let d = 0; d < 4; d++) {
+            if (!isTallWall(c + DX[d]!, r + DZ[d]!)) continue;
+            const ex = cx + DX[d]! * (T / 2 - 0.13);
+            const ez = cz + DZ[d]! * (T / 2 - 0.13);
+            b.cube(lib.brass, { x: ex, y: top + 0.004, z: ez }, d % 2 === 0 ? T - 0.04 : 0.05, 0.02, d % 2 === 0 ? 0.05 : T - 0.04, { cast: false });
+          }
       } else if (t.kind === 'wall' && cls(c, r) === 'none') {
-        // solid mass behind the chamber walls: dark exterior deck plating (seen from the overview camera) instead
-        // of a bare foundation top
+        // solid mass behind the chamber walls: dark exterior deck plating (seen from the overview camera)
         const n = cellHash(c, r);
         const v = 0.34 + ((n % 1000) / 1000) * 0.08;
-        b.add(tileGeo, (n >>> 16) % 7 === 0 ? lib.floorGrate : lib.floorTile, { x: cx, y: top - 0.13, z: cz }, { cast: false, rotY: ((n >>> 4) % 4) * (Math.PI / 2), color: new THREE.Color(v * 0.94, v, v * 1.1) });
+        b.add(tileGeo, (n >>> 16) % 7 === 0 ? lib.floorGrate : (n >>> 16) % 3 === 0 ? lib.floorPlate : lib.floorTile, { x: cx, y: top - 0.13, z: cz }, { cast: false, rotY: ((n >>> 4) % 4) * (Math.PI / 2), color: new THREE.Color(v * 0.94, v, v * 1.1) });
       }
       // edges toward void/lower ground: brass lip + amber strip on the exposed face
       for (let d = 0; d < 4; d++) {
@@ -137,10 +174,12 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
         const ex = cx + DX[d]! * (T / 2 + 0.01);
         const ez = cz + DZ[d]! * (T / 2 + 0.01);
         const rotY = d % 2 === 0 ? 0 : Math.PI / 2;
-        b.add(lipGeo, lib.brass, { x: ex, y: top - 0.06, z: ez }, { rotY, cast: false });
-        b.add(edgeStripGeo, amber, { x: ex + DX[d]! * 0.02, y: top - 0.32, z: ez + DZ[d]! * 0.02 }, { rotY, cast: false, receive: false });
+        b.cube(lib.brass, { x: ex, y: top - 0.06, z: ez }, T, 0.09, 0.12, { rotY, cast: false });
+        b.cube(lib.glow, { x: ex + DX[d]! * 0.02, y: top - 0.32, z: ez + DZ[d]! * 0.02 }, T + 0.01, 0.05, 0.04, { rotY, cast: false, receive: false, color: amber });
         if (nt.kind === 'void') {
-          b.add(underGlowGeo, amberSoft, { x: ex + DX[d]! * 0.02, y: top - 1.6, z: ez + DZ[d]! * 0.02 }, { rotY, cast: false, receive: false });
+          b.cube(lib.glow, { x: ex + DX[d]! * 0.02, y: top - 1.6, z: ez + DZ[d]! * 0.02 }, T + 0.01, 0.06, 0.05, { rotY, cast: false, receive: false, color: amberSoft });
+          // foundation ribs every other cell: gunmetal buttresses under the platform lip
+          if ((c + r) % 2 === 0) b.cube(lib.gunmetalDark, { x: ex + DX[d]! * 0.08, y: top - 1.1, z: ez + DZ[d]! * 0.08 }, 0.3, 1.5, 0.16, { rotY: rotY + Math.PI / 2, cast: false });
         }
       }
     }
@@ -148,26 +187,48 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
   // ---------- walls ----------
   const wallGeo = b.box(T, WALL_H, T, 2);
   const capGeo = b.rbox(T + 0.06, 0.28, T + 0.06, 0.04, 2);
-  const capTrimGeo = b.box(T + 0.08, 0.06, T + 0.08);
-  const capRailGeo = b.box(T + 0.06, 0.05, 0.3);
-  const conduitGeo = b.box(0.07, WALL_H * 0.62, 0.05);
   const conduitHousingGeo = b.rbox(0.24, WALL_H * 0.68, 0.08, 0.03, 2);
   const pilasterGeo = b.rbox(0.38, WALL_H + 0.25, 0.34, 0.05, 2);
-  const pilasterBandGeo = b.box(0.42, 0.1, 0.38);
-  const pilasterGlowGeo = b.box(0.06, WALL_H * 0.55, 0.02);
+  const columnGeo = b.rbox(0.6, WALL_H - 0.5, 0.3, 0.05, 2);
   const parapetGeo = b.rbox(T, PARAPET_H, T * 0.9, 0.05, 2, 2);
   const railTopGeo = b.rbox(T + 0.02, 0.08, 0.24, 0.03, 2);
   const partitionGeo = b.rbox(T, PARTITION_H, 0.55, 0.05, 2);
-  const glassGeo = b.box(T - 0.12, PARTITION_GLASS_H - PARTITION_H - 0.1, 0.05);
-  const mullionGeo = b.box(0.08, PARTITION_GLASS_H - PARTITION_H, 0.1);
   const sconceGeo = b.rbox(0.26, 0.42, 0.16, 0.05, 2);
-  const sconceGlowGeo = b.box(0.14, 0.3, 0.05);
-  const nicheFrame = b.geo('nicheFrame', () => archFrameGeometry(1.0, 2.5, 0.08));
+  const nicheFrame = b.geo('nicheFrame', () => archFrameGeometry(NICHE_W, NICHE_H, 0.08));
   const nicheBack = b.geo('nicheBack', () => {
-    const g = archPaneGeometry(1.0, 2.5);
+    const g = archPaneGeometry(NICHE_W, NICHE_H);
     g.translate(0, 0, 0.005);
     return g;
   });
+  const WIN_H = 1.75;
+  const winFrame = b.geo('winFrame', () => archFrameGeometry(0.9, WIN_H, 0.1));
+  const winPane = b.geo('winPane', () => archPaneGeometry(0.9, WIN_H));
+  const paneMat = windowPaneMaterial(WIN_H);
+  ownedMats.push(paneMat);
+
+  /** Deterministic module per wall face, avoiding a repeat of the previous face along the same wall run. */
+  const baseModule = (c: number, r: number, d: number, k: WallClass): WallModule => {
+    const weights = k === 'back' ? BACK_WEIGHTS : SIDE_WEIGHTS;
+    const total = MODULES.reduce((s, m) => s + weights[m], 0);
+    let x = cellHash(c * 4 + d + 101, r * 3 + 17) % total;
+    for (const m of MODULES) {
+      x -= weights[m];
+      if (x < 0) return m;
+    }
+    return 'plain';
+  };
+  const pickModule = (c: number, r: number, d: number, k: WallClass): WallModule => {
+    const m = baseModule(c, r, d, k);
+    const ac = d % 2 === 0 ? 1 : 0;
+    const ar = d % 2 === 0 ? 0 : 1;
+    const pc = c - ac;
+    const pr = r - ar;
+    if (!(isTallWall(pc, pr) && openish(pc + DX[d]!, pr + DZ[d]!))) return m;
+    if (baseModule(pc, pr, d, cls(pc, pr)) !== m) return m;
+    const weights = k === 'back' ? BACK_WEIGHTS : SIDE_WEIGHTS;
+    const pool = MODULES.filter((x) => x !== m && weights[x] > 0);
+    return pool[cellHash(c + 7, r + 13 * d) % pool.length] ?? m;
+  };
 
   let lampCounter = 0;
   for (let r = 0; r < H; r++)
@@ -183,66 +244,126 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
       if (k === 'back' || k === 'side') {
         b.add(wallGeo, lib.wallPanel, { x: cx, y: base + WALL_H / 2, z: cz });
         b.add(capGeo, lib.gunmetal, { x: cx, y: base + WALL_H + 0.14, z: cz });
-        b.add(capTrimGeo, lib.brass, { x: cx, y: base + WALL_H - 0.02, z: cz }, { cast: false });
-        b.add(capRailGeo, lib.brass, { x: cx, y: base + WALL_H + 0.3, z: cz }, { cast: false, rotY: open.some((d) => d % 2 === 1) ? Math.PI / 2 : 0 });
+        b.cube(lib.brass, { x: cx, y: base + WALL_H - 0.02, z: cz }, T + 0.08, 0.06, T + 0.08, { cast: false });
+        b.cube(lib.brass, { x: cx, y: base + WALL_H + 0.3, z: cz }, T + 0.06, 0.05, 0.3, { cast: false, rotY: open.some((d) => d % 2 === 1) ? Math.PI / 2 : 0 });
         for (const d of open) {
-          const fx = cx + DX[d]! * (T / 2);
-          const fz = cz + DZ[d]! * (T / 2);
-          const rotY = d % 2 === 0 ? 0 : Math.PI / 2;
-          const variant = (c * 7 + r * 3) % 4;
-          if (variant === 1 && k === 'back') {
-            // arch niche: brass arch frame, dark recess, warm glow at its foot
-            b.add(nicheFrame, lib.brass, { x: fx + DX[d]! * 0.01, y: base + 0.35, z: fz + DZ[d]! * 0.01 }, { rotY: d === 2 ? 0 : d === 0 ? Math.PI : d === 1 ? Math.PI / 2 : -Math.PI / 2 });
-            b.add(nicheBack, lib.gunmetalDark, { x: fx + DX[d]! * 0.012, y: base + 0.35, z: fz + DZ[d]! * 0.012 }, { rotY: d === 2 ? 0 : d === 0 ? Math.PI : d === 1 ? Math.PI / 2 : -Math.PI / 2, cast: false });
-            b.add(sconceGlowGeo, lib.emissive(PALETTE.warmLamp, 2.6), { x: fx + DX[d]! * 0.05, y: base + 2.35, z: fz + DZ[d]! * 0.05 }, { rotY, cast: false, scale: new THREE.Vector3(1.6, 0.5, 1) });
-            lights.push({ position: new THREE.Vector3(fx + DX[d]! * 0.6, base + 2.2, fz + DZ[d]! * 0.6), color: PALETTE.warmLamp, intensity: 4, distance: 6, priority: 1 });
-          } else if (variant % 2 === 0) {
-            b.add(conduitHousingGeo, lib.gunmetalDark, { x: fx + DX[d]! * 0.03, y: base + WALL_H * 0.5, z: fz + DZ[d]! * 0.03 }, { rotY });
-            b.add(conduitGeo, cyanStrip, { x: fx + DX[d]! * 0.075, y: base + WALL_H * 0.5, z: fz + DZ[d]! * 0.075 }, { rotY, cast: false, receive: false });
-          } else if (lampCounter++ % 2 === 0) {
-            // warm sconce
-            const sx = fx + DX[d]! * 0.08;
-            const sz = fz + DZ[d]! * 0.08;
-            b.add(sconceGeo, lib.brass, { x: sx, y: base + 2.6, z: sz }, { rotY });
-            b.add(sconceGlowGeo, lib.emissive(PALETTE.warmLamp, 3.2), { x: sx + DX[d]! * 0.07, y: base + 2.6, z: sz + DZ[d]! * 0.07 }, { rotY, cast: false });
-            lights.push({
-              position: new THREE.Vector3(sx + DX[d]! * 0.5, base + 2.7, sz + DZ[d]! * 0.5),
-              color: PALETTE.warmLamp,
-              intensity: 6,
-              distance: 7,
-              priority: 1,
-            });
-          }
+          const f = face(cx, base, cz, d);
+          const rotY = f.rotY;
+          // trims on every face: protruding kick plate with a brass line, crown moulding under the cap
+          b.cube(lib.gunmetalDark, f.at(0, 0.12, 0.05), T, 0.24, 0.1, { rotY });
+          b.cube(lib.brass, f.at(0, 0.255, 0.055), T, 0.03, 0.11, { rotY, cast: false });
+          b.cube(lib.gunmetal, f.at(0, WALL_H - 0.2, 0.05), T, 0.14, 0.1, { rotY, cast: false });
+          // faces covered by authored wall decor (windows, conduits, banners, machinery) keep only the trims
+          if (!plan.wallFaces.has(`${c},${r},${d}`)) addWallModule(pickModule(c, r, d, k), f, k);
           // pilaster at the module boundary (one per pair to avoid doubling)
           const along = d % 2 === 0 ? { dx: 1, dz: 0 } : { dx: 0, dz: 1 };
           const nc = c + along.dx;
           const nr = r + along.dz;
-          if (grid.isWall(nc, nr) && (cls(nc, nr) === 'back' || cls(nc, nr) === 'side') && openish(nc + DX[d]!, nr + DZ[d]!)) {
-            const px = fx + along.dx * (T / 2) + DX[d]! * 0.12;
-            const pz = fz + along.dz * (T / 2) + DZ[d]! * 0.12;
-            b.add(pilasterGeo, lib.gunmetal, { x: px, y: base + (WALL_H + 0.25) / 2, z: pz }, { rotY });
-            for (const y of [0.35, WALL_H - 0.4]) b.add(pilasterBandGeo, lib.brass, { x: px, y: base + y, z: pz }, { rotY });
-            b.add(pilasterGlowGeo, lib.emissive(PALETTE.gold, 1.8), { x: px + DX[d]! * 0.175, y: base + WALL_H * 0.5, z: pz + DZ[d]! * 0.175 }, { rotY, cast: false });
+          if (isTallWall(nc, nr) && openish(nc + DX[d]!, nr + DZ[d]!)) {
+            const px = f.x + along.dx * (T / 2) + DX[d]! * 0.12;
+            const pz = f.z + along.dz * (T / 2) + DZ[d]! * 0.12;
+            const prot = d % 2 === 0 ? 0 : Math.PI / 2;
+            b.add(pilasterGeo, lib.gunmetal, { x: px, y: base + (WALL_H + 0.25) / 2, z: pz }, { rotY: prot });
+            for (const y of [0.35, WALL_H - 0.4]) b.cube(lib.brass, { x: px, y: base + y, z: pz }, 0.42, 0.1, 0.38, { rotY: prot });
+            b.cube(lib.glow, { x: px + DX[d]! * 0.175, y: base + WALL_H * 0.5, z: pz + DZ[d]! * 0.175 }, 0.06, WALL_H * 0.55, 0.02, { rotY: prot, cast: false, receive: false, color: glow(PALETTE.gold, 1.8) });
           }
         }
       } else if (k === 'front') {
         b.add(parapetGeo, lib.gunmetal, { x: cx, y: base + PARAPET_H / 2, z: cz - T * 0.05 });
         b.add(railTopGeo, lib.brass, { x: cx, y: base + PARAPET_H + 0.02, z: cz - T * 0.4 });
-        b.add(glowStripGeo, amber, { x: cx, y: base + PARAPET_H - 0.12, z: cz - T * 0.5 - 0.005 }, { cast: false });
+        b.cube(lib.glow, { x: cx, y: base + PARAPET_H - 0.12, z: cz - T * 0.5 - 0.005 }, T * 0.94, 0.05, 0.04, { cast: false, receive: false, color: amber });
+        // small ivory inspection plates break up the parapet run
+        if (cellHash(c, r) % 3 === 0) b.cube(lib.ivory, { x: cx, y: base + PARAPET_H * 0.42, z: cz - T * 0.5 + 0.08 }, 0.7, 0.22, 0.03, { cast: false });
       } else if (k === 'partition') {
         const rotY = open.includes(0) && open.includes(2) ? 0 : Math.PI / 2;
         b.add(partitionGeo, lib.gunmetal, { x: cx, y: base + PARTITION_H / 2, z: cz }, { rotY });
         b.add(railTopGeo, lib.brass, { x: cx, y: base + PARTITION_H + 0.02, z: cz }, { rotY });
-        b.add(glassGeo, lib.glass, { x: cx, y: base + (PARTITION_GLASS_H + PARTITION_H) / 2, z: cz }, { rotY, cast: false });
+        b.cube(lib.glass, { x: cx, y: base + (PARTITION_GLASS_H + PARTITION_H) / 2, z: cz }, T - 0.12, PARTITION_GLASS_H - PARTITION_H - 0.1, 0.05, { rotY, cast: false });
         b.add(railTopGeo, lib.brass, { x: cx, y: base + PARTITION_GLASS_H, z: cz }, { rotY, cast: false });
-        b.add(mullionGeo, lib.brass, { x: cx, y: base + (PARTITION_GLASS_H + PARTITION_H) / 2, z: cz }, { rotY, cast: false });
+        b.cube(lib.brass, { x: cx, y: base + (PARTITION_GLASS_H + PARTITION_H) / 2, z: cz }, 0.08, PARTITION_GLASS_H - PARTITION_H, 0.1, { rotY, cast: false });
         for (const side of [-1, 1]) {
           const ox = rotY === 0 ? 0 : side * 0.285;
           const oz = rotY === 0 ? side * 0.285 : 0;
-          b.add(glowStripGeo, amberSoft, { x: cx + ox, y: base + PARTITION_H - 0.2, z: cz + oz }, { rotY, cast: false, receive: false });
+          b.cube(lib.glow, { x: cx + ox, y: base + PARTITION_H - 0.2, z: cz + oz }, T * 0.94, 0.05, 0.04, { rotY, cast: false, receive: false, color: amberSoft });
         }
       }
     }
+
+  function addWallModule(mod: WallModule, f: Face, k: WallClass): void {
+    const { rotY } = f;
+    switch (mod) {
+      case 'plain':
+        // brass name plate + two status pips
+        b.cube(lib.brass, f.at(0, 2.95, 0.02), 0.56, 0.12, 0.04, { rotY, cast: false });
+        b.cube(lib.glow, f.at(-0.42, 2.95, 0.02), 0.06, 0.06, 0.03, { rotY, cast: false, receive: false, color: cyanStrip });
+        b.cube(lib.glow, f.at(0.42, 2.95, 0.02), 0.06, 0.06, 0.03, { rotY, cast: false, receive: false, color: amber });
+        break;
+      case 'conduit':
+        b.add(conduitHousingGeo, lib.gunmetalDark, f.at(0, WALL_H * 0.5, 0.03), { rotY });
+        b.cube(lib.glow, f.at(0, WALL_H * 0.5, 0.075), 0.07, WALL_H * 0.62, 0.05, { rotY, cast: false, receive: false, color: cyanStrip });
+        for (const y of [WALL_H * 0.16, WALL_H * 0.84]) b.cube(lib.brass, f.at(0, y, 0.05), 0.32, 0.1, 0.12, { rotY, cast: false });
+        break;
+      case 'window': {
+        // observation window: brass arched frame, a glowing view out into the facility, brass sill
+        const y0 = 1.3;
+        b.add(winPane, lib.gunmetalDark, f.at(0, y0 - 0.06, 0.004), { rotY, cast: false, scale: new THREE.Vector3(1.22, 1.08, 1) });
+        b.add(winPane, paneMat, f.at(0, y0, 0.01), { rotY, cast: false, receive: false, color: new THREE.Color(1, 1, 1) });
+        b.add(winFrame, lib.brass, f.at(0, y0 - 0.12, 0.012), { rotY });
+        b.cube(lib.brass, f.at(0, y0 - 0.1, 0.1), 1.45, 0.08, 0.2, { rotY, cast: false });
+        break;
+      }
+      case 'recessed':
+        b.cube(lib.gunmetalDark, f.at(0, 2.0, 0.03), 1.5, 2.6, 0.06, { rotY });
+        b.cube(lib.ivory, f.at(0, 2.72, 0.07), 1.22, 1.0, 0.04, { rotY, cast: false });
+        b.cube(lib.ivory, f.at(0, 1.42, 0.07), 1.22, 1.06, 0.04, { rotY, cast: false, color: new THREE.Color(0.55, 0.6, 0.66) });
+        b.cube(lib.glow, f.at(0, 2.12, 0.07), 1.22, 0.035, 0.03, { rotY, cast: false, receive: false, color: amber });
+        for (const sx of [-0.66, 0.66]) for (const y of [0.8, 3.2]) b.tube(lib.brass, f.at(sx, y, 0.07), 0.045, 0.04, { rotY, rotX: Math.PI / 2, cast: false, seg: 8 });
+        break;
+      case 'pipes': {
+        const pipes = [
+          [-0.52, 0.075],
+          [-0.27, 0.1],
+          [0.0, 0.06],
+          [0.2, 0.06],
+        ] as const;
+        for (const [u, rr] of pipes) b.tube(u === 0.2 ? lib.gunmetal : lib.brass, f.at(u, WALL_H / 2 + 0.05, 0.16), rr, WALL_H - 0.5, { rotY });
+        for (const y of [0.95, 2.9]) b.cube(lib.gunmetalDark, f.at(-0.16, y, 0.12), 0.95, 0.12, 0.14, { rotY, cast: false });
+        b.tube(lib.brass, f.at(-0.27, 1.75, 0.3), 0.17, 0.04, { rotY, rotX: Math.PI / 2, cast: false, seg: 10 });
+        b.cube(lib.gunmetalDark, f.at(0.58, 1.9, 0.05), 0.34, 0.46, 0.1, { rotY, cast: false });
+        b.cube(lib.glow, f.at(0.58, 1.98, 0.105), 0.2, 0.16, 0.02, { rotY, cast: false, receive: false, color: amber });
+        break;
+      }
+      case 'column':
+        b.cube(lib.gunmetalDark, f.at(0, 0.2, 0.2), 0.78, 0.4, 0.42, { rotY });
+        b.add(columnGeo, lib.ivory, f.at(0, 0.25 + (WALL_H - 0.5) / 2, 0.15), { rotY });
+        for (const y of [0.55, 1.95, 3.35]) b.cube(lib.brass, f.at(0, y, 0.15), 0.66, 0.1, 0.36, { rotY });
+        for (const y of [1.25, 2.65]) b.cube(lib.glow, f.at(0, y, 0.305), 0.06, 1.0, 0.02, { rotY, cast: false, receive: false, color: glow(PALETTE.gold, 2.4) });
+        break;
+      case 'vent':
+        b.cube(lib.gunmetalDark, f.at(0, 1.2, 0.04), 1.32, 1.12, 0.08, { rotY });
+        b.cube(lib.glow, f.at(0, 1.2, 0.082), 1.14, 0.94, 0.01, { rotY, cast: false, receive: false, color: glow(PALETTE.warmLamp, 0.55) });
+        for (let i = 0; i < 7; i++) b.cube(lib.gunmetal, f.at(0, 0.8 + i * 0.135, 0.11), 1.16, 0.05, 0.11, { rotY, rotX: -0.55, cast: false });
+        b.cube(lib.brass, f.at(0, 1.8, 0.09), 1.36, 0.06, 0.1, { rotY, cast: false });
+        b.cube(lib.glow, f.at(0, 2.9, 0.03), 0.42, 0.05, 0.03, { rotY, cast: false, receive: false, color: cyanStrip });
+        break;
+      case 'niche': {
+        // arch niche: brass arch frame, dark recess, warm glow at its head
+        const archRot = f.d === 2 ? 0 : f.d === 0 ? Math.PI : f.d === 1 ? Math.PI / 2 : -Math.PI / 2;
+        b.add(nicheFrame, lib.brass, f.at(0, 0.35, 0.01), { rotY: archRot });
+        b.add(nicheBack, lib.gunmetalDark, f.at(0, 0.35, 0.012), { rotY: archRot, cast: false });
+        b.cube(lib.glow, f.at(0, 2.35, 0.05), 0.22, 0.15, 0.05, { rotY, cast: false, receive: false, color: glow(PALETTE.warmLamp, 2.6) });
+        lights.push({ position: new THREE.Vector3(...f.arr(0, 2.2, 0.6)), color: PALETTE.warmLamp, intensity: 4, distance: 6, priority: 1 });
+        break;
+      }
+      case 'sconce': {
+        b.add(sconceGeo, lib.brass, f.at(0, 2.6, 0.08), { rotY });
+        b.cube(lib.glow, f.at(0, 2.6, 0.15), 0.14, 0.3, 0.05, { rotY, cast: false, receive: false, color: glow(PALETTE.warmLamp, 3.2) });
+        if (lampCounter++ % 2 === 0 || k === 'back')
+          lights.push({ position: new THREE.Vector3(...f.arr(0, 2.7, 0.58)), color: PALETTE.warmLamp, intensity: 6, distance: 7, priority: 1 });
+        break;
+      }
+    }
+  }
 
   // ---------- pillars ----------
   for (let r = 0; r < H; r++)
@@ -286,16 +407,33 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
     for (const [k, s] of [
       [0.12, 0.26],
       [0.28, 0.17],
+      [0.4, 0.1],
     ] as const) {
-      b.add(ringGeo, amber, { x: cx, y: -FOUNDATION_DEPTH - span * k, z: cz }, { rotX: Math.PI / 2, scale: span * s, cast: false });
+      b.add(ringGeo, lib.glow, { x: cx, y: -FOUNDATION_DEPTH - span * k, z: cz }, { rotX: Math.PI / 2, scale: span * s, cast: false, receive: false, color: amber });
     }
+    // slow gyroscope under the keel: two crossed clockwork rings
+    const ky = -FOUNDATION_DEPTH - span * 0.5;
+    addClockworkRing(parts, clock, lib, new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(cx, ky, cz), span * 0.2, { teeth: 0.5, speed: 0.05, glow: 1.2 });
+    addClockworkRing(parts, clock, lib, new THREE.Matrix4().makeRotationY(0.7).setPosition(cx, ky, cz), span * 0.15, { teeth: 0.5, speed: -0.07, glow: 1.2, color: PALETTE.gold });
   }
 
   // ---------- decor ----------
-  for (const d of level.decor ?? []) addDecor(d, grid, b, lib, extra, animated, lights, ownedGeos, ownedMats);
+  const ownedTex: THREE.Texture[] = [];
+  const dctx: DecorContext = { grid, b, lib, extra, animated, lights, owned: ownedGeos, ownedMats, ownedTex, parts, clock, isTallWall };
+  const decor = new DecorBuilder(dctx);
+  for (const d of level.decor ?? []) decor.add(d);
+  decor.finish();
 
   const group = b.build('environment');
   group.add(extra);
+  group.add(parts.build('environment-animated'));
+  animated.push({ object: parts.group, update: (t) => parts.update(t) });
+  animated.push({
+    object: extra,
+    update: (t) => {
+      paneMat.uniforms['uTime']!.value = t;
+    },
+  });
   return {
     group,
     grid,
@@ -304,25 +442,29 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
     wallClass: cls,
     dispose() {
       b.dispose();
+      parts.dispose();
+      clock.dispose();
       for (const g of ownedGeos) g.dispose();
       for (const m of ownedMats) m.dispose();
+      for (const t of ownedTex) t.dispose();
     },
   };
 }
 
 function addPillar(b: Batcher, lib: MaterialLibrary, x: number, y: number, z: number, h: number): void {
   b.add(b.rbox(1.34, 0.42, 1.34, 0.06, 2), lib.gunmetal, { x, y: y + 0.21, z });
-  b.add(b.box(1.22, 0.1, 1.22), lib.brass, { x, y: y + 0.47, z });
+  b.cube(lib.brass, { x, y: y + 0.47, z }, 1.22, 0.1, 1.22);
   b.add(b.rbox(0.96, h - 1.1, 0.96, 0.06, 2), lib.gunmetal, { x, y: y + 0.52 + (h - 1.1) / 2, z });
   const panelH = h - 1.7;
+  const gold = lib.glowColor(PALETTE.gold, 2.6);
   for (let d = 0; d < 4; d++) {
     const ox = DX[d]! * 0.49;
     const oz = DZ[d]! * 0.49;
     const rotY = d % 2 === 0 ? 0 : Math.PI / 2;
     b.add(b.rbox(0.62, panelH, 0.04, 0.015, 1), lib.ivory, { x: x + ox, y: y + 0.85 + panelH / 2, z: z + oz }, { rotY });
-    b.add(b.box(0.07, panelH - 0.3, 0.03), lib.emissive(PALETTE.gold, 2.6), { x: x + ox * 1.05, y: y + 0.85 + panelH / 2, z: z + oz * 1.05 }, { rotY, cast: false });
+    b.cube(lib.glow, { x: x + ox * 1.05, y: y + 0.85 + panelH / 2, z: z + oz * 1.05 }, 0.07, panelH - 0.3, 0.03, { rotY, cast: false, receive: false, color: gold });
   }
-  for (const yy of [0.72, h - 0.72]) b.add(b.box(1.08, 0.14, 1.08), lib.brass, { x, y: y + yy, z });
+  for (const yy of [0.72, h - 0.72]) b.cube(lib.brass, { x, y: y + yy, z }, 1.08, 0.14, 1.08);
   b.add(b.rbox(1.24, 0.34, 1.24, 0.05, 2), lib.gunmetalDark, { x, y: y + h - 0.45, z });
   b.add(b.rbox(1.4, 0.16, 1.4, 0.04, 2), lib.brass, { x, y: y + h - 0.22, z });
 }
@@ -331,17 +473,18 @@ function addRailing(b: Batcher, lib: MaterialLibrary, x: number, y: number, z: n
   const postGeo = b.rbox(0.14, 1.0, 0.14, 0.03, 1);
   b.add(postGeo, lib.brass, { x, y: y + 0.5, z });
   b.add(b.rbox(0.3, 0.14, 0.3, 0.03, 1), lib.gunmetalDark, { x, y: y + 0.07, z });
+  const gold = lib.glowColor(PALETTE.gold, 2.4);
   for (const d of arms) {
     const len = T / 2;
     const mx = x + (DX[d]! * len) / 2;
     const mz = z + (DZ[d]! * len) / 2;
     const rotY = d % 2 === 0 ? Math.PI / 2 : 0;
-    b.add(b.box(len, 0.07, 0.09), lib.brass, { x: mx, y: y + 1.0, z: mz }, { rotY });
-    b.add(b.box(len, 0.04, 0.05), lib.brass, { x: mx, y: y + 0.62, z: mz }, { rotY });
+    b.cube(lib.brass, { x: mx, y: y + 1.0, z: mz }, len, 0.07, 0.09, { rotY });
+    b.cube(lib.brass, { x: mx, y: y + 0.62, z: mz }, len, 0.04, 0.05, { rotY });
     b.add(b.rbox(len, 0.22, 0.16, 0.03, 1), lib.gunmetal, { x: mx, y: y + 0.11, z: mz }, { rotY });
-    b.add(b.box(len, 0.035, 0.03), lib.emissive(PALETTE.gold, 2.4), { x: mx, y: y + 0.24, z: mz }, { rotY, cast: false });
+    b.cube(lib.glow, { x: mx, y: y + 0.24, z: mz }, len, 0.035, 0.03, { rotY, cast: false, receive: false, color: gold });
     // glass infill
-    b.add(b.box(len, 0.36, 0.025), lib.glass, { x: mx, y: y + 0.42, z: mz }, { rotY, cast: false });
+    b.cube(lib.glass, { x: mx, y: y + 0.42, z: mz }, len, 0.36, 0.025, { rotY, cast: false });
   }
 }
 
@@ -355,12 +498,13 @@ function addStairs(b: Batcher, lib: MaterialLibrary, x: number, y: number, z: nu
   // local (lx, lz) -> world, ascent toward local -z
   const at = (lx: number, ly: number, lz: number) => ({ x: x + lx * cos + lz * sin, y: y + ly, z: z - lx * sin + lz * cos });
   const width = T * 0.8;
+  const gold = lib.glowColor(PALETTE.gold, 2.2);
   for (let i = 0; i < steps; i++) {
     const top = (i + 1) * rise;
     const lz = T / 2 - (i + 0.5) * run;
-    b.add(b.box(width, top, run), lib.gunmetal, at(0, top / 2 - 0.001, lz), { rotY });
-    b.add(b.box(width, 0.04, run * 0.92), lib.floorPlain, at(0, top + 0.015, lz), { rotY, cast: false });
-    b.add(b.box(width * 0.96, 0.03, 0.035), lib.emissive(PALETTE.gold, 2.2), at(0, top + 0.01, lz + run / 2 - 0.02), { rotY, cast: false });
+    b.cube(lib.gunmetal, at(0, top / 2 - 0.001, lz), width, top, run, { rotY });
+    b.cube(lib.floorPlain, at(0, top + 0.015, lz), width, 0.04, run * 0.92, { rotY, cast: false });
+    b.cube(lib.glow, at(0, top + 0.01, lz + run / 2 - 0.02), width * 0.96, 0.03, 0.035, { rotY, cast: false, receive: false, color: gold });
   }
   // side stringers (extruded right triangles) with brass caps
   const strGeo = b.geo('stringer', () => {
@@ -380,151 +524,21 @@ function addStairs(b: Batcher, lib: MaterialLibrary, x: number, y: number, z: nu
   for (const side of [-1, 1]) {
     b.add(strGeo, lib.gunmetalDark, at(side * (width / 2 + 0.1), 0, 0), { rotY });
   }
-  const railGeo = b.cyl(0.035, 0.035, Math.hypot(T, T) * 0.98, 8);
+  const railLen = Math.hypot(T, T) * 0.98;
   for (const side of [-1, 1]) {
     const p = at(side * (width / 2 + 0.1), T / 2 + 0.95, 0);
-    b.add(railGeo, lib.brass, p, { rotY, rotX: -Math.PI / 4 });
+    b.tube(lib.brass, p, 0.035, railLen, { rotY, rotX: -Math.PI / 4, seg: 8 });
     for (const k of [-0.42, 0.42]) {
       const pp = at(side * (width / 2 + 0.1), T / 2 + k * T * 1.0 + 0.45, -k * T);
-      b.add(b.cyl(0.03, 0.03, 0.95, 6), lib.brass, pp, { rotY });
+      b.tube(lib.brass, pp, 0.03, 0.95, { rotY, seg: 8 });
     }
   }
 }
 
-function addDecor(
-  d: DecorDefinition,
-  grid: RenderGrid,
-  b: Batcher,
-  lib: MaterialLibrary,
-  extra: THREE.Group,
-  animated: BuiltKit['animated'],
-  lights: KitLight[],
-  owned: THREE.BufferGeometry[],
-  ownedMats: THREE.Material[],
-): void {
-  const facing = d.facing ?? 2;
-  // Wall-mounted decor authored on the floor cell in front of a wall is moved onto that wall.
-  let col = d.col;
-  let row = d.row;
-  if ((d.type === 'conduit' || d.type === 'observationWindow') && !grid.isWall(col, row) && grid.isWall(col - DX[facing]!, row - DZ[facing]!)) {
-    col -= DX[facing]!;
-    row -= DZ[facing]!;
-  }
-  const lvl = d.level ?? Math.max(0, grid.tileAt(col, row).h);
-  const cx = (col + 0.5) * T;
-  const cz = (row + 0.5) * T;
-  const base = lvl * T;
-  const scale = typeof d.params?.['scale'] === 'number' ? d.params['scale'] : 1;
-  const rotY = facing % 2 === 0 ? 0 : Math.PI / 2;
-  // face position: on the wall face pointing toward `facing`
-  const fx = cx + DX[facing]! * (T / 2 + 0.02);
-  const fz = cz + DZ[facing]! * (T / 2 + 0.02);
-  switch (d.type) {
-    case 'conduit': {
-      // trunk of pipes running up the wall face with glowing couplers
-      for (const off of [-0.32, 0, 0.32]) {
-        const ox = facing % 2 === 0 ? off : 0;
-        const oz = facing % 2 === 0 ? 0 : off;
-        b.add(b.cyl(0.07, 0.07, WALL_H - 0.4, 10), lib.brass, { x: fx + ox + DX[facing]! * 0.08, y: base + WALL_H / 2, z: fz + oz + DZ[facing]! * 0.08 });
-        for (const y of [0.9, 2.1, 3.3]) {
-          b.add(b.cyl(0.1, 0.1, 0.12, 10), lib.gunmetalDark, { x: fx + ox + DX[facing]! * 0.08, y: base + y, z: fz + oz + DZ[facing]! * 0.08 });
-          b.add(b.cyl(0.085, 0.085, 0.05, 10), lib.emissive(PALETTE.cyan, 2.6), { x: fx + ox + DX[facing]! * 0.08, y: base + y + 0.1, z: fz + oz + DZ[facing]! * 0.08 }, { cast: false });
-        }
-      }
-      break;
-    }
-    case 'observationWindow': {
-      const geo = archFrameGeometry(1.75 * scale, 3.1 * scale, 0.22);
-      owned.push(geo);
-      const frame = new THREE.Mesh(geo, lib.brass);
-      frame.position.set(fx + DX[facing]! * 0.02, base + 0.45, fz + DZ[facing]! * 0.02);
-      frame.rotation.y = facing === 2 ? 0 : facing === 0 ? Math.PI : facing === 1 ? Math.PI / 2 : -Math.PI / 2;
-      frame.castShadow = true;
-      extra.add(frame);
-      // glowing "view" into the facility: gradient pane + glass
-      const paneGeo = archPaneGeometry(1.42 * scale, 2.8 * scale);
-      owned.push(paneGeo);
-      const paneMat = new THREE.ShaderMaterial({
-        uniforms: { uTop: { value: new THREE.Color(0x0d2c4a) }, uBottom: { value: new THREE.Color(0x58c8ff) }, uH: { value: 2.8 * scale } },
-        vertexShader: 'varying float vY; void main(){ vY = position.y; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
-        fragmentShader:
-          'uniform vec3 uTop; uniform vec3 uBottom; uniform float uH; varying float vY; void main(){ float k = clamp(vY/uH,0.0,1.0); vec3 c = mix(uBottom*1.6, uTop, pow(k,0.7)); float bars = step(0.94, fract(vY*2.2)); c *= 1.0 - bars*0.6; gl_FragColor = vec4(c,1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}',
-      });
-      ownedMats.push(paneMat);
-      const pane = new THREE.Mesh(paneGeo, paneMat);
-      pane.position.copy(frame.position);
-      pane.rotation.copy(frame.rotation);
-      pane.position.y += 0.15;
-      extra.add(pane);
-      lights.push({ position: new THREE.Vector3(fx + DX[facing]! * 1.2, base + 2, fz + DZ[facing]! * 1.2), color: 0x6fc8ff, intensity: 5, distance: 8, priority: 2 });
-      break;
-    }
-    case 'ring': {
-      // Rings never sit between the camera and the play space: on the camera side of the chamber they hang
-      // horizontally beneath the platform, otherwise they stand upright behind the wall line.
-      const ring = clockworkRing(lib, 2.2 * scale, owned, { teeth: 0.6 });
-      const front = d.row >= grid.height / 2;
-      if (front) {
-        ring.position.set(cx, base - 2.4, cz + 1.5);
-        ring.rotation.x = -Math.PI / 2;
-      } else {
-        ring.position.set(cx + DX[facing]! * -2.5, base + WALL_H + 2.4 * scale, cz + DZ[facing]! * -2.5);
-        ring.rotation.y = rotY;
-      }
-      extra.add(ring);
-      const inner = ring.children[1];
-      animated.push({
-        object: ring,
-        update(t) {
-          if (ring.children[0]) ring.children[0].rotation.z = t * 0.12;
-          if (inner) inner.rotation.z = -t * 0.2;
-        },
-      });
-      break;
-    }
-    case 'lamp': {
-      b.add(b.cyl(0.05, 0.08, 2.4, 8), lib.brass, { x: cx, y: base + 1.2, z: cz });
-      b.add(b.cyl(0.18, 0.12, 0.3, 12), lib.emissive(PALETTE.warmLamp, 3), { x: cx, y: base + 2.5, z: cz }, { cast: false });
-      lights.push({ position: new THREE.Vector3(cx, base + 2.6, cz), color: PALETTE.warmLamp, intensity: 6, distance: 7, priority: 1 });
-      break;
-    }
-    default:
-      // Unknown decor types are ignored (forward compatible with level designers' data).
-      break;
-  }
-}
-
-/** Arch frame: rectangle with a round-topped opening, extruded. Origin at bottom centre, faces +z. */
-export function archFrameGeometry(w: number, h: number, depth: number): THREE.ExtrudeGeometry {
-  const outer = new THREE.Shape();
-  const r = w / 2;
-  outer.moveTo(-r - 0.22, 0);
-  outer.lineTo(r + 0.22, 0);
-  outer.lineTo(r + 0.22, h - r);
-  outer.absarc(0, h - r, r + 0.22, 0, Math.PI, false);
-  outer.lineTo(-r - 0.22, 0);
-  const hole = new THREE.Path();
-  hole.moveTo(-r + 0.05, 0.12);
-  hole.lineTo(r - 0.05, 0.12);
-  hole.lineTo(r - 0.05, h - r);
-  hole.absarc(0, h - r, r - 0.05, 0, Math.PI, false);
-  hole.lineTo(-r + 0.05, 0.12);
-  outer.holes.push(hole);
-  return new THREE.ExtrudeGeometry(outer, { depth, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 2, curveSegments: 24 });
-}
-
-export function archPaneGeometry(w: number, h: number): THREE.ShapeGeometry {
-  const s = new THREE.Shape();
-  const r = w / 2;
-  s.moveTo(-r, 0);
-  s.lineTo(r, 0);
-  s.lineTo(r, h - r);
-  s.absarc(0, h - r, r, 0, Math.PI, false);
-  s.lineTo(-r, 0);
-  return new THREE.ShapeGeometry(s, 24);
-}
-
-/** Rotating brass clockwork ring with tick teeth + inner counter-rotating ring. Faces +z. */
+/**
+ * Rotating brass clockwork ring with tick teeth + inner counter-rotating ring, as a standalone group (kept for
+ * callers outside the environment; the kit and backdrop use the instanced `addClockworkRing`). Faces +z.
+ */
 export function clockworkRing(lib: MaterialLibrary, radius: number, owned: THREE.BufferGeometry[], opts: { teeth?: number; glow?: number } = {}): THREE.Group {
   const ts = opts.teeth ?? 1;
   const g = new THREE.Group();
@@ -552,17 +566,16 @@ export function clockworkRing(lib: MaterialLibrary, radius: number, owned: THREE
   inner.add(new THREE.Mesh(t2, lib.emissive(PALETTE.cyan, opts.glow ?? 1.8)));
   const spokeGeo = new THREE.BoxGeometry(radius * 1.56, radius * 0.025, radius * 0.025);
   owned.push(spokeGeo);
+  const spokes = new THREE.InstancedMesh(spokeGeo, lib.brass, 3);
   for (let i = 0; i < 3; i++) {
-    const s = new THREE.Mesh(spokeGeo, lib.brass);
-    s.rotation.z = (i / 3) * Math.PI;
-    inner.add(s);
+    o.position.set(0, 0, 0);
+    o.rotation.set(0, 0, (i / 3) * Math.PI);
+    o.scale.setScalar(1);
+    o.updateMatrix();
+    spokes.setMatrixAt(i, o.matrix);
   }
+  inner.add(spokes);
   g.add(inner);
   return g;
 }
 
-function cellHash(c: number, r: number): number {
-  let h = Math.imul(c * 73856093 ^ r * 19349663, 2654435761);
-  h ^= h >>> 13;
-  return Math.imul(h, 1274126177) >>> 0;
-}

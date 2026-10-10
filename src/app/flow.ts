@@ -1,6 +1,7 @@
 import type { LevelDefinition, PlayerInput, SimView, TemporalLoop } from '../engine/contracts';
 import type { QualityLevel } from '../engine/rendering';
-import type { QualityPreset } from '../persistence/settings';
+import type { ComfortSettings } from '../engine/rendering/comfort';
+import { QUALITY_PRESETS, type QualityPreset, type Settings } from '../persistence/settings';
 import { compileSolution } from '../testing/harness/harness';
 
 /**
@@ -14,6 +15,27 @@ export type AppMode = 'boot' | 'menu' | 'intro' | 'playing' | 'complete';
 /** Settings has an extra 'ultra' preset; the renderer tops out at 'high'. */
 export function rendererQuality(q: QualityPreset | string | null | undefined): QualityLevel {
   return q === 'low' || q === 'medium' ? q : 'high';
+}
+
+/**
+ * `?quality=` URL override, validated against the Settings presets (null when absent or unknown). While set it wins
+ * over the saved preset, and the Settings screen shows it (see createUI `qualityOverride`).
+ */
+export function qualityOverrideOf(param: string | null | undefined): QualityPreset | null {
+  return param && (QUALITY_PRESETS as readonly string[]).includes(param) ? (param as QualityPreset) : null;
+}
+
+/** Renderer comfort settings (camera sensitivity, reduced motion) from the player's Settings. */
+export function comfortOf(s: Pick<Settings, 'cameraSensitivity' | 'reducedMotion'>): ComfortSettings {
+  return { cameraSensitivity: s.cameraSensitivity, reducedMotion: s.reducedMotion };
+}
+
+/**
+ * The main-menu attract replay is suspended (sim paused, backdrop redrawn rarely) while a sub-screen (settings,
+ * level select, credits) covers the menu.
+ */
+export function attractSuspended(mode: AppMode, screen: string | null): boolean {
+  return mode === 'menu' && screen !== null && screen !== 'menu';
 }
 
 /** Compiled known solutions (echo loops + final run inputs), cached per level id. Pure: runs a headless game. */

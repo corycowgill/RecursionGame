@@ -10,7 +10,7 @@ import {
   type BindableAction,
   type KeyBindings,
 } from '../../persistence/keybinds';
-import { QUALITY_PRESETS, SETTINGS_LIMITS, type Settings } from '../../persistence/settings';
+import { QUALITY_PRESETS, SETTINGS_LIMITS, type QualityPreset, type Settings } from '../../persistence/settings';
 import { esc, h } from '../dom';
 import { icon, shapeBadge } from '../icons';
 import { echoStyle, playerStyle } from '../palette';
@@ -34,8 +34,25 @@ const TABS: { id: Tab; label: string }[] = [
 
 let uid = 0;
 
+export interface SettingsOptions {
+  /**
+   * Quality preset forced by the `?quality=` URL option. The Display tab then shows that preset as active, locks the
+   * selector and names the saved preset that applies without the override.
+   */
+  qualityOverride?: QualityPreset | null;
+}
+
+const QUALITY_LABELS: Record<QualityPreset, string> = { low: 'Low', medium: 'Medium', high: 'High', ultra: 'Ultra' };
+
 /** Settings: display, audio, accessibility, controls (key remapping). Every change is emitted immediately. */
-export function createSettings(initial: Settings, initialBinds: KeyBindings, act: SettingsActions, startTab: Tab = 'graphics'): Screen & { setTab(t: Tab): void } {
+export function createSettings(
+  initial: Settings,
+  initialBinds: KeyBindings,
+  act: SettingsActions,
+  startTab: Tab = 'graphics',
+  opts: SettingsOptions = {},
+): Screen & { setTab(t: Tab): void } {
+  const qualityOverride = opts.qualityOverride ?? null;
   let s: Settings = { ...initial };
   let binds: KeyBindings = initialBinds;
   let tab: Tab = startTab;
@@ -51,10 +68,10 @@ export function createSettings(initial: Settings, initialBinds: KeyBindings, act
   const field = (label: string, help: string | null, control: HTMLElement): HTMLElement =>
     h('div', { class: 'rx-field' }, h('div', { class: 'rx-field-label', html: `${esc(label)}${help ? `<small>${esc(help)}</small>` : ''}` }), control);
 
-  const segmented = <T extends string>(name: string, options: readonly T[], labels: Record<T, string>, value: T, onPick: (v: T) => void): HTMLElement => {
-    const wrap = h('div', { class: 'rx-seg', role: 'group', 'aria-label': name });
+  const segmented = <T extends string>(name: string, options: readonly T[], labels: Record<T, string>, value: T, onPick: (v: T) => void, locked = false): HTMLElement => {
+    const wrap = h('div', { class: `rx-seg${locked ? ' locked' : ''}`, role: 'group', 'aria-label': name, 'aria-disabled': locked ? 'true' : null });
     for (const o of options) {
-      const b = h('button', { type: 'button', 'aria-pressed': String(o === value) }, labels[o]);
+      const b = h('button', { type: 'button', 'aria-pressed': String(o === value), disabled: locked || null }, labels[o]);
       b.addEventListener('click', () => {
         wrap.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', 'false'));
         b.setAttribute('aria-pressed', 'true');
@@ -170,12 +187,17 @@ export function createSettings(initial: Settings, initialBinds: KeyBindings, act
     body.setAttribute('aria-labelledby', `rx-tab${id}-${tab}`);
     body.replaceChildren();
     if (tab === 'graphics') {
+      const qualityHelp = qualityOverride
+        ? `Set by the ?quality=${qualityOverride} URL option for this session. Saved preset: ${QUALITY_LABELS[s.quality]}.`
+        : 'Shadows, bloom, particles and resolution scale';
+      const qualityField = field(
+        'Quality preset',
+        qualityHelp,
+        segmented('Quality preset', QUALITY_PRESETS, QUALITY_LABELS, qualityOverride ?? s.quality, (v) => emit({ quality: v }), qualityOverride !== null),
+      );
+      if (qualityOverride) qualityField.dataset['override'] = qualityOverride;
       body.append(
-        field(
-          'Quality preset',
-          'Shadows, bloom, particles and resolution scale',
-          segmented('Quality preset', QUALITY_PRESETS, { low: 'Low', medium: 'Medium', high: 'High', ultra: 'Ultra' }, s.quality, (v) => emit({ quality: v })),
-        ),
+        qualityField,
         field(
           'Interface scale',
           'Size of all menus and HUD elements',
@@ -212,7 +234,7 @@ export function createSettings(initial: Settings, initialBinds: KeyBindings, act
       body.append(
         field(
           'Camera sensitivity',
-          'Orbit and zoom speed',
+          'Mouse-wheel zoom and camera follow speed',
           range('Camera sensitivity', s.cameraSensitivity, SETTINGS_LIMITS.cameraSensitivity.min, SETTINGS_LIMITS.cameraSensitivity.max, SETTINGS_LIMITS.cameraSensitivity.step, mult, (x) => emit({ cameraSensitivity: x })),
         ),
         h('div', { style: 'height:.8em' }),

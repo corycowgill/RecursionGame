@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { PALETTE } from './palette';
 import {
+  bannerTexture,
   brushedMetalTextures,
   concreteTextures,
   floorEmblemTextures,
   floorGrateTextures,
+  floorPlateTextures,
   floorTileTextures,
   gunmetalTextures,
   radialSprite,
@@ -21,6 +23,7 @@ export class MaterialLibrary {
   readonly floorTile: THREE.MeshStandardMaterial;
   readonly floorGrate: THREE.MeshStandardMaterial;
   readonly floorEmblem: THREE.MeshStandardMaterial;
+  readonly floorPlate: THREE.MeshStandardMaterial;
   readonly floorPlain: THREE.MeshStandardMaterial;
   readonly wallPanel: THREE.MeshStandardMaterial;
   readonly ivory: THREE.MeshStandardMaterial;
@@ -32,12 +35,20 @@ export class MaterialLibrary {
   readonly glass: THREE.MeshPhysicalMaterial;
   readonly rubber: THREE.MeshStandardMaterial;
   readonly backdropStone: THREE.MeshStandardMaterial;
+  /**
+   * Unlit glow whose colour comes from per-instance colour (palette colour x intensity, see `glowColor`). Every
+   * batched emissive trim shares this one material, so all of them collapse into one draw call per geometry.
+   */
+  readonly glow: THREE.MeshBasicMaterial;
+  /** Banner cloth (alpha-tested, double-sided). */
+  readonly banner: THREE.MeshStandardMaterial;
   readonly sprite: THREE.Texture;
   readonly spriteHard: THREE.Texture;
 
   private readonly sets: PBRSet[] = [];
   private readonly emissives = new Map<string, THREE.MeshStandardMaterial>();
   private readonly owned: THREE.Material[] = [];
+  private readonly extraTextures: THREE.Texture[] = [];
 
   constructor() {
     const floor = this.track(floorTileTextures(512));
@@ -81,6 +92,7 @@ export class MaterialLibrary {
       );
     this.floorGrate = floorVariant(grate, true);
     this.floorEmblem = floorVariant(emblem, false);
+    this.floorPlate = floorVariant(this.track(floorPlateTextures(512)), false);
     this.floorPlain = this.own(
       new THREE.MeshStandardMaterial({ color: 0x4b525b, normalMap: gun.normalMap, roughnessMap: gun.ormMap, roughness: 1, metalness: 0.6 }),
     );
@@ -97,6 +109,11 @@ export class MaterialLibrary {
         envMapIntensity: 0.8,
       }),
     );
+    // world UVs run -0.5..0.5 across a 2 m face and -1..1 up a 4 m wall: one module per face, no mid-face seam
+    for (const t of [wall.map, wall.normalMap, wall.ormMap]) {
+      t.repeat.set(1, 0.5);
+      t.offset.set(0.5, 0.5);
+    }
     this.ivory = this.own(
       new THREE.MeshStandardMaterial({ color: PALETTE.ivory, roughness: 0.42, metalness: 0.18, envMapIntensity: 0.8 }),
     );
@@ -149,6 +166,12 @@ export class MaterialLibrary {
     this.backdropStone = this.own(
       new THREE.MeshStandardMaterial({ color: 0x2a3644, map: conc.map, roughness: 0.8, metalness: 0.2, fog: true }),
     );
+    this.glow = this.own(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    const bannerMap = bannerTexture();
+    this.extraTextures.push(bannerMap);
+    this.banner = this.own(
+      new THREE.MeshStandardMaterial({ map: bannerMap, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.82, metalness: 0.05, envMapIntensity: 0.6 }),
+    );
     this.sprite = radialSprite(128, 0.18);
     this.spriteHard = radialSprite(64, 0.55);
   }
@@ -186,6 +209,11 @@ export class MaterialLibrary {
     return m;
   }
 
+  /** Linear instance colour for `glow`: palette colour times intensity (same response as `emissive()`). */
+  glowColor(color: number, intensity = 2): THREE.Color {
+    return new THREE.Color(color).multiplyScalar(intensity);
+  }
+
   /** A private (animatable) emissive material; caller owns and disposes it. */
   emissiveUnique(color: number, intensity = 2): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.4, metalness: 0 });
@@ -198,6 +226,7 @@ export class MaterialLibrary {
       s.ormMap.dispose();
       s.emissiveMap?.dispose();
     }
+    for (const t of this.extraTextures) t.dispose();
     for (const m of this.owned) m.dispose();
     for (const m of this.emissives.values()) m.dispose();
     this.sprite.dispose();

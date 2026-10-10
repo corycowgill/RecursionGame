@@ -13,6 +13,7 @@ export class Batcher {
   >();
   private readonly geos = new Map<string, THREE.BufferGeometry>();
   private readonly tmp = new THREE.Object3D();
+  private readonly scaleTmp = new THREE.Vector3();
   private ids = new WeakMap<object, number>();
   private nextId = 1;
 
@@ -53,6 +54,32 @@ export class Batcher {
 
   cyl(rt: number, rb: number, h: number, seg = 16, open = false): THREE.BufferGeometry {
     return this.geo(`cyl:${rt}:${rb}:${h}:${seg}:${open}`, () => new THREE.CylinderGeometry(rt, rb, h, seg, 1, open));
+  }
+
+  /**
+   * Unit-cube part scaled per instance. Every plain box of one material shares a single InstancedMesh
+   * (one draw call), whatever its size. Three.js corrects instanced normals for non-uniform scale.
+   */
+  cube(
+    mat: THREE.Material,
+    pos: { x: number; y: number; z: number },
+    sx: number,
+    sy: number,
+    sz: number,
+    o: { rotY?: number; rotX?: number; rotZ?: number; cast?: boolean; receive?: boolean; color?: THREE.Color } = {},
+  ): void {
+    this.add(this.box(1, 1, 1), mat, pos, { ...o, scale: this.scaleTmp.set(sx, sy, sz) });
+  }
+
+  /** Unit-cylinder part (radius r, height h, along local y) scaled per instance; shares one mesh per material. */
+  tube(
+    mat: THREE.Material,
+    pos: { x: number; y: number; z: number },
+    r: number,
+    h: number,
+    o: { rotY?: number; rotX?: number; rotZ?: number; cast?: boolean; receive?: boolean; color?: THREE.Color; seg?: number } = {},
+  ): void {
+    this.add(this.cyl(1, 1, 1, o.seg ?? 12), mat, pos, { ...o, scale: this.scaleTmp.set(r, h, r) });
   }
 
   add(

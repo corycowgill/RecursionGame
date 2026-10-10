@@ -36,16 +36,25 @@ export class VfxSystem implements VfxSink {
   private readonly tmp = new THREE.Vector3();
   private readonly c = new THREE.Color();
   private readonly ringCap: number;
-  private readonly particleScale: number;
+  private readonly baseParticleScale: number;
+  private particleScale: number;
   /** Callback the renderer uses to pulse echo glitch visuals on divergence. */
   onDivergence: ((actorId: string) => void) | null = null;
   onRemanifest: (() => void) | null = null;
+  /** Camera-shake impulse (0..1) for the renderer's camera rig (scaled / disabled there by reduced motion). */
+  onShake: ((amount: number) => void) | null = null;
 
   constructor(sprite: THREE.Texture, quality: { particles: number }) {
+    this.baseParticleScale = quality.particles;
     this.particleScale = quality.particles;
     this.particles = new ParticleSystem(Math.round(1400 * quality.particles) + 64, sprite);
     this.group.add(this.particles.points);
     this.ringCap = 24;
+  }
+
+  /** Comfort multiplier on top of the quality preset's particle budget (reduced motion halves bursts). */
+  setIntensity(k: number): void {
+    this.particleScale = this.baseParticleScale * Math.max(0, k);
   }
 
   sparks(pos: THREE.Vector3, color: number, count: number, o: { speed?: number; up?: number; size?: number; life?: number; spread?: number } = {}): void {
@@ -134,6 +143,7 @@ export class VfxSystem implements VfxSink {
         case 'rewind':
         case 'chamberRestart':
           this.rewind = ev.type === 'rewind' ? 1 : 0.75;
+          this.onShake?.(0.18);
           this.onRemanifest?.();
           for (const a of state.actors) {
             p.set(unitsToWorld(a.x), unitsToWorld(a.y) + 0.9, unitsToWorld(a.z));
@@ -163,6 +173,7 @@ export class VfxSystem implements VfxSink {
           break;
         case 'divergence':
           this.glitch = Math.max(this.glitch, 0.7);
+          this.onShake?.(0.32);
           this.onDivergence?.(ev.actorId);
           if (this.actorPos(state, ev.actorId, p)) {
             p.y += 1;
@@ -196,6 +207,7 @@ export class VfxSystem implements VfxSink {
         case 'levelComplete': {
           this.flash = 0.75;
           this.flashColor.set(1, 0.86, 0.6);
+          this.onShake?.(0.4);
           const exit = Object.values(state.entities).find((e) => e.kind === 'exitPortal');
           if (exit) {
             p.set(unitsToWorld(exit.x), unitsToWorld(exit.y), unitsToWorld(exit.z));

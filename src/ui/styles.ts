@@ -177,6 +177,9 @@ export const UI_CSS = /* css */ `
 .rx-seg button:last-child { border-right: 0; }
 .rx-seg button[aria-pressed="true"] { background: linear-gradient(180deg, rgba(255,181,74,.22), rgba(255,181,74,.08)); color: var(--rx-gold-hi) !important; box-shadow: inset 0 -2px 0 var(--rx-gold); }
 .rx-seg button:hover { color: #fff !important; }
+.rx-seg.locked button { cursor: not-allowed; }
+.rx-seg.locked button:hover { color: var(--rx-dim) !important; }
+.rx-seg.locked button[aria-pressed="true"], .rx-seg.locked button[aria-pressed="true"]:hover { color: var(--rx-gold-hi) !important; }
 .rx-range { display: flex; align-items: center; gap: .8em; }
 .rx-range output { min-width: 3.4em; text-align: right; font-family: var(--rx-display); font-size: .74em; letter-spacing: .06em; color: var(--rx-gold-hi); }
 .rx-range input { -webkit-appearance: none; appearance: none; flex: 1; height: 1.6em; background: transparent; cursor: pointer; margin: 0; }

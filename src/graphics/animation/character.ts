@@ -121,7 +121,7 @@ export class Character {
     if (variant === 'player') {
       this.material = createSuitMaterial();
     } else {
-      const h = createHologramMaterial(tint, { fill: 0.12, rim: 1.3, seed: this.rand() * 10 });
+      const h = createHologramMaterial(tint, { fill: 0.13, rim: 1.45, seed: this.rand() * 10 });
       this.holograms.push(h);
       this.material = h;
     }

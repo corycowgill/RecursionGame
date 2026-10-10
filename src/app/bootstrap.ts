@@ -15,7 +15,8 @@ import { SaveStore } from '../persistence/save';
 import type { Settings } from '../persistence/settings';
 import { buildLevelEntries, createUI, type MainMenuData, type UIHandle } from '../ui';
 import { installDebugHook, type DebugHook } from './debugHook';
-import { rendererQuality, sampleRewind, solutionFor, withoutHiddenEchoes, type AppMode } from './flow';
+import { EchoForecastController, type ForecastFrame } from './forecast';
+import { attractSuspended, comfortOf, qualityOverrideOf, rendererQuality, sampleRewind, solutionFor, withoutHiddenEchoes, type AppMode } from './flow';
 
 export interface AppHandle {
   readonly game: TemporalGame;
@@ -30,6 +31,8 @@ const REWIND_MS_REDUCED = 160;
 const COMPLETE_CARD_MS = 1500;
 /** Temporal preview (hold Q): fast-forward speed through the future of the current loop. */
 const PREVIEW_SPEED = 2.5;
+/** While a main-menu sub-screen covers the attract replay, the sim is paused and the 3D view redraws this rarely. */
+const SUSPENDED_RENDER_MS = 500;
 
 /**
  * APP BOOTSTRAP (director-owned). The single place where the pieces meet:
@@ -51,7 +54,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
   const keyboard = new KeyboardInput();
   keyboard.resolver = (code, shift) => resolveKeyAction(save.data.keybinds, code, shift);
 
-  const qualityOverride = params.get('quality');
+  const qualityOverride = qualityOverrideOf(params.get('quality'));
   let renderer: GameRenderer;
   try {
     renderer = createGameRenderer(appRoot, {
@@ -79,6 +82,8 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
   let previewHeld = false;
   let previewBase = 0;
   let previewClock = 0;
+  /** Debug hook: hold the temporal preview at a fixed tick (screenshots / tests). */
+  let previewPinned: number | null = null;
   let snapshotCache: { key: string; view: SimView } | null = null;
   let rewindFrames: SimView[] = [];
   let rewindClock = 0;
@@ -91,6 +96,9 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
   let lastResult: CompletionResult | null = null;
   let transitioning = false;
   let attempts = 0;
+  let lastRenderAt = -Infinity;
+  const forecast = new EchoForecastController();
+  const forecastFrame = (events: readonly SimEvent[] = []): ForecastFrame => ({ level, live: game.getState(), loops: game.getLoops(), recording: game.getRecording(), events });
 
   // ------------------------------------------------------------------ simulation clock
   const stepper = new FixedStepper(() => {
@@ -114,7 +122,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
 
   const simRunning = (): boolean => {
     if (rewindFrames.length) return false;
-    if (mode === 'menu') return true;
+    if (mode === 'menu') return !attractSuspended(mode, ui.screen);
     return mode === 'playing' && !pauseOpen && !inspectHold && !previewHeld && !ui.isBlocking() && !transitioning;
   };
 
@@ -182,8 +190,9 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       onUISound: (cue) => audio.playUi(cue),
       getLevelEntries: () => buildLevelEntries(LEVELS, save.data.progress),
     },
-    { settings: save.data.settings, keybinds: save.data.keybinds, seenTutorials: save.data.seenTutorials },
+    { settings: save.data.settings, keybinds: save.data.keybinds, seenTutorials: save.data.seenTutorials, qualityOverride },
   );
+  renderer.setComfort(comfortOf(save.data.settings));
 
   // ------------------------------------------------------------------ flow
   function menuData(): MainMenuData {
@@ -328,6 +337,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
   function clearPreview(): void {
     previewTick = null;
     previewHeld = false;
+    previewPinned = null;
     inspectHold = ui?.timelineExpanded ?? false;
     snapshotCache = null;
   }
@@ -419,6 +429,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       if (!cmd.held) {
         if (previewHeld) {
           previewHeld = false;
+          previewPinned = null;
           previewTick = null;
           if (!ui.timelineExpanded) renderer.setCameraMode('follow');
         }
@@ -429,6 +440,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       previewBase = game.getState().tick;
       previewClock = 0;
       previewTick = previewBase;
+      forecast.refresh(forecastFrame());
       renderer.setCameraMode('overview');
       return;
     }
@@ -467,6 +479,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
 
   function applySettings(s: Settings): void {
     if (!qualityOverride) renderer.setQuality(rendererQuality(s.quality));
+    renderer.setComfort(comfortOf(s));
     audio.setVolumes(volumesOf(s));
   }
 
@@ -513,7 +526,8 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
         stepper.reset();
       }
     } else {
-      if (previewHeld) {
+      if (previewHeld && previewPinned !== null) previewTick = Math.min(level.loopDurationTicks, Math.max(previewBase, previewPinned));
+      else if (previewHeld) {
         previewClock += dt;
         const span = Math.max(1, level.loopDurationTicks - previewBase);
         const ahead = Math.floor(previewClock * 60 * PREVIEW_SPEED) % (span + 45); // brief hold at the end, then loop
@@ -531,8 +545,18 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
     if (mode === 'menu') renderer.setFraming({ lift: 0.04, shift: 0.17, zoom: 1.45 });
     else renderer.setFraming({ lift: ui.timelineExpanded ? 0.16 : mode === 'playing' ? 0.06 : 0 });
     const timeline = mode === 'playing' || mode === 'intro' || mode === 'complete' ? game.getTimeline() : null;
-    renderer.setTimeline(mode === 'playing' && !rewindFrames.length ? timeline : null);
-    renderer.render(withoutHiddenEchoes(view, hiddenEchoes), withoutHiddenEchoes(prev, hiddenEchoes), alpha, events, dt);
+    const badges = mode === 'playing' && !rewindFrames.length;
+    renderer.setTimeline(badges ? timeline : null);
+    // Echo forecast: walk-on badges (live view and Q preview, not while scrubbing the past) and Q ghost paths.
+    if (mode === 'playing') forecast.update(forecastFrame(events));
+    renderer.setWalkOns(badges && (previewTick === null || previewHeld) ? forecast.walkOns() : null);
+    renderer.setGhostPaths(badges && previewHeld ? forecast.ghostPaths(previewBase, hiddenEchoes) : null);
+    // A main-menu sub-screen (settings, level select, credits) covers the attract replay: the sim is paused above
+    // and the backdrop only redraws occasionally (also keeps it correct after a resize).
+    if (!attractSuspended(mode, ui.screen) || now - lastRenderAt >= SUSPENDED_RENDER_MS) {
+      renderer.render(withoutHiddenEchoes(view, hiddenEchoes), withoutHiddenEchoes(prev, hiddenEchoes), alpha, events, dt);
+      lastRenderAt = now;
+    }
     keyboard.sampler.yawStep = renderer.getCameraYawStep();
 
     if (timeline) {
@@ -576,6 +600,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       window.removeEventListener('keydown', unlockAudio, { capture: true });
       ui.dispose();
       audio.dispose();
+      forecast.dispose();
       renderer.dispose();
     },
   };
@@ -616,6 +641,21 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       stepper.reset();
     },
     commit: () => commitOrReset(true),
+    setPreview: (tick) => {
+      if (tick === null) {
+        if (previewHeld) onCommand({ type: 'temporalPreview', held: false });
+        return;
+      }
+      if (!previewHeld) onCommand({ type: 'temporalPreview', held: true });
+      if (previewHeld) previewPinned = tick;
+    },
+    forecastStats: () => ({
+      samples: forecast.forecastSamples.length,
+      version: forecast.version,
+      walkOns: forecast.walkOns().length,
+      ghostPaths: previewHeld ? forecast.ghostPaths(previewBase, hiddenEchoes).length : 0,
+      previewTick,
+    }),
     restart: () => restartChamber(),
     dispose: () => handle.dispose(),
     inputDebug: () => ({ gameplayEnabled: keyboard.gameplayEnabled, simRunning: simRunning(), autopilot: autopilot !== null, blocking: ui.isBlocking(), pauseOpen, inspectHold, previewHeld, transitioning, rewinding: rewindFrames.length > 0 }),

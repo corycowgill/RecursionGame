@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { unitsToWorld, type ActorView, type EntityView, type LevelDefinition, type SimEvent, type SimView, type Timeline } from '../contracts';
 import { ActorVisual } from '../../graphics/animation/actorVisual';
 import { EchoIntentLayer } from '../../graphics/effects/echoIntents';
+import type { GhostPath, WalkOn } from '../../graphics/effects/forecast';
+import { GhostPathLayer } from '../../graphics/effects/ghostPaths';
 import { createAmbientMotes } from '../../graphics/effects/particles';
 import { VfxSystem } from '../../graphics/effects/vfx';
 import { buildBackdrop, type Backdrop } from '../../graphics/environment/backdrop';
@@ -11,6 +13,7 @@ import { CARRIABLE_VISUAL_KINDS, createEntityVisual, MovingPlatformVisual, type 
 import { MaterialLibrary } from '../../graphics/materials/library';
 import { PALETTE } from '../../graphics/materials/palette';
 import { CameraRig, type CameraMode } from './CameraRig';
+import { comfortParams, type ComfortParams, type ComfortSettings } from './comfort';
 import { createEnvironmentTexture } from './environmentMap';
 import { PostFX } from './PostFX';
 import { QUALITY_PRESETS, type QualityLevel, type QualitySettings } from './quality';
@@ -44,6 +47,18 @@ export interface GameRenderer {
    * TemporalGame.getTimeline() each frame, or null to hide them (menus, attract mode).
    */
   setTimeline(timeline: Timeline | null): void;
+  /**
+   * Walk-on plan for the badges over pressure plates / ride-lifts (which echo steps on it, and when), from the echo
+   * forecast (`scheduleWalkOns`). null hides them.
+   */
+  setWalkOns(walkOns: readonly WalkOn[] | null): void;
+  /** Temporal-preview ghost paths (`extractGhostPaths`): dashed trails of each echo's upcoming movement. null clears. */
+  setGhostPaths(paths: readonly GhostPath[] | null): void;
+  /**
+   * Player comfort settings: camera sensitivity (wheel zoom rate, follow/pan speed) and reduced motion (no camera
+   * shake, short intro without orbit swing, damped screen distortion and flashes, fewer particles, no ambient bob).
+   */
+  setComfort(c: Partial<ComfortSettings>): void;
   /** Plays the level-intro fly-in (also triggered automatically by setLevel unless disabled). */
   playIntro(): void;
   /** Camera yaw in 45° steps for `InputSampler.yawStep` (W = screen-up). */
@@ -82,6 +97,8 @@ class GameRendererImpl implements GameRenderer {
   private readonly actorRoot = new THREE.Group();
   private readonly fxRoot = new THREE.Group();
   private readonly intents = new EchoIntentLayer();
+  private readonly ghosts = new GhostPathLayer();
+  private comfort: ComfortParams = comfortParams();
   private levelId = '';
   private readonly key: THREE.DirectionalLight;
   private readonly rim: THREE.DirectionalLight;
@@ -151,7 +168,7 @@ class GameRendererImpl implements GameRenderer {
     this.key.shadow.radius = 3;
     this.rim = new THREE.DirectionalLight(0x5fb6ff, 1.1);
     this.scene.add(this.hemi, this.key, this.key.target, this.rim, this.rim.target);
-    this.scene.add(this.levelRoot, this.actorRoot, this.fxRoot, this.intents.group);
+    this.scene.add(this.levelRoot, this.actorRoot, this.fxRoot, this.intents.group, this.ghosts.group);
 
     this.vfx = new VfxSystem(this.lib.sprite, this.q);
     this.wireVfx();
@@ -167,6 +184,8 @@ class GameRendererImpl implements GameRenderer {
   }
 
   private wireVfx(): void {
+    this.vfx.setIntensity(this.comfort.particles);
+    this.vfx.onShake = (amount) => this.rig.addShake(amount);
     this.vfx.onDivergence = (id) => this.actorVisuals.get(id)?.pulseGlitch();
     this.vfx.onRemanifest = () => {
       for (const v of this.actorVisuals.values()) v.remanifest();
@@ -327,7 +346,8 @@ class GameRendererImpl implements GameRenderer {
     this.wires?.update(state, dt, this.time);
     this.kit?.animated.forEach((x) => x.update(this.time));
     this.backdrop?.update(this.time);
-    for (const m of this.motes) m.material.uniforms['uTime']!.value = this.time;
+    // reduced motion: ambient motes drift at a third of the speed
+    for (const m of this.motes) m.material.uniforms['uTime']!.value = this.time * (this.comfort.ambientMotion ? 1 : 0.35);
     this.vfx.update(dt);
 
     // camera follows the player (render-interpolated)
@@ -344,13 +364,14 @@ class GameRendererImpl implements GameRenderer {
     }
     this.rig.update(dt, focus, this.focusVel);
     this.intents.update(state, this.levelId, this.rig.camera, this.time);
+    this.ghosts.update(state.tick, this.time, dt);
 
     // grade uniforms
     const u = this.post.grade.uniforms;
     u['uTime']!.value = this.time;
-    u['uRewind']!.value = easeOut(this.vfx.rewind);
-    u['uGlitch']!.value = this.vfx.glitch;
-    u['uFlash']!.value = this.vfx.flash * this.vfx.flash;
+    u['uRewind']!.value = easeOut(this.vfx.rewind) * this.comfort.distortion;
+    u['uGlitch']!.value = this.vfx.glitch * this.comfort.distortion;
+    u['uFlash']!.value = this.vfx.flash * this.vfx.flash * this.comfort.flash;
     (u['uFlashColor']!.value as THREE.Color).copy(this.vfx.flashColor);
 
     this.renderer.info.reset();
@@ -394,11 +415,15 @@ class GameRendererImpl implements GameRenderer {
       const pe = (prev.entities[id] as EntityView | undefined) ?? e;
       if (e.carriedBy && CARRIABLE_VISUAL_KINDS.has(e.kind)) {
         const carrier = this.actorVisuals.get(e.carriedBy);
-        if (carrier) {
-          carrier.character.carryAnchor.getWorldPosition(pos);
-          pos.y -= e.kind === 'crate' ? 0.15 : 0.1;
-        } else pos.set(unitsToWorld(e.x), unitsToWorld(e.y), unitsToWorld(e.z));
+        // Every actor in the view has a visual (syncActors runs first), so a missing carrier means the app filtered
+        // it out: an echo hidden on the timeline. What it carries is hidden with it (see hiddenCarry docs) rather
+        // than drawn at the item's simulated position, which would float a crate where nobody is visible.
+        v.root.visible = !!carrier;
+        if (!carrier) continue;
+        carrier.character.carryAnchor.getWorldPosition(pos);
+        pos.y -= e.kind === 'crate' ? 0.15 : 0.1;
       } else {
+        v.root.visible = true;
         const jump = Math.abs(pe.x - e.x) + Math.abs(pe.z - e.z) > 1500 || pe.carriedBy !== e.carriedBy;
         const p = jump ? e : pe;
         pos.set(unitsToWorld(p.x + (e.x - p.x) * a), unitsToWorld(p.y + (e.y - p.y) * a), unitsToWorld(p.z + (e.z - p.z) * a));
@@ -419,6 +444,7 @@ class GameRendererImpl implements GameRenderer {
     this.rig.camera.updateProjectionMatrix();
     this.post.setSize(w, h, pr);
     this.vfx.particles.setViewportHeight(h * pr, this.rig.camera.fov);
+    this.ghosts.configure({ pixelScale: pr });
     for (const m of this.motes) m.material.uniforms['uScale']!.value = (h * pr) / (2 * Math.tan((this.rig.camera.fov * Math.PI) / 360));
   }
 
@@ -476,6 +502,34 @@ class GameRendererImpl implements GameRenderer {
     this.intents.setTimeline(timeline);
   }
 
+  setWalkOns(walkOns: readonly WalkOn[] | null): void {
+    this.intents.setWalkOns(walkOns);
+  }
+
+  setGhostPaths(paths: readonly GhostPath[] | null): void {
+    this.ghosts.setPaths(paths && paths.length ? paths : null);
+  }
+
+  setComfort(c: Partial<ComfortSettings>): void {
+    const p = comfortParams(c);
+    this.comfort = p;
+    this.rig.zoomRate = p.zoomRate;
+    this.rig.setSmoothing(p.followSmoothing);
+    this.rig.leadScale = p.lead;
+    this.rig.shakeScale = p.shake;
+    if (p.shake === 0) this.rig.clearShake();
+    this.rig.introSwing = p.introSwing;
+    this.rig.setIntroDuration(p.introDuration);
+    this.vfx.setIntensity(p.particles);
+    this.intents.setReducedMotion(!p.ambientMotion);
+    this.ghosts.configure({ reducedMotion: !p.ambientMotion });
+  }
+
+  /** Current comfort parameters (debug / tests). */
+  getComfort(): ComfortParams {
+    return this.comfort;
+  }
+
   setFraming(f: { lift?: number; shift?: number; zoom?: number }): void {
     this.rig.viewLift = Math.min(0.3, Math.max(0, f.lift ?? 0));
     this.rig.viewShift = Math.min(0.3, Math.max(-0.3, f.shift ?? 0));
@@ -512,6 +566,7 @@ class GameRendererImpl implements GameRenderer {
     this.clearLevel();
     this.vfx.dispose();
     this.intents.dispose();
+    this.ghosts.dispose();
     this.post.dispose();
     this.lib.dispose();
     this.envTex.dispose();

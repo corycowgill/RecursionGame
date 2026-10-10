@@ -12,7 +12,8 @@ import * as THREE from 'three';
  *    manifest-in edge from the feet up driven by uFade (0..1);
  *  - uGlitch (0..1) shifts toward coral and jitters bands (divergence).
  *
- * It renders in the opaque queue with depth writes (additive blending), so a body part only shows its nearest
+ * It renders in the opaque queue with depth writes (premultiplied glow: adds its colour and slightly veils what is
+ * behind it), so a body part only shows its nearest
  * surface: overlapping limbs no longer stack into a bright mess and the outline stays crisp. Geometry without
  * the paint attributes falls back to a uniform mid tone (WebGL default attribute values).
  */
@@ -94,7 +95,9 @@ const frag = /* glsl */ `
     vec3 accentCol = mix(tint, vec3(1.0), 0.22);
     vec3 col = tint * a + accentCol * vAccent * (0.45 + 0.35 * scan) + tint * edgeGlow * 2.5 + accentCol * fres * fres * 0.25;
     col *= flick;
-    gl_FragColor = vec4(col, 1.0);
+    // premultiplied: add the glow and dim what is behind by 'veil' so the tint stays saturated on bright floors
+    float veil = clamp(0.34 + 0.2 * vTone + fres * 0.25, 0.0, 0.7) * min(1.0, uFade * 2.0);
+    gl_FragColor = vec4(col, veil);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -118,10 +121,13 @@ export function createHologramMaterial(
     uniforms,
     vertexShader: vert,
     fragmentShader: frag,
-    // opaque queue + depth write: only the nearest surface of the body shows (additive, so still see-through)
+    // opaque queue + depth write: only the nearest surface of the body shows (premultiplied glow, still see-through)
     transparent: false,
     depthWrite: true,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
     side: THREE.FrontSide,
   });
   return m as THREE.ShaderMaterial & { uniforms: HologramUniforms };

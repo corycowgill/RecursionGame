@@ -49,6 +49,14 @@ export class CameraRig {
   viewShift = 0;
   /** Framing distance multiplier set by the app (e.g. a wider main-menu shot); multiplies the user's wheel zoom. */
   framingZoom = 1;
+  /** Comfort (see comfort.ts): wheel-zoom rate, movement look-ahead, shake amplitude, intro swing. */
+  zoomRate = 1;
+  leadScale = 1;
+  shakeScale = 1;
+  introSwing = 1;
+  /** Camera-shake trauma 0..1 (decays; amplitude ∝ trauma²). */
+  private trauma = 0;
+  private shakeT = 0;
 
   private readonly tx = new Damped(0, 0.32);
   private readonly ty = new Damped(0, 0.4);
@@ -74,7 +82,7 @@ export class CameraRig {
   attachWheel(el: HTMLElement): void {
     this.detachWheel();
     this.onWheel = (e: WheelEvent) => {
-      this.zoom = THREE.MathUtils.clamp(this.zoom * Math.exp(e.deltaY * 0.0012), 0.55, 1.9);
+      this.zoom = THREE.MathUtils.clamp(this.zoom * Math.exp(e.deltaY * 0.0012 * this.zoomRate), 0.55, 1.9);
     };
     el.addEventListener('wheel', this.onWheel, { passive: true });
     this.wheelEl = el;
@@ -122,6 +130,32 @@ export class CameraRig {
     this.mode = 'intro';
   }
 
+  /** Follow/pan smoothing multiplier (1 = default; < 1 snappier). Applies to target and distance springs. */
+  setSmoothing(k: number): void {
+    const f = THREE.MathUtils.clamp(k, 0.3, 3);
+    this.tx.smoothTime = 0.32 * f;
+    this.tz.smoothTime = 0.32 * f;
+    this.ty.smoothTime = 0.4 * f;
+    this.dist.smoothTime = 0.45 * f;
+  }
+
+  setIntroDuration(seconds: number): void {
+    this.introDuration = Math.max(0.2, seconds);
+  }
+
+  /** Adds camera-shake trauma (0..1), scaled by the comfort setting (0 with reduced motion). */
+  addShake(amount: number): void {
+    this.trauma = Math.min(1, this.trauma + Math.max(0, amount) * this.shakeScale);
+  }
+
+  clearShake(): void {
+    this.trauma = 0;
+  }
+
+  get shakeLevel(): number {
+    return this.trauma;
+  }
+
   update(dt: number, focus: THREE.Vector3 | null, focusVelocity: THREE.Vector3 | null): void {
     let target = this.tmp;
     let distance: number;
@@ -133,10 +167,11 @@ export class CameraRig {
       const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
       const end = focus ? this.blendFocus(focus) : this.levelCentre;
       target = this.tmp.copy(this.levelCentre).lerp(end, e);
-      target.y += (1 - e) * 6;
-      distance = THREE.MathUtils.lerp(this.overviewDistance() * 1.9, this.baseDistance * this.zoom, e);
-      yaw = this.yaw + (1 - e) * 1.1;
-      pitch = this.pitch + (1 - e) * 0.22;
+      const sw = this.introSwing;
+      target.y += (1 - e) * 6 * sw;
+      distance = THREE.MathUtils.lerp(this.overviewDistance() * (1 + 0.9 * sw), this.baseDistance * this.zoom, e);
+      yaw = this.yaw + (1 - e) * 1.1 * sw;
+      pitch = this.pitch + (1 - e) * 0.22 * sw;
       // intro drives the springs directly so the hand-off to follow is seamless
       this.tx.snap(target.x);
       this.ty.snap(target.y);
@@ -153,7 +188,7 @@ export class CameraRig {
       if (focus) {
         target.copy(this.blendFocus(focus));
         if (focusVelocity) {
-          this.lead.lerp(this.tmp.set(focusVelocity.x, 0, focusVelocity.z).multiplyScalar(0.28), 1 - Math.exp(-3 * dt));
+          this.lead.lerp(this.tmp.set(focusVelocity.x, 0, focusVelocity.z).multiplyScalar(0.28 * this.leadScale), 1 - Math.exp(-3 * dt));
           target = this.tmp.copy(this.blendFocus(focus)).add(this.lead);
         }
       } else target.copy(this.levelCentre);
@@ -168,6 +203,19 @@ export class CameraRig {
     const cp = Math.cos(pt);
     this.camera.position.set(x - Math.sin(yw) * cp * d, y + Math.sin(pt) * d, z + Math.cos(yw) * cp * d);
     this.camera.lookAt(x, y, z);
+    if (this.trauma > 1e-3) {
+      // smooth pseudo-noise (sum of incommensurate sines), amplitude ∝ trauma², applied in camera space
+      this.shakeT += dt;
+      const t = this.shakeT * 22;
+      const amp = this.trauma * this.trauma;
+      const ox = (Math.sin(t * 1.0) + Math.sin(t * 2.31 + 1.3) * 0.5) * 0.09 * amp;
+      const oy = (Math.sin(t * 1.17 + 0.7) + Math.sin(t * 2.73 + 2.1) * 0.5) * 0.09 * amp;
+      const roll = Math.sin(t * 0.83 + 0.4) * 0.006 * amp;
+      this.camera.translateX(ox);
+      this.camera.translateY(oy);
+      this.camera.rotateZ(roll);
+      this.trauma = Math.max(0, this.trauma - dt * 1.8);
+    }
     const lift = this.liftD.step(this.viewLift, dt);
     const shift = this.shiftD.step(this.viewShift, dt);
     if (Math.abs(lift) > 1e-4 || Math.abs(shift) > 1e-4) {

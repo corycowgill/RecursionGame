@@ -1,6 +1,6 @@
 import type { LevelDefinition, SimEvent } from '../engine/contracts';
 import { defaultKeybinds, type KeyBindings } from '../persistence/keybinds';
-import { defaultSettings, type Settings } from '../persistence/settings';
+import { defaultSettings, type QualityPreset, type Settings } from '../persistence/settings';
 import { focusFirst, h } from './dom';
 import { HintScheduler } from './hud/hints';
 import { Hud } from './hud/Hud';
@@ -21,6 +21,8 @@ export interface CreateUIOptions {
   keybinds?: KeyBindings;
   /** Tutorial ids already completed (skips onboarding). */
   seenTutorials?: readonly string[];
+  /** Quality preset forced by the `?quality=` URL option (shown, and locked, in Settings). */
+  qualityOverride?: QualityPreset | null;
 }
 
 export interface ShowHUDOptions {
@@ -212,7 +214,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       onBack: () => closeSub(),
       ...(cb.onResetProgress ? { onResetProgress: () => cb.onResetProgress?.() } : {}),
       sound,
-    });
+    }, 'graphics', { qualityOverride: opts.qualityOverride ?? null });
   }
 
   function announce(text: string): void {

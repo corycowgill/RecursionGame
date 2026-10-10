@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { unitsToWorld, type SimView, type Timeline } from '../../engine/contracts';
 import { echoTint } from '../materials/palette';
 import { labelTexture } from '../materials/textures';
+import type { WalkOn } from './forecast';
 
 /**
  * In-world echo intent indicators (pillar 4: "always clear which echo does what, when").
@@ -10,25 +11,34 @@ import { labelTexture } from '../materials/textures';
  * gets a floating badge above the target object: the echo's numbered hex in its tint, ringed by a countdown arc
  * that closes as the moment approaches and flares when it lands. Purely a read-only view of
  * `TemporalGame.getTimeline()` planned markers and the rendered SimView tick — it never touches the simulation.
+ *
+ * Walk-on triggers (pressure plates, 'ride' lifts) have no recorded interaction, so they come from the echo
+ * forecast (`scheduleWalkOns`, see forecast.ts) via `setWalkOns`. Their badge uses a segmented ring (step-on, not
+ * E): it counts down to the moment the echo steps on, flares, then stays as a dim steady "held by echo N" ring while
+ * the echo stands there.
  */
 
 const LOOKAHEAD = 240; // 4 s
 const AFTERGLOW = 24; // ticks the badge lingers (flared) after the action fires
-const POOL = 12;
+const POOL = 20;
+/** Opacity of the steady ring while an echo stands on a walk-on trigger. */
+const HOLD_OPACITY = 0.55;
 
 const RingShader = {
-  uniforms: { uColor: { value: new THREE.Color() }, uProgress: { value: 0 }, uFlare: { value: 0 }, uOpacity: { value: 1 } },
+  uniforms: { uColor: { value: new THREE.Color() }, uProgress: { value: 0 }, uFlare: { value: 0 }, uOpacity: { value: 1 }, uSegments: { value: 0 } },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform vec3 uColor; uniform float uProgress; uniform float uFlare; uniform float uOpacity;
+    uniform vec3 uColor; uniform float uProgress; uniform float uFlare; uniform float uOpacity; uniform float uSegments;
     varying vec2 vUv;
     void main() {
       vec2 p = vUv * 2.0 - 1.0;
       float r = length(p);
       float a = atan(p.x, p.y) / 6.2831853 + 0.5;           // 0 at 12 o'clock, clockwise
       float band = smoothstep(0.80, 0.84, r) * (1.0 - smoothstep(0.93, 0.97, r));
+      // walk-on badges: 8 separated segments ("step here") instead of a continuous band
+      band *= mix(1.0, step(0.22, fract(a * 8.0)), uSegments);
       float track = band * 0.22;
       float arc = band * step(1.0 - uProgress, 1.0 - a);
       float ticks = band * step(0.92, fract(a * 12.0)) * 0.35;
@@ -52,7 +62,9 @@ export class EchoIntentLayer {
   private readonly labels = new Map<number, THREE.Texture>();
   private readonly ringGeo = new THREE.PlaneGeometry(1, 1);
   private timeline: Timeline | null = null;
+  private walkOns: readonly WalkOn[] | null = null;
   private enabled = true;
+  private motion = 1;
 
   constructor(private readonly makeLabel: (text: string, color: string) => THREE.Texture = labelTexture) {
     this.group.name = 'echo-intents';
@@ -83,6 +95,16 @@ export class EchoIntentLayer {
     this.timeline = t;
   }
 
+  /** Forecast walk-on plan (pressure plates, ride-lifts) or null. */
+  setWalkOns(w: readonly WalkOn[] | null): void {
+    this.walkOns = w;
+  }
+
+  /** Reduced motion: no bobbing / pulsing (the countdown ring still fills). */
+  setReducedMotion(on: boolean): void {
+    this.motion = on ? 0 : 1;
+  }
+
   setEnabled(on: boolean): void {
     this.enabled = on;
     if (!on) for (const b of this.badges) b.group.visible = false;
@@ -93,7 +115,7 @@ export class EchoIntentLayer {
     let used = 0;
     const tl = this.timeline;
     if (this.enabled && tl && tl.levelId === levelId) {
-      const shown = new Set(view.actors.map((a) => a.id));
+      const shown = new Set<string>(view.actors.map((a) => a.id));
       const perEntity = new Map<string, number>();
       const now = view.tick;
       for (const track of tl.tracks) {
@@ -103,28 +125,72 @@ export class EchoIntentLayer {
         if (!m || !m.entityId) continue;
         const e = view.entities[m.entityId];
         if (!e) continue;
-        const stack = perEntity.get(m.entityId) ?? 0;
-        perEntity.set(m.entityId, stack + 1);
         const b = this.badges[used++]!;
-        this.setIndex(b, track.echoIndex);
-        const dtTicks = m.tick - now;
-        const progress = dtTicks <= 0 ? 1 : 1 - dtTicks / LOOKAHEAD;
-        const flare = dtTicks <= 0 ? 1 - -dtTicks / AFTERGLOW : 0;
-        const u = b.ring.material.uniforms;
-        u['uProgress']!.value = progress;
-        u['uFlare']!.value = flare;
-        // fade in at the edge of the window, fade out through the afterglow
-        u['uOpacity']!.value = Math.min(1, (LOOKAHEAD - dtTicks) / 30) * (dtTicks < 0 ? Math.max(0, flare) : 1);
-        (b.label.material as THREE.SpriteMaterial).opacity = u['uOpacity']!.value as number;
-        const bob = Math.sin(time * 2.2 + track.echoIndex) * 0.05;
-        b.group.position.set(unitsToWorld(e.x), unitsToWorld(e.y) + 2.15 + stack * 0.75 + bob, unitsToWorld(e.z));
-        b.ring.quaternion.copy(camera.quaternion);
-        const s = 0.92 + flare * 0.35 + (dtTicks > 0 && dtTicks < 30 ? Math.sin(time * 18) * 0.03 : 0);
-        b.ring.scale.setScalar(s);
-        b.group.visible = true;
+        this.place(b, track.echoIndex, e, perEntity, m.entityId, m.tick - now, false, camera, time, 2.15);
+      }
+      // walk-on triggers: the first relevant stay of each echo on each trigger
+      if (this.walkOns) {
+        const done = new Set<string>();
+        for (const w of this.walkOns) {
+          if (used >= POOL) break;
+          if (!shown.has(w.actorId)) continue;
+          const key = `${w.entityId}|${w.actorId}`;
+          if (done.has(key)) continue;
+          if (w.leaveTick !== null && w.leaveTick <= now) continue; // already over
+          const dtTicks = w.enterTick - now;
+          if (dtTicks > LOOKAHEAD) continue;
+          const e = view.entities[w.entityId];
+          if (!e) continue;
+          done.add(key);
+          const b = this.badges[used++]!;
+          this.place(b, w.echoIndex, e, perEntity, w.entityId, dtTicks, true, camera, time, 1.55);
+        }
       }
     }
     for (let i = used; i < this.badges.length; i++) this.badges[i]!.group.visible = false;
+  }
+
+  /** Number of visible badges (tests / debug). */
+  get visibleCount(): number {
+    return this.badges.filter((b) => b.group.visible).length;
+  }
+
+  private place(
+    b: Badge,
+    echoIndex: number,
+    e: { x: number; y: number; z: number },
+    perEntity: Map<string, number>,
+    entityId: string,
+    dtTicks: number,
+    walkOn: boolean,
+    camera: THREE.Camera,
+    time: number,
+    height: number,
+  ): void {
+    const stack = perEntity.get(entityId) ?? 0;
+    perEntity.set(entityId, stack + 1);
+    this.setIndex(b, echoIndex);
+    const progress = dtTicks <= 0 ? 1 : 1 - dtTicks / LOOKAHEAD;
+    let flare = dtTicks <= 0 ? Math.max(0, 1 - -dtTicks / AFTERGLOW) : 0;
+    const fadeIn = Math.min(1, (LOOKAHEAD - dtTicks) / 30);
+    let opacity: number;
+    if (dtTicks > 0) opacity = fadeIn;
+    else if (walkOn) opacity = Math.max(HOLD_OPACITY, flare); // stays while the echo stands there
+    else opacity = flare;
+    flare *= 0.4 + 0.6 * this.motion;
+    const u = b.ring.material.uniforms;
+    u['uProgress']!.value = progress;
+    u['uFlare']!.value = flare;
+    u['uOpacity']!.value = opacity;
+    u['uSegments']!.value = walkOn ? 1 : 0;
+    (b.label.material as THREE.SpriteMaterial).opacity = opacity;
+    const bob = Math.sin(time * 2.2 + echoIndex) * 0.05 * this.motion;
+    b.group.position.set(unitsToWorld(e.x), unitsToWorld(e.y) + height + stack * 0.75 + bob, unitsToWorld(e.z));
+    b.ring.quaternion.copy(camera.quaternion);
+    const pulse = dtTicks > 0 && dtTicks < 30 ? Math.sin(time * 18) * 0.03 * this.motion : 0;
+    b.ring.scale.setScalar(0.92 + flare * 0.35 + pulse);
+    b.group.visible = true;
+    b.group.userData['walkOn'] = walkOn;
   }
 
   private setIndex(b: Badge, index: number): void {
