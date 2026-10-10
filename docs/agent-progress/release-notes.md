@@ -88,4 +88,10 @@ Gameplay readability / UI
 
 ## Tests run for this release
 
-See `docs/agent-progress/director-final.md` for the exact commands and results of the final verification run.
+- `npm run verify`: typecheck clean · Vitest 25 files, 406 passed + 3 expected-fail (open QA repros) · build OK.
+- Full Playwright suite (`CI=1 E2E_PORT=4312 npx playwright test`, 23 min): all flow, smoke, all-10-levels and
+  UI visual tests passed; the 4 3D visual baselines differed only by this pass's intended visual changes, were
+  reviewed and re-blessed, and the visual suite then passed 6/6.
+- `dist/` served from a sub-folder of a plain static server boots to the main menu with no errors.
+
+Exact commands and details: `docs/agent-progress/director-final.md`.
