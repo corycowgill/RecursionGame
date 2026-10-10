@@ -1,8 +1,12 @@
 import type { PuzzleEntityBehaviour } from '../../engine/contracts';
+import { bump, rideSurface } from './common';
 
 /**
- * Crate — CARRY model: E picks it up (exclusive ownership), E again drops it cell-snapped on the faced cell.
- * Solid when resting; weighs 1 on pressure plates. Never pushed.
+ * Crate — CARRY model (never pushed): E picks it up (exclusive ownership), E again drops it cell-snapped on the
+ * faced cell (see the central interaction system in src/engine/simulation/interactions.ts).
+ *  - Solid while resting: blocks actors, item drops and laser beams. Weighs 1 on pressure plates.
+ *  - Rides elevators and moving platforms it rests on.
+ *  - state.restTicks: ticks since it was last put down (0 while carried) — renderers use it for settle bounce.
  */
 export const crateBehaviour: PuzzleEntityBehaviour<'crate'> = {
   kind: 'crate',
@@ -13,6 +17,11 @@ export const crateBehaviour: PuzzleEntityBehaviour<'crate'> = {
   blocksLaser: () => true,
   update(ctx) {
     const e = ctx.entity;
-    e.state.restTicks = e.carriedBy === null ? Math.min(e.state.restTicks + 1, 3600) : 0;
+    if (e.carriedBy !== null) {
+      e.state.restTicks = 0;
+      return;
+    }
+    e.state.restTicks = bump(e.state.restTicks, 3600);
+    rideSurface(ctx, e);
   },
 };

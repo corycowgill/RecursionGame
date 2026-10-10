@@ -1,0 +1,78 @@
+{
+ "schema": 1,
+ "levelId": "L01-first-echo",
+ "levelFingerprint": 648074862,
+ "maxEchoes": 2,
+ "loopDurationTicks": 3600,
+ "completedAtTick": 285,
+ "loops": [
+  {
+   "v": 1,
+   "id": 1,
+   "durationTicks": 245,
+   "runs": [
+    75,
+    6,
+    50,
+    1,
+    75,
+    6,
+    25,
+    1,
+    20,
+    5
+   ],
+   "outcomes": []
+  },
+  {
+   "v": 1,
+   "id": 0,
+   "durationTicks": 286,
+   "runs": [
+    286,
+    1
+   ],
+   "outcomes": []
+  }
+ ],
+ "passes": [
+  {
+   "ticks": 245,
+   "finalHash": 3215078928,
+   "digest": 3574192142,
+   "checkpoints": {
+    "60": 1658137042,
+    "120": 1094645657,
+    "180": 2238012964,
+    "240": 3781587723,
+    "245": 3215078928
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorOpen": 1,
+    "footstep": 20,
+    "plateDown": 1
+   }
+  },
+  {
+   "ticks": 286,
+   "finalHash": 2808298554,
+   "digest": 65116222,
+   "checkpoints": {
+    "60": 2666130764,
+    "120": 532733434,
+    "180": 1784226939,
+    "240": 987911197,
+    "286": 2808298554
+   },
+   "completedAtTick": 285,
+   "events": {
+    "doorOpen": 1,
+    "echoFinished": 1,
+    "footstep": 36,
+    "levelComplete": 1,
+    "plateDown": 1
+   }
+  }
+ ]
+}

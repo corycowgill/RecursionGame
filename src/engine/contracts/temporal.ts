@@ -15,6 +15,14 @@ export function echoActorId(loopId: number): ActorId {
   return `echo:${loopId}`;
 }
 
+/**
+ * Actor id of recursive copy `depth` (>= 1) of loop `loopId` (nested loops, LevelDefinition.recursion), e.g.
+ * 'echo:3.1'. It still starts with 'echo:'; never parse it — read ActorState.loopId / .recursion instead.
+ */
+export function recursiveEchoActorId(loopId: number, depth: number): ActorId {
+  return `echo:${loopId}.${depth}` as ActorId;
+}
+
 export function isEchoId(id: ActorId): id is `echo:${number}` {
   return id !== 'player';
 }

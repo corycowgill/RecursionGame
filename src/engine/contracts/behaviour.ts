@@ -134,6 +134,11 @@ export interface PuzzleEntityBehaviour<K extends EntityKind> {
   readonly plateWeight?: number;
   /** Blocks actor/crate movement in its cell right now? default false */
   isSolid?(entity: SimEntity<K>, def: EntityDefinitionOf<K>): boolean;
+  /**
+   * Per-actor solidity (e.g. temporal gate letting only echoes through). When present it is consulted for
+   * actors INSTEAD of isSolid; isSolid still governs item drops and lasers.
+   */
+  isSolidFor?(entity: SimEntity<K>, def: EntityDefinitionOf<K>, actor: ActorState): boolean;
   /** Blocks laser beams right now? default = isSolid */
   blocksLaser?(entity: SimEntity<K>, def: EntityDefinitionOf<K>): boolean;
   /** Walk-surface overrides (elevators, moving platforms). */

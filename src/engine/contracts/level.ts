@@ -40,6 +40,20 @@ export interface CameraHints {
   introPath?: { col: number; row: number; level?: number }[];
 }
 
+/**
+ * Nested-loop mechanic (Level 8 "Recursive Machine" onward): the chamber's Recursion Engine re-loops every
+ * committed recording. Each TemporalLoop is replayed by its echo from tick 0 AND by `copies` recursive copies,
+ * copy k replaying the very same inputs delayed by k * delayTicks (it waits idle on the spawn cell until then).
+ * Copies are full actors (they press plates, carry, block lasers) and are compared against the recording like any
+ * echo, so a copy that meets a different world diverges visibly. They do not count against maxEchoes.
+ */
+export interface LevelRecursion {
+  /** Delay between an echo and its first recursive copy (and between successive copies), in ticks (> 0). */
+  delayTicks: number;
+  /** Recursive copies per committed loop. default 1 */
+  copies?: number;
+}
+
 export interface LevelHint {
   text: string;
   /** Show after this many seconds in the chamber (UI decides presentation). */
@@ -89,6 +103,8 @@ export interface LevelDefinition {
   decor?: DecorDefinition[];
   /** RNG seed for any deterministic randomness (default 1). */
   seed?: number;
+  /** Optional nested-loop mechanic (see LevelRecursion). Absent = ordinary echoes only. */
+  recursion?: LevelRecursion;
   /** Mechanics introduced (for menus/teaching), e.g. ['pressurePlate', 'echo']. */
   teaches?: string[];
 }

@@ -1,0 +1,171 @@
+{
+ "schema": 1,
+ "levelId": "L03-the-relay",
+ "levelFingerprint": 573264764,
+ "maxEchoes": 2,
+ "loopDurationTicks": 4500,
+ "completedAtTick": 585,
+ "loops": [
+  {
+   "v": 1,
+   "id": 1,
+   "durationTicks": 433,
+   "runs": [
+    51,
+    4,
+    1,
+    53,
+    49,
+    4,
+    76,
+    1,
+    1,
+    53,
+    1,
+    10,
+    199,
+    6,
+    25,
+    1,
+    30,
+    5
+   ],
+   "outcomes": [
+    {
+     "tick": 51,
+     "verb": "interact",
+     "kind": "pickup",
+     "entityId": "crate-a"
+    },
+    {
+     "tick": 177,
+     "verb": "interact",
+     "kind": "drop",
+     "entityId": "crate-a"
+    }
+   ]
+  },
+  {
+   "v": 1,
+   "id": 2,
+   "durationTicks": 571,
+   "runs": [
+    35,
+    10,
+    75,
+    6,
+    50,
+    9,
+    175,
+    6,
+    150,
+    1,
+    55,
+    5,
+    1,
+    53,
+    30,
+    5
+   ],
+   "outcomes": [
+    {
+     "tick": 540,
+     "verb": "interact",
+     "kind": "use",
+     "entityId": "switch-far"
+    }
+   ]
+  },
+  {
+   "v": 1,
+   "id": 0,
+   "durationTicks": 586,
+   "runs": [
+    586,
+    1
+   ],
+   "outcomes": []
+  }
+ ],
+ "passes": [
+  {
+   "ticks": 433,
+   "finalHash": 3602248459,
+   "digest": 3536523986,
+   "checkpoints": {
+    "60": 2346381765,
+    "120": 1462982921,
+    "180": 32671164,
+    "240": 2333583055,
+    "300": 3705306844,
+    "360": 3141751189,
+    "420": 2844591178,
+    "433": 3602248459
+   },
+   "completedAtTick": null,
+   "events": {
+    "drop": 1,
+    "footstep": 35,
+    "pickup": 1,
+    "plateDown": 2
+   }
+  },
+  {
+   "ticks": 571,
+   "finalHash": 2841365755,
+   "digest": 530448125,
+   "checkpoints": {
+    "60": 1422826853,
+    "120": 2747395398,
+    "180": 297874537,
+    "240": 3271963674,
+    "300": 3199578759,
+    "360": 29085183,
+    "420": 3773489705,
+    "480": 906453330,
+    "540": 1800759231,
+    "571": 2841365755
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorOpen": 1,
+    "drop": 1,
+    "echoFinished": 1,
+    "footstep": 79,
+    "interact": 1,
+    "pickup": 1,
+    "plateDown": 2,
+    "switchOn": 1
+   }
+  },
+  {
+   "ticks": 586,
+   "finalHash": 2567608104,
+   "digest": 853694097,
+   "checkpoints": {
+    "60": 2047949688,
+    "120": 2024975182,
+    "180": 3337998709,
+    "240": 2484805784,
+    "300": 2849204933,
+    "360": 4120904037,
+    "420": 3213875497,
+    "480": 3695553080,
+    "540": 3809120593,
+    "586": 2567608104
+   },
+   "completedAtTick": 585,
+   "events": {
+    "doorOpen": 1,
+    "drop": 1,
+    "echoFinished": 2,
+    "footstep": 92,
+    "interact": 1,
+    "levelComplete": 1,
+    "pickup": 1,
+    "plateDown": 2,
+    "switchOn": 1
+   }
+  }
+ ]
+}

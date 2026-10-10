@@ -22,6 +22,7 @@ import { buildCollisionWorld, moveAxis, settleOnSurface, type CollisionWorld } f
 import { buildSurfaceOverrides, cellKey, surfaceAt, tileSurfaceAt } from '../physics/terrain';
 import { TickContext } from './context';
 import { attachToCarrier, resolveInteraction, sameOutcome } from './interactions';
+import { replayTracks } from './recursion';
 import { seedRng } from './rng';
 
 /** Per-actor driving data for one tick. */
@@ -45,15 +46,22 @@ export interface TickReport {
 
 /* ------------------------------------------------------------------------------------------------ */
 
-function makeActor(rt: LevelRuntime, kind: 'player' | 'echo', echoIndex: number, loopId: number | null): ActorState {
+function makeActor(
+  rt: LevelRuntime,
+  kind: 'player' | 'echo',
+  echoIndex: number,
+  loopId: number | null,
+  id?: ActorState['id'],
+  recursion = 0,
+): ActorState {
   const spawn = rt.level.playerSpawn;
   const c = cellCenter(spawn.col, spawn.row);
   const tile = rt.tileAt(spawn.col, spawn.row);
   const y = tileSurfaceAt(tile, spawn.col, spawn.row, c.x, c.z) ?? tile.h * 1000;
   const facing: Dir4 = spawn.facing ?? 2;
   const heading = ([0, 2, 4, 6] as const)[facing];
-  return {
-    id: kind === 'player' ? PLAYER_ACTOR_ID : echoActorId(loopId ?? 0),
+  const actor: ActorState = {
+    id: id ?? (kind === 'player' ? PLAYER_ACTOR_ID : echoActorId(loopId ?? 0)),
     kind,
     echoIndex,
     loopId,
@@ -75,11 +83,19 @@ function makeActor(rt: LevelRuntime, kind: 'player' | 'echo', echoIndex: number,
     lastInteraction: null,
     interactHeld: false,
   };
+  // Only nested-loop copies carry the field, so ordinary states (and their hashes) are unchanged.
+  if (recursion > 0) actor.recursion = recursion;
+  return actor;
 }
 
-/** Builds the deterministic tick-0 state for a pass with the given echo loops. */
+/**
+ * Builds the deterministic tick-0 state for a pass with the given echo loops. With LevelDefinition.recursion each
+ * loop also spawns its recursive copies (see simulation/recursion.ts for the actor order).
+ */
 export function createInitialState(rt: LevelRuntime, loops: readonly TemporalLoop[]): SimState {
-  const actors: ActorState[] = loops.map((l, i) => makeActor(rt, 'echo', i, l.id));
+  const actors: ActorState[] = replayTracks(rt.level, loops).map((t) =>
+    makeActor(rt, 'echo', t.loopIndex, t.loop.id, t.actorId, t.depth),
+  );
   actors.push(makeActor(rt, 'player', -1, null));
 
   const entities: Record<string, AnySimEntity> = {};
@@ -301,7 +317,8 @@ export function stepSim(
         type: 'levelComplete',
         tick,
         levelId: rt.level.id,
-        echoesUsed: state.actors.length - 1,
+        // Recordings used, not bodies: nested-loop copies are free.
+        echoesUsed: state.actors.filter((a) => a.kind === 'echo' && a.recursion === undefined).length,
         ticks: tick + 1,
       });
     }

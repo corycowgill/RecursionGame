@@ -11,18 +11,27 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "verify": "npm run typecheck && npm test && vite build",
+    "replays:update": "UPDATE_GOLDEN=1 vitest run src/testing/replays",
+    "test:fuzz": "FUZZ_TICKS=${FUZZ_TICKS:-30000} FUZZ_SEEDS=${FUZZ_SEEDS:-4} vitest run src/testing/qa/fuzz.test.ts",
+    "bench": "vitest run --config src/testing/benchmarks/vitest.bench.config.ts",
+    "test:e2e:update-snapshots": "playwright test tests/e2e/visual.spec.ts --update-snapshots",
+    "test:e2e:perf": "playwright test tests/e2e/perf.spec.ts"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@fontsource/orbitron": "^5.3.0",
+    "@fontsource/rajdhani": "^5.3.0",
     "three": "^0.186.1"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
     "@types/node": "^22.10.0",
     "@types/three": "^0.186.0",
+    "happy-dom": "^20.14.6",
     "typescript": "~5.9.3",
     "vite": "^7.3.7",
     "vitest": "^4.1.11"

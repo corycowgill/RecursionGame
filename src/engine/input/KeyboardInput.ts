@@ -14,6 +14,14 @@ export class KeyboardInput {
   private target: Window | null = null;
   /** When false, gameplay keys are ignored (e.g. menus open); commands still fire. */
   gameplayEnabled = true;
+  /**
+   * Optional key remapper (additive, director integration): maps a key event to a bindable action name
+   * ('moveUp' | 'moveDown' | 'moveLeft' | 'moveRight' | 'interact' | 'action' | 'rewind' | 'restart' | 'timeline' |
+   * 'pause' | 'preview' | 'echo1'..'echo5'). Null = the built-in default layout below.
+   */
+  resolver: ((code: string, shiftKey: boolean) => string | null) | null = null;
+  /** Codes currently held for movement/interact/preview, so key-up releases what key-down pressed. */
+  private readonly held = new Map<string, string>();
 
   attach(target: Window = window): void {
     if (this.target) return;
@@ -63,57 +71,103 @@ export class KeyboardInput {
     }
   }
 
+  /** Resolves a key to an action through `resolver`, falling back to the default layout. */
+  private actionFor(code: string, shiftKey: boolean): string | null {
+    if (this.resolver) return this.resolver(code, shiftKey);
+    const dir = this.dirFor(code);
+    if (dir) return { up: 'moveUp', down: 'moveDown', left: 'moveLeft', right: 'moveRight' }[dir];
+    switch (code) {
+      case 'KeyE':
+        return 'interact';
+      case 'Space':
+        return 'action';
+      case 'KeyR':
+        return shiftKey ? 'restart' : 'rewind';
+      case 'Tab':
+        return 'timeline';
+      case 'Escape':
+        return 'pause';
+      case 'KeyQ':
+        return 'preview';
+      default:
+        return /^Digit[1-5]$/.test(code) ? `echo${code.slice(5)}` : null;
+    }
+  }
+
   private readonly onKeyDown = (e: KeyboardEvent): void => {
-    const dir = this.dirFor(e.code);
+    const action = this.actionFor(e.code, e.shiftKey);
+    if (!action) return;
+    const dir = ({ moveUp: 'up', moveDown: 'down', moveLeft: 'left', moveRight: 'right' } as const)[action as 'moveUp'];
     if (dir) {
-      if (this.gameplayEnabled) this.sampler.setDirection(dir, true);
-      e.preventDefault();
+      // Held directions are always tracked (a key held through a menu/intro resumes on return); only the default
+      // browser action is left alone while menus are open, so arrows still navigate them.
+      this.sampler.setDirection(dir, true);
+      this.held.set(e.code, action);
+      if (this.gameplayEnabled) e.preventDefault();
       return;
     }
-    switch (e.code) {
-      case 'KeyE':
-        if (this.gameplayEnabled && !e.repeat) this.sampler.setInteract(true);
+    switch (action) {
+      case 'interact':
+        if (this.gameplayEnabled && !e.repeat) {
+          this.sampler.setInteract(true);
+          this.held.set(e.code, action);
+        }
         break;
-      case 'Space':
-        if (this.gameplayEnabled && !e.repeat) this.sampler.pressAction();
-        e.preventDefault();
+      case 'action':
+        if (this.gameplayEnabled) {
+          if (!e.repeat) this.sampler.pressAction();
+          e.preventDefault();
+        }
         break;
-      case 'KeyR':
-        if (!e.repeat) this.emit(e.shiftKey ? { type: 'restart' } : { type: 'rewind' });
+      case 'rewind':
+        if (!e.repeat) this.emit({ type: 'rewind' });
         break;
-      case 'Tab':
-        e.preventDefault();
+      case 'restart':
+        if (!e.repeat) this.emit({ type: 'restart' });
+        break;
+      case 'timeline':
+        // Only swallow Tab during gameplay: menus need it for focus traversal.
+        if (this.gameplayEnabled) e.preventDefault();
         if (!e.repeat) this.emit({ type: 'toggleTimeline' });
         break;
-      case 'Escape':
+      case 'pause':
         if (!e.repeat) this.emit({ type: 'pause' });
         break;
-      case 'KeyQ':
-        if (!e.repeat) this.emit({ type: 'temporalPreview', held: true });
-        break;
-      case 'Digit1':
-      case 'Digit2':
-      case 'Digit3':
-      case 'Digit4':
-      case 'Digit5':
-        if (!e.repeat) this.emit({ type: 'selectEcho', index: Number(e.code.slice(5)) - 1 });
+      case 'preview':
+        if (!e.repeat) {
+          this.held.set(e.code, action);
+          this.emit({ type: 'temporalPreview', held: true });
+        }
         break;
       default:
+        if (/^echo[1-5]$/.test(action) && !e.repeat) this.emit({ type: 'selectEcho', index: Number(action.slice(4)) - 1 });
         break;
     }
   };
 
   private readonly onKeyUp = (e: KeyboardEvent): void => {
-    const dir = this.dirFor(e.code);
+    const action = this.held.get(e.code);
+    if (!action) return;
+    this.held.delete(e.code);
+    const dir = ({ moveUp: 'up', moveDown: 'down', moveLeft: 'left', moveRight: 'right' } as const)[action as 'moveUp'];
     if (dir) {
-      this.sampler.setDirection(dir, false);
+      // Another held key may still map to the same direction (e.g. W and ArrowUp).
+      if (![...this.held.values()].includes(action)) this.sampler.setDirection(dir, false);
       return;
     }
-    if (e.code === 'KeyE') this.sampler.setInteract(false);
-    if (e.code === 'KeyQ') this.emit({ type: 'temporalPreview', held: false });
+    if (action === 'interact' && ![...this.held.values()].includes('interact')) this.sampler.setInteract(false);
+    if (action === 'preview') this.emit({ type: 'temporalPreview', held: false });
   };
 
   private readonly onBlur = (): void => {
-    this.sampler.releaseAll();
+    this.releaseAll();
   };
+
+  /** Releases every held key (blur, menus opening, level transitions) so nothing sticks. */
+  releaseAll(): void {
+    const previewHeld = [...this.held.values()].includes('preview');
+    this.held.clear();
+    this.sampler.releaseAll();
+    if (previewHeld) this.emit({ type: 'temporalPreview', held: false });
+  }
 }

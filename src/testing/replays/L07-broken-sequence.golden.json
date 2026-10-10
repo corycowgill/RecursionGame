@@ -1,0 +1,306 @@
+{
+ "schema": 1,
+ "levelId": "L07-broken-sequence",
+ "levelFingerprint": 3265105683,
+ "maxEchoes": 2,
+ "loopDurationTicks": 4500,
+ "completedAtTick": 756,
+ "loops": [
+  {
+   "v": 1,
+   "id": 1,
+   "durationTicks": 1334,
+   "runs": [
+    35,
+    10,
+    200,
+    6,
+    25,
+    9,
+    70,
+    5,
+    197,
+    0,
+    12,
+    4,
+    115,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5,
+    40,
+    1,
+    1,
+    53,
+    19,
+    5
+   ],
+   "outcomes": [
+    {
+     "tick": 654,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 714,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 774,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 834,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 894,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 954,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 1014,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 1074,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 1134,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 1194,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 1254,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    },
+    {
+     "tick": 1314,
+     "verb": "interact",
+     "kind": "none",
+     "entityId": null
+    }
+   ]
+  },
+  {
+   "v": 1,
+   "id": 2,
+   "durationTicks": 470,
+   "runs": [
+    107,
+    0,
+    100,
+    4,
+    100,
+    1,
+    107,
+    0,
+    26,
+    1,
+    30,
+    5
+   ],
+   "outcomes": []
+  },
+  {
+   "v": 1,
+   "id": 0,
+   "durationTicks": 757,
+   "runs": [
+    71,
+    8,
+    175,
+    4,
+    511,
+    9
+   ],
+   "outcomes": []
+  }
+ ],
+ "passes": [
+  {
+   "ticks": 1334,
+   "finalHash": 4194924577,
+   "digest": 3456281082,
+   "checkpoints": {
+    "60": 1099805402,
+    "120": 929828327,
+    "180": 1032864263,
+    "240": 1307329500,
+    "300": 1055932718,
+    "360": 3253164130,
+    "420": 17091159,
+    "480": 2606937888,
+    "540": 3082678324,
+    "600": 1628187750,
+    "660": 2049605916,
+    "720": 2071399976,
+    "780": 3710793663,
+    "840": 81393115,
+    "900": 2439252583,
+    "960": 1656225923,
+    "1020": 1618284559,
+    "1080": 1810588878,
+    "1140": 3418059682,
+    "1200": 3203247318,
+    "1260": 1137489706,
+    "1320": 743094729,
+    "1334": 4194924577
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorClose": 1,
+    "doorOpen": 1,
+    "footstep": 55,
+    "plateDown": 1,
+    "plateUp": 1
+   }
+  },
+  {
+   "ticks": 470,
+   "finalHash": 1980001706,
+   "digest": 3809036073,
+   "checkpoints": {
+    "60": 2238035138,
+    "120": 2928208521,
+    "180": 1391044023,
+    "240": 721699282,
+    "300": 1953507287,
+    "360": 118182241,
+    "420": 1482871291,
+    "470": 1980001706
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorClose": 1,
+    "doorOpen": 2,
+    "footstep": 81,
+    "plateDown": 2,
+    "plateUp": 1
+   }
+  },
+  {
+   "ticks": 757,
+   "finalHash": 1191469483,
+   "digest": 3090042181,
+   "checkpoints": {
+    "60": 1225529460,
+    "120": 450230140,
+    "180": 1215025970,
+    "240": 222660415,
+    "300": 630772775,
+    "360": 4137201361,
+    "420": 232096265,
+    "480": 2806192070,
+    "540": 192184486,
+    "600": 1051194540,
+    "660": 784432182,
+    "720": 319531374,
+    "757": 1191469483
+   },
+   "completedAtTick": 756,
+   "events": {
+    "divergence": 1,
+    "doorClose": 1,
+    "doorOpen": 3,
+    "echoFinished": 1,
+    "footstep": 126,
+    "interact": 1,
+    "levelComplete": 1,
+    "plateDown": 2,
+    "plateUp": 1,
+    "switchOn": 1,
+    "switchTick": 1
+   }
+  }
+ ]
+}

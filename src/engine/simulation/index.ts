@@ -8,3 +8,4 @@ export * from './interactions';
 export * from './step';
 export * from './stepper';
 export * from './stateHash';
+export * from './recursion';

@@ -18,6 +18,7 @@ import {
   type TimelineTrack,
 } from '../contracts';
 import { deepClone } from '../simulation/clone';
+import { replayTracks, trackFinishedAt, trackInputAt, type ReplayTrack } from '../simulation/recursion';
 import type { EntityRegistry } from '../simulation/registry';
 import { LevelRuntimeImpl } from '../simulation/runtime';
 import { hashState } from '../simulation/stateHash';
@@ -51,6 +52,8 @@ export class TemporalGame implements TemporalGameApi {
   private rt: LevelRuntimeImpl | null = null;
   private loops: TemporalLoop[] = [];
   private expectations: ExpectationMap[] = [];
+  /** Replay tracks of the current loop set (one per echo actor, incl. nested-loop copies). */
+  private tracks: ReplayTrack[] = [];
   private nextLoopId = 1;
 
   private state: SimState | null = null;
@@ -264,20 +267,28 @@ export class TemporalGame implements TemporalGameApi {
       return m;
     };
     const tracks: TimelineTrack[] = [];
-    this.loops.forEach((loop, i) => {
-      const id: ActorId = `echo:${loop.id}`;
-      tracks.push({
+    for (const tr of this.tracks) {
+      const id: ActorId = tr.actorId;
+      const loop = tr.loop;
+      const track: TimelineTrack = {
         actorId: id,
         kind: 'echo',
-        echoIndex: i,
+        echoIndex: tr.loopIndex,
         loopId: loop.id,
         durationTicks: loop.durationTicks,
-        planned: loop.outcomes.filter((o) => o.kind !== 'none').map(toMarker),
+        planned: loop.outcomes
+          .filter((o) => o.kind !== 'none')
+          .map((o) => toMarker(tr.offset === 0 ? o : { ...o, tick: o.tick + tr.offset })),
         actual: [...(this.passMarkers.get(id) ?? [])],
         divergences: this.passDivergences.filter((d) => d.actorId === id),
         finishedAtTick: this.finishedAt.get(id) ?? null,
-      });
-    });
+      };
+      if (tr.depth > 0) {
+        track.recursion = tr.depth;
+        track.startTick = tr.offset;
+      }
+      tracks.push(track);
+    }
     const playerMarkers = this.recordingOutcomes.filter((o) => o.kind !== 'none').map(toMarker);
     tracks.push({
       actorId: 'player',
@@ -317,6 +328,7 @@ export class TemporalGame implements TemporalGameApi {
   }
 
   private newPass(): void {
+    this.tracks = replayTracks(this.runtime().level, this.loops);
     this.state = this.initialState();
     this.prevState = null;
     this.recording = [];
@@ -331,16 +343,17 @@ export class TemporalGame implements TemporalGameApi {
 
   private framesFor(tick: number, playerInput: PlayerInput): ActorFrame[] {
     const frames: ActorFrame[] = [];
-    for (let i = 0; i < this.loops.length; i++) {
-      const loop = this.loops[i] as TemporalLoop;
-      const exp = this.expectations[i] as ExpectationMap;
-      const active = tick < loop.durationTicks;
-      const input = active ? (loop.inputs[tick] ?? IDLE_INPUT) : IDLE_INPUT;
-      const frame: ActorFrame = { input, replayFinished: !active };
-      if (active && (input.interactPressed || input.actionPressed)) {
+    for (const track of this.tracks) {
+      const exp = this.expectations[track.loopIndex] as ExpectationMap;
+      const local = tick - track.offset;
+      const finished = trackFinishedAt(track, tick);
+      const input = trackInputAt(track, tick);
+      const frame: ActorFrame = { input, replayFinished: finished };
+      if (local >= 0 && !finished && (input.interactPressed || input.actionPressed)) {
+        // Expectations are keyed by the loop's own (local) tick; nested-loop copies are shifted by their offset.
         const expected: NonNullable<ActorFrame['expected']> = {};
-        const ei = exp.get(verbKey(tick, 'interact'));
-        const ea = exp.get(verbKey(tick, 'action'));
+        const ei = exp.get(verbKey(local, 'interact'));
+        const ea = exp.get(verbKey(local, 'action'));
         if (ei) expected.interact = ei;
         if (ea) expected.action = ea;
         frame.expected = expected;

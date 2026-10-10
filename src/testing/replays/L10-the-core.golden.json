@@ -1,0 +1,310 @@
+{
+ "schema": 1,
+ "levelId": "L10-the-core",
+ "levelFingerprint": 1370610455,
+ "maxEchoes": 3,
+ "loopDurationTicks": 5400,
+ "completedAtTick": 1063,
+ "loops": [
+  {
+   "v": 1,
+   "id": 1,
+   "durationTicks": 343,
+   "runs": [
+    76,
+    6,
+    1,
+    53,
+    71,
+    2,
+    49,
+    6,
+    115,
+    1,
+    1,
+    53,
+    30,
+    5
+   ],
+   "outcomes": [
+    {
+     "tick": 76,
+     "verb": "interact",
+     "kind": "pickup",
+     "entityId": "cell-core"
+    },
+    {
+     "tick": 312,
+     "verb": "interact",
+     "kind": "fail",
+     "entityId": "cell-core",
+     "reason": "occupied"
+    }
+   ]
+  },
+  {
+   "v": 1,
+   "id": 2,
+   "durationTicks": 1051,
+   "runs": [
+    175,
+    4,
+    25,
+    9,
+    25,
+    4,
+    365,
+    5,
+    26,
+    4,
+    1,
+    53,
+    26,
+    6,
+    157,
+    5,
+    25,
+    6,
+    35,
+    2,
+    25,
+    6,
+    1,
+    1,
+    1,
+    53,
+    35,
+    8,
+    77,
+    9,
+    21,
+    5,
+    1,
+    53,
+    30,
+    5
+   ],
+   "outcomes": [
+    {
+     "tick": 616,
+     "verb": "interact",
+     "kind": "pickup",
+     "entityId": "crate-relic"
+    },
+    {
+     "tick": 886,
+     "verb": "interact",
+     "kind": "drop",
+     "entityId": "crate-relic"
+    },
+    {
+     "tick": 1020,
+     "verb": "interact",
+     "kind": "use",
+     "entityId": "timer-west"
+    }
+   ]
+  },
+  {
+   "v": 1,
+   "id": 3,
+   "durationTicks": 1051,
+   "runs": [
+    143,
+    10,
+    150,
+    6,
+    1,
+    9,
+    726,
+    5,
+    1,
+    53,
+    30,
+    5
+   ],
+   "outcomes": [
+    {
+     "tick": 1020,
+     "verb": "interact",
+     "kind": "use",
+     "entityId": "timer-east"
+    }
+   ]
+  },
+  {
+   "v": 1,
+   "id": 0,
+   "durationTicks": 1064,
+   "runs": [
+    107,
+    0,
+    25,
+    4,
+    25,
+    1,
+    283,
+    5,
+    624,
+    1
+   ],
+   "outcomes": []
+  }
+ ],
+ "passes": [
+  {
+   "ticks": 343,
+   "finalHash": 535218811,
+   "digest": 248978199,
+   "checkpoints": {
+    "60": 1760283520,
+    "120": 3836303925,
+    "180": 1701064716,
+    "240": 724448475,
+    "300": 1881335621,
+    "343": 535218811
+   },
+   "completedAtTick": null,
+   "events": {
+    "footstep": 21,
+    "interactFailed": 1,
+    "pickup": 1
+   }
+  },
+  {
+   "ticks": 1051,
+   "finalHash": 3220952648,
+   "digest": 630972723,
+   "checkpoints": {
+    "60": 3953435159,
+    "120": 623025179,
+    "180": 432720607,
+    "240": 799855211,
+    "300": 2718633878,
+    "360": 4216167074,
+    "420": 35420658,
+    "480": 3748557899,
+    "540": 3420708161,
+    "600": 1254323884,
+    "660": 400694855,
+    "720": 1517612485,
+    "780": 1344617008,
+    "840": 943130752,
+    "900": 3592314716,
+    "960": 1508957109,
+    "1020": 3823490742,
+    "1051": 3220952648
+   },
+   "completedAtTick": null,
+   "events": {
+    "cellInserted": 1,
+    "divergence": 1,
+    "drop": 1,
+    "echoFinished": 1,
+    "elevatorArrive": 1,
+    "elevatorStart": 1,
+    "footstep": 69,
+    "interact": 2,
+    "laserOn": 1,
+    "pickup": 2,
+    "plateDown": 1,
+    "platformArrive": 3,
+    "platformDepart": 3,
+    "receiverLit": 1,
+    "switchOn": 1,
+    "switchTick": 1
+   }
+  },
+  {
+   "ticks": 1051,
+   "finalHash": 344928535,
+   "digest": 1242453544,
+   "checkpoints": {
+    "60": 210076013,
+    "120": 141056498,
+    "180": 4044602568,
+    "240": 1231317306,
+    "300": 3758139028,
+    "360": 3341255606,
+    "420": 2842779710,
+    "480": 312941299,
+    "540": 142780545,
+    "600": 930252334,
+    "660": 49615919,
+    "720": 666726667,
+    "780": 1186352802,
+    "840": 2210202692,
+    "900": 1261831636,
+    "960": 3175063075,
+    "1020": 3014690672,
+    "1051": 344928535
+   },
+   "completedAtTick": null,
+   "events": {
+    "cellInserted": 1,
+    "divergence": 1,
+    "doorOpen": 1,
+    "drop": 1,
+    "echoFinished": 1,
+    "elevatorArrive": 1,
+    "elevatorStart": 1,
+    "footstep": 100,
+    "interact": 3,
+    "laserOn": 1,
+    "pickup": 2,
+    "plateDown": 1,
+    "platformArrive": 3,
+    "platformDepart": 3,
+    "receiverLit": 1,
+    "switchOn": 2,
+    "switchTick": 2
+   }
+  },
+  {
+   "ticks": 1064,
+   "finalHash": 2323786836,
+   "digest": 2122158160,
+   "checkpoints": {
+    "60": 583464869,
+    "120": 1477099189,
+    "180": 874542302,
+    "240": 4174954678,
+    "300": 617673846,
+    "360": 1636694510,
+    "420": 832609838,
+    "480": 1998744127,
+    "540": 2746623812,
+    "600": 2421138937,
+    "660": 892746322,
+    "720": 3064569648,
+    "780": 1546561553,
+    "840": 3773397237,
+    "900": 324268175,
+    "960": 4071827646,
+    "1020": 413763109,
+    "1064": 2323786836
+   },
+   "completedAtTick": 1063,
+   "events": {
+    "cellInserted": 1,
+    "divergence": 1,
+    "doorOpen": 1,
+    "drop": 1,
+    "echoFinished": 3,
+    "elevatorArrive": 1,
+    "elevatorStart": 1,
+    "footstep": 126,
+    "interact": 3,
+    "laserOn": 1,
+    "levelComplete": 1,
+    "pickup": 2,
+    "plateDown": 1,
+    "platformArrive": 3,
+    "platformDepart": 3,
+    "receiverLit": 1,
+    "switchOn": 2,
+    "switchTick": 2
+   }
+  }
+ ]
+}

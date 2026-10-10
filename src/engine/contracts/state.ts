@@ -61,6 +61,11 @@ export interface ActorState {
   lastInteraction: RecordedInteraction | null;
   /** interactHeld from this tick's input (animation hook; behaviours may read it). */
   interactHeld: boolean;
+  /**
+   * Nested loops only (LevelDefinition.recursion): recursive copy depth k >= 1 of loop `loopId`, replaying its
+   * inputs delayed by k * delayTicks. Absent on ordinary echoes and the player.
+   */
+  recursion?: number;
 }
 
 export type SimStatus = 'playing' | 'complete' | 'timeUp';

@@ -74,11 +74,18 @@ export interface TimedSwitchConfig {
   durationTicks: number;
   /** Re-activating while on restarts the timer. default true */
   retrigger?: boolean;
+  /**
+   * (level-design addition) Ticks the switch stays locked after switching off; presses fail with reason
+   * 'cooldown' meanwhile, so a switch can never be held on continuously by repeated presses. default 0
+   */
+  cooldownTicks?: number;
 }
 export interface TimedSwitchState {
   on: boolean;
   remainingTicks: number;
   activatedBy: ActorId | null;
+  /** (level-design addition) Remaining cooldown ticks after switching off (only present with cooldownTicks). */
+  cooldown?: number;
 }
 
 export type CrateConfig = Record<string, never>;
@@ -118,8 +125,14 @@ export interface ElevatorConfig {
   /**
    * 'signal': goes to levels[last] while wired input is active, levels[0] otherwise.
    * 'cycle' : interacting (E) on the platform/console advances to the next level.
+   * 'ride'  : (gameplay addition) standing on the platform for `rideDelayTicks` sends it to the next level.
+   * In 'cycle'/'ride' mode a wired input acts as a call button: each rising edge advances to the next level.
    */
-  mode?: 'signal' | 'cycle';
+  mode?: 'signal' | 'cycle' | 'ride';
+  /** 'ride' mode: ticks an occupant must stand on the resting platform before it departs. default 30 */
+  rideDelayTicks?: number;
+  /** 'ride'/'cycle' mode: return to startIndex after this many empty ticks away from it. default: never */
+  returnDelayTicks?: number;
 }
 export interface ElevatorState {
   /** Current platform surface height in UNITS. */
@@ -128,6 +141,14 @@ export interface ElevatorState {
   moving: boolean;
   /** Units moved this tick (for carrying actors / renderers). */
   dy: number;
+  /** (gameplay addition) ride/return dwell counter in ticks. */
+  dwellTicks?: number;
+  /** (gameplay addition) ride mode: false after a ride until the platform has been vacated. */
+  armed?: boolean;
+  /** (gameplay addition) previous combined input value, for rising-edge call buttons. */
+  lastInput?: boolean;
+  /** (gameplay addition) true while a departure is held because an actor straddles the shaft edge. */
+  held?: boolean;
 }
 
 export interface LaserEmitterConfig {

@@ -1,0 +1,117 @@
+{
+ "schema": 1,
+ "levelId": "L02-two-places",
+ "levelFingerprint": 2052147022,
+ "maxEchoes": 3,
+ "loopDurationTicks": 3600,
+ "completedAtTick": 482,
+ "loops": [
+  {
+   "v": 1,
+   "id": 1,
+   "durationTicks": 220,
+   "runs": [
+    175,
+    4,
+    25,
+    1,
+    20,
+    5
+   ],
+   "outcomes": []
+  },
+  {
+   "v": 1,
+   "id": 2,
+   "durationTicks": 467,
+   "runs": [
+    247,
+    1,
+    100,
+    6,
+    25,
+    1,
+    75,
+    6,
+    20,
+    5
+   ],
+   "outcomes": []
+  },
+  {
+   "v": 1,
+   "id": 0,
+   "durationTicks": 483,
+   "runs": [
+    483,
+    1
+   ],
+   "outcomes": []
+  }
+ ],
+ "passes": [
+  {
+   "ticks": 220,
+   "finalHash": 2508846510,
+   "digest": 3414046380,
+   "checkpoints": {
+    "60": 109731068,
+    "120": 4030241191,
+    "180": 743102063,
+    "220": 2508846510
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorOpen": 1,
+    "footstep": 17,
+    "plateDown": 1
+   }
+  },
+  {
+   "ticks": 467,
+   "finalHash": 77291556,
+   "digest": 141835492,
+   "checkpoints": {
+    "60": 4231176714,
+    "120": 462043435,
+    "180": 2966651011,
+    "240": 1226055220,
+    "300": 2340515787,
+    "360": 2460133307,
+    "420": 3575579928,
+    "467": 77291556
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorOpen": 2,
+    "echoFinished": 1,
+    "footstep": 42,
+    "plateDown": 2
+   }
+  },
+  {
+   "ticks": 483,
+   "finalHash": 1666887286,
+   "digest": 2576502403,
+   "checkpoints": {
+    "60": 2573498261,
+    "120": 2802019694,
+    "180": 3204608082,
+    "240": 3217351422,
+    "300": 3913429460,
+    "360": 1741429462,
+    "420": 2523846599,
+    "480": 2533186337,
+    "483": 1666887286
+   },
+   "completedAtTick": 482,
+   "events": {
+    "doorOpen": 2,
+    "echoFinished": 2,
+    "footstep": 56,
+    "levelComplete": 1,
+    "plateDown": 2
+   }
+  }
+ ]
+}

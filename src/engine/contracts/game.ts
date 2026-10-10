@@ -33,6 +33,13 @@ export interface TimelineTrack {
   divergences: DivergenceRecord[];
   /** Tick at which an echo finished replaying in this pass (null if not yet / player). */
   finishedAtTick: number | null;
+  /**
+   * Nested loops only: recursive copy depth (>= 1) of loop `loopId`; its `planned` markers are already shifted by
+   * `startTick`. Absent on ordinary echo tracks and the player track.
+   */
+  recursion?: number;
+  /** Nested loops only: tick at which this copy starts replaying (k * delayTicks). */
+  startTick?: number;
 }
 
 export interface Timeline {

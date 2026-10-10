@@ -88,7 +88,7 @@ export function crateRoom(maxEchoes = 2): LevelDefinition {
  *   r1 #........#
  *   r2 #...>....#   ramp (4,2) ascending east onto platform cols 5-7 rows 1-3 (height 1)
  *   r3 #........#
- *   r4 #........#
+ *   r4 #........#   exit (1,4)
  *   r5 ##########
  */
 export function terrainRoom(): LevelDefinition {
@@ -101,6 +101,6 @@ export function terrainRoom(): LevelDefinition {
       heights: ['0000000000', '0000011100', '0000011100', '0000011100', '0000000000', '0000000000'],
     },
     playerSpawn: { col: 2, row: 2, facing: 1 },
-    entities: [{ id: 'exit', kind: 'exitPortal', col: 8, row: 4, config: {} }],
+    entities: [{ id: 'exit', kind: 'exitPortal', col: 1, row: 4, config: {} }],
   });
 }

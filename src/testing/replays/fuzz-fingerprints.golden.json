@@ -1,0 +1,114 @@
+{
+ "schema": 1,
+ "fuzzerVersion": 1,
+ "runs": [
+  {
+   "levelId": "qa-component-gauntlet",
+   "levelFingerprint": 665221926,
+   "seed": 7,
+   "ticks": 3000,
+   "digest": 1863891397,
+   "passes": 8,
+   "commits": 3
+  },
+  {
+   "levelId": "qa-component-gauntlet",
+   "levelFingerprint": 665221926,
+   "seed": 8,
+   "ticks": 3000,
+   "digest": 21510994,
+   "passes": 8,
+   "commits": 3
+  },
+  {
+   "levelId": "L01-first-echo",
+   "levelFingerprint": 648074862,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 2495853436,
+   "passes": 3,
+   "commits": 1
+  },
+  {
+   "levelId": "L02-two-places",
+   "levelFingerprint": 2052147022,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 634765793,
+   "passes": 4,
+   "commits": 2
+  },
+  {
+   "levelId": "L03-the-relay",
+   "levelFingerprint": 573264764,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 1944177462,
+   "passes": 1,
+   "commits": 0
+  },
+  {
+   "levelId": "L04-the-lift",
+   "levelFingerprint": 2157445063,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 2252301014,
+   "passes": 3,
+   "commits": 2
+  },
+  {
+   "levelId": "L05-perfect-timing",
+   "levelFingerprint": 194468488,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 274311095,
+   "passes": 5,
+   "commits": 2
+  },
+  {
+   "levelId": "L06-chain-reaction",
+   "levelFingerprint": 2685481005,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 51971361,
+   "passes": 5,
+   "commits": 3
+  },
+  {
+   "levelId": "L07-broken-sequence",
+   "levelFingerprint": 3265105683,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 3780284316,
+   "passes": 5,
+   "commits": 1
+  },
+  {
+   "levelId": "L08-recursive-machine",
+   "levelFingerprint": 2240364407,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 1086095623,
+   "passes": 6,
+   "commits": 1
+  },
+  {
+   "levelId": "L09-paradox-chamber",
+   "levelFingerprint": 1769831330,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 4255058388,
+   "passes": 10,
+   "commits": 3
+  },
+  {
+   "levelId": "L10-the-core",
+   "levelFingerprint": 1370610455,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 4245844384,
+   "passes": 4,
+   "commits": 2
+  }
+ ]
+}

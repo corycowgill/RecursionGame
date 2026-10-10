@@ -1,0 +1,77 @@
+{
+ "schema": 1,
+ "levelId": "T00-test-chamber",
+ "levelFingerprint": 2579541392,
+ "maxEchoes": 2,
+ "loopDurationTicks": 3600,
+ "completedAtTick": 261,
+ "loops": [
+  {
+   "v": 1,
+   "id": 1,
+   "durationTicks": 187,
+   "runs": [
+    90,
+    10,
+    87,
+    6,
+    10,
+    5
+   ],
+   "outcomes": []
+  },
+  {
+   "v": 1,
+   "id": 0,
+   "durationTicks": 262,
+   "runs": [
+    90,
+    10,
+    12,
+    6,
+    160,
+    9
+   ],
+   "outcomes": []
+  }
+ ],
+ "passes": [
+  {
+   "ticks": 187,
+   "finalHash": 42355636,
+   "digest": 4288854868,
+   "checkpoints": {
+    "60": 3864319247,
+    "120": 4294715845,
+    "180": 3920881723,
+    "187": 42355636
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorOpen": 1,
+    "footstep": 17,
+    "plateDown": 1
+   }
+  },
+  {
+   "ticks": 262,
+   "finalHash": 1650758506,
+   "digest": 1424239893,
+   "checkpoints": {
+    "60": 2475955234,
+    "120": 4238769448,
+    "180": 1296179730,
+    "240": 1524955000,
+    "262": 1650758506
+   },
+   "completedAtTick": 261,
+   "events": {
+    "doorOpen": 1,
+    "echoFinished": 1,
+    "footstep": 35,
+    "levelComplete": 1,
+    "plateDown": 1
+   }
+  }
+ ]
+}

@@ -1,0 +1,234 @@
+{
+ "schema": 1,
+ "levelId": "L06-chain-reaction",
+ "levelFingerprint": 2685481005,
+ "maxEchoes": 3,
+ "loopDurationTicks": 4500,
+ "completedAtTick": 735,
+ "loops": [
+  {
+   "v": 1,
+   "id": 1,
+   "durationTicks": 255,
+   "runs": [
+    200,
+    6,
+    25,
+    9,
+    30,
+    5
+   ],
+   "outcomes": []
+  },
+  {
+   "v": 1,
+   "id": 2,
+   "durationTicks": 721,
+   "runs": [
+    35,
+    0,
+    25,
+    4,
+    212,
+    1,
+    108,
+    0,
+    75,
+    4,
+    1,
+    1,
+    24,
+    5,
+    1,
+    53,
+    209,
+    5,
+    1,
+    53,
+    30,
+    5
+   ],
+   "outcomes": [
+    {
+     "tick": 480,
+     "verb": "interact",
+     "kind": "use",
+     "entityId": "switch-relay"
+    },
+    {
+     "tick": 690,
+     "verb": "interact",
+     "kind": "use",
+     "entityId": "switch-relay"
+    }
+   ]
+  },
+  {
+   "v": 1,
+   "id": 3,
+   "durationTicks": 653,
+   "runs": [
+    35,
+    0,
+    25,
+    4,
+    212,
+    1,
+    108,
+    2,
+    157,
+    6,
+    35,
+    2,
+    26,
+    6,
+    25,
+    1,
+    30,
+    5
+   ],
+   "outcomes": []
+  },
+  {
+   "v": 1,
+   "id": 0,
+   "durationTicks": 736,
+   "runs": [
+    35,
+    0,
+    25,
+    4,
+    676,
+    1
+   ],
+   "outcomes": []
+  }
+ ],
+ "passes": [
+  {
+   "ticks": 255,
+   "finalHash": 1612789063,
+   "digest": 2029156040,
+   "checkpoints": {
+    "60": 464968903,
+    "120": 4120723308,
+    "180": 2586619734,
+    "240": 3816828570,
+    "255": 1612789063
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorOpen": 1,
+    "footstep": 20,
+    "plateDown": 1
+   }
+  },
+  {
+   "ticks": 721,
+   "finalHash": 1235135425,
+   "digest": 2981527181,
+   "checkpoints": {
+    "60": 730626042,
+    "120": 4058310349,
+    "180": 2925286647,
+    "240": 3076444468,
+    "300": 484501884,
+    "360": 589032924,
+    "420": 1606563143,
+    "480": 2587814846,
+    "540": 2766553358,
+    "600": 1225827185,
+    "660": 3358554522,
+    "720": 3238621093,
+    "721": 1235135425
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorClose": 1,
+    "doorOpen": 3,
+    "echoFinished": 1,
+    "footstep": 51,
+    "interact": 2,
+    "laserOff": 2,
+    "laserOn": 4,
+    "plateDown": 1,
+    "receiverLit": 4,
+    "receiverUnlit": 2,
+    "switchOff": 1,
+    "switchOn": 2,
+    "switchTick": 1
+   }
+  },
+  {
+   "ticks": 653,
+   "finalHash": 3504464457,
+   "digest": 764892027,
+   "checkpoints": {
+    "60": 1998741104,
+    "120": 53530647,
+    "180": 528040901,
+    "240": 2650764203,
+    "300": 875579405,
+    "360": 3999564280,
+    "420": 3946786577,
+    "480": 3486745318,
+    "540": 3473197170,
+    "600": 2268126482,
+    "653": 3504464457
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorClose": 1,
+    "doorOpen": 2,
+    "echoFinished": 1,
+    "footstep": 94,
+    "interact": 1,
+    "laserOff": 2,
+    "laserOn": 2,
+    "plateDown": 2,
+    "receiverLit": 2,
+    "receiverUnlit": 2,
+    "switchOff": 1,
+    "switchOn": 1,
+    "switchTick": 1
+   }
+  },
+  {
+   "ticks": 736,
+   "finalHash": 3649716594,
+   "digest": 2088958155,
+   "checkpoints": {
+    "60": 4255464113,
+    "120": 3405663482,
+    "180": 1791649532,
+    "240": 4189279297,
+    "300": 4032174396,
+    "360": 1588282446,
+    "420": 765481555,
+    "480": 1869308312,
+    "540": 1385306948,
+    "600": 635226574,
+    "660": 2766302724,
+    "720": 1218582669,
+    "736": 3649716594
+   },
+   "completedAtTick": 735,
+   "events": {
+    "doorClose": 1,
+    "doorOpen": 4,
+    "echoFinished": 3,
+    "footstep": 118,
+    "interact": 2,
+    "laserOff": 2,
+    "laserOn": 4,
+    "levelComplete": 1,
+    "plateDown": 2,
+    "receiverLit": 4,
+    "receiverUnlit": 2,
+    "switchOff": 1,
+    "switchOn": 2,
+    "switchTick": 1
+   }
+  }
+ ]
+}

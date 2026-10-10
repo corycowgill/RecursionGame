@@ -18,10 +18,12 @@ import { buildSurfaceOverrides, cellSurfaceAtPoint, surfaceAt, type SurfaceOverr
  *  - Terrain blockers: a cell blocks when it has no surface (wall/pillar/railing/void) or when its surface
  *    height, sampled at the point of the cell nearest the actor's centre, differs from the actor's y by more
  *    than PHYS.STEP_TOLERANCE (ledges; ramps are entered from their low/high edges).
- *  - Entity blockers: entities whose behaviour reports isSolid. Footprint = carriable ? CRATE_HALF square
+ *  - Entity blockers: entities whose behaviour reports isSolid (or isSolidFor(actor) when defined). Footprint = carriable ? CRATE_HALF square
  *    around the entity : full cell square. Vertical extent [y, y + height] must overlap the actor's.
  *  - Blockers already overlapping the actor before the move are ignored (lets actors escape if an elevator or
  *    door ever ends up overlapping them; never used to pass through walls since those are never overlapped).
+ *    Exception: an already-overlapped terrain cell still blocks a move that raises its surface (sampled at the
+ *    candidate centre) further above the step tolerance — e.g. sliding along the side of a ramp.
  *  - Actors never collide with other actors (echoes and the player pass through each other). This keeps
  *    replays robust: an echo is never shoved off its recorded path by a body.
  */
@@ -34,6 +36,8 @@ export interface Box {
   minY: number;
   maxY: number;
   entityId: EntityId;
+  /** Optional per-actor filter (behaviour.isSolidFor). */
+  blocks?: (actor: ActorState) => boolean;
 }
 
 export interface CollisionWorld {
@@ -50,7 +54,15 @@ export function buildCollisionWorld(rt: LevelRuntime, state: SimState): Collisio
     const e = state.entities[id];
     if (!e || e.carriedBy !== null) continue;
     const b = rt.behaviourFor(e.kind);
-    if (!b.isSolid || !b.isSolid(e, rt.def(id))) continue;
+    const def = rt.def(id);
+    if (b.isSolidFor) {
+      const isSolidFor = b.isSolidFor;
+      const box = entityBox(e.x, e.y, e.z, b.carriable === true, id);
+      box.blocks = (actor) => isSolidFor(e, def, actor);
+      solids.push(box);
+      continue;
+    }
+    if (!b.isSolid || !b.isSolid(e, def)) continue;
     solids.push(entityBox(e.x, e.y, e.z, b.carriable === true, id));
   }
   return { rt, overrides: buildSurfaceOverrides(rt, state), solids };
@@ -133,8 +145,14 @@ export function moveAxis(world: CollisionWorld, actor: ActorState, axis: 'x' | '
       const bz0 = row * UNITS_PER_TILE;
       const bx1 = bx0 + UNITS_PER_TILE;
       const bz1 = bz0 + UNITS_PER_TILE;
-      if (overlaps1(oMinX, oMaxX, bx0, bx1) && overlaps1(oMinZ, oMaxZ, bz0, bz1)) continue; // already overlapping
-      if (!cellBlocks(world, col, row, cx, cz, y)) continue;
+      if (overlaps1(oMinX, oMaxX, bx0, bx1) && overlaps1(oMinZ, oMaxZ, bz0, bz1)) {
+        // Already overlapping (e.g. walking beside a ramp): only block a move that pushes the body deeper into
+        // terrain rising above the step tolerance, so actors cannot slide into a ramp's side wall (QA fuzz finding).
+        const sNew = cellSurfaceAtPoint(world.rt, world.overrides, col, row, cx, cz);
+        if (sNew === null || sNew - y <= PHYS.STEP_TOLERANCE) continue;
+        const sOld = cellSurfaceAtPoint(world.rt, world.overrides, col, row, ox, oz);
+        if (sOld !== null && sNew <= sOld) continue;
+      } else if (!cellBlocks(world, col, row, cx, cz, y)) continue;
       if (axis === 'x') clampTo(bx0, bx1);
       else clampTo(bz0, bz1);
     }
@@ -145,6 +163,7 @@ export function moveAxis(world: CollisionWorld, actor: ActorState, axis: 'x' | '
   const aMaxY = y + PHYS.ACTOR_HEIGHT;
   for (const b of world.solids) {
     if (!overlaps1(aMinY, aMaxY, b.minY, b.maxY)) continue;
+    if (b.blocks && !b.blocks(actor)) continue;
     if (!(overlaps1(cMinX, cMaxX, b.minX, b.maxX) && overlaps1(cMinZ, cMaxZ, b.minZ, b.maxZ))) continue;
     if (overlaps1(oMinX, oMaxX, b.minX, b.maxX) && overlaps1(oMinZ, oMaxZ, b.minZ, b.maxZ)) continue;
     if (axis === 'x') clampTo(b.minX, b.maxX);
