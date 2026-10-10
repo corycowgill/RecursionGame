@@ -4,6 +4,7 @@ import { testChamber } from '../../levels/definitions/test-chamber';
 import { crateRoom, terrainRoom } from '../../testing/harness/fixtures';
 import { createGame, playInputs, playScript } from '../../testing/harness/harness';
 import { inputs } from '../../testing/harness/script';
+import { cellKey, cellSurfaceAtPoint, isFlatCell, overrideAtPoint } from './terrain';
 
 const player = (g: ReturnType<typeof createGame>) => {
   const st = g.getState();
@@ -156,5 +157,22 @@ describe('registry extensibility', () => {
     const st = g.getState();
     expect(st.actors[0]!.x).toBe(7500 + 120 * PHYS.ACTOR_SPEED); // echo passed through the gate
     expect(st.actors[1]!.x).toBe(9000 - PHYS.ACTOR_HALF); // player blocked
+  });
+});
+
+describe('clipped surface overrides (round 2, QA-1)', () => {
+  it('a clipped override covers only its extent; the rest of the cell keeps the tile surface; first covering wins', () => {
+    const rt = { tileAt: () => ({ kind: 'void', h: 0 }) } as unknown as Parameters<typeof cellSurfaceAtPoint>[0];
+    const clip = { minX: 2300, maxX: 3300, minZ: 1000, maxZ: 2000 };
+    const ov = new Map([[cellKey(2, 1), [{ y: 0, clip }, { y: 500, clip: null }]], [cellKey(3, 1), [{ y: 0, clip }]]]);
+    expect(cellSurfaceAtPoint(rt, ov, 2, 1, 2400, 1500)).toBe(0);
+    expect(cellSurfaceAtPoint(rt, ov, 2, 1, 2200, 1500)).toBe(500); // second override covers the rest of the cell
+    expect(cellSurfaceAtPoint(rt, ov, 3, 1, 3299, 1500)).toBe(0);
+    expect(cellSurfaceAtPoint(rt, ov, 3, 1, 3300, 1500)).toBeNull(); // half-open edge -> void tile
+    expect(cellSurfaceAtPoint(rt, ov, 3, 1, 9000, 1500)).toBeNull(); // point clamped into the cell (x=3999)
+    expect(cellSurfaceAtPoint(rt, ov, 3, 1, 0, 1500)).toBe(0); // clamped to x=3000, inside the clip
+    expect(overrideAtPoint(ov, 4, 1, 4500, 1500)).toBeNull();
+    expect(isFlatCell(rt, ov, 2, 1)).toBe(true); // centre 2500 covered
+    expect(isFlatCell(rt, ov, 3, 1)).toBe(false); // centre 3500 not covered
   });
 });

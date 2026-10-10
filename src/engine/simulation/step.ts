@@ -141,7 +141,12 @@ function updateFacing(actor: ActorState, mx: number, mz: number): void {
   }
 }
 
-function carrierDeltaFor(rt: LevelRuntime, state: SimState, actor: ActorState): { dx: number; dy: number; dz: number } | null {
+/**
+ * The carrier (surface-providing entity with carrierDelta: moving platform, elevator) the actor's centre stands on,
+ * or null. Mirrors the terrain rule: the first provider in id order whose (clipped) surface covers the centre point
+ * owns it, and the actor must be within STEP_TOLERANCE of that surface.
+ */
+function carrierUnder(rt: LevelRuntime, state: SimState, actor: ActorState): AnySimEntity | null {
   const col = fdiv(actor.x, UNITS_PER_TILE);
   const row = fdiv(actor.z, UNITS_PER_TILE);
   const key = cellKey(col, row);
@@ -149,14 +154,14 @@ function carrierDeltaFor(rt: LevelRuntime, state: SimState, actor: ActorState): 
     const e = state.entities[id];
     if (!e) continue;
     const b = rt.behaviourFor(e.kind);
-    if (!b.carrierDelta || !b.surfaceCells) continue;
-    const def = rt.def(id);
-    const cells = b.surfaceCells(e, def);
-    for (const sc of cells) {
+    if (!b.surfaceCells) continue;
+    for (const sc of b.surfaceCells(e, rt.def(id))) {
       if (cellKey(sc.col, sc.row) !== key) continue;
+      const c = sc.clip;
+      if (c && !(actor.x >= c.minX && actor.x < c.maxX && actor.z >= c.minZ && actor.z < c.maxZ)) continue;
       const d = sc.y - actor.y;
-      if (d > PHYS.STEP_TOLERANCE || d < -PHYS.STEP_TOLERANCE) continue;
-      return b.carrierDelta(e);
+      if (!b.carrierDelta || d > PHYS.STEP_TOLERANCE || d < -PHYS.STEP_TOLERANCE) return null;
+      return e;
     }
   }
   return null;
@@ -168,21 +173,13 @@ function moveActor(
   actor: ActorState,
   input: PlayerInput,
 ): void {
-  const rt = ctx.runtime;
   const x0 = actor.x;
   const y0 = actor.y;
   const z0 = actor.z;
+  const cx = x0;
+  const cz = z0;
 
-  // 1) Ride carrier surfaces (moving platforms) — collision-checked.
-  const carry = carrierDeltaFor(rt, ctx.state, actor);
-  if (carry) {
-    moveAxis(world, actor, 'x', carry.dx);
-    moveAxis(world, actor, 'z', carry.dz);
-  }
-  const cx = actor.x;
-  const cz = actor.z;
-
-  // 2) Walk.
+  // Walk (riders are carried later, in the carry phase after the entity update).
   const mx = input.moveX;
   const mz = input.moveY;
   updateFacing(actor, mx, mz);
@@ -216,6 +213,35 @@ function moveActor(
 }
 
 /**
+ * Carry phase (contracts §6 step 4b, QA-1/QA-3). Each rider (actor whose centre stood on a carrier surface when the
+ * entity update began) is moved by the carrier's planar delta of this tick — collision-checked against walls, ledges
+ * and solids, but not against the bare pit its footprint overhangs — and then re-seated on the surface under its
+ * centre. Riders therefore never lag their deck/lift, so a rider is always over the carrier that supports it.
+ */
+function carryRiders(ctx: TickContext, riders: readonly { actor: ActorState; carrier: AnySimEntity }[]): void {
+  const rt = ctx.runtime;
+  const world = buildCollisionWorld(rt, ctx.state);
+  for (const { actor, carrier } of riders) {
+    const d = rt.behaviourFor(carrier.kind).carrierDelta?.(carrier) ?? null;
+    const x0 = actor.x;
+    const y0 = actor.y;
+    const z0 = actor.z;
+    if (d) {
+      moveAxis(world, actor, 'x', d.dx, { carry: true });
+      moveAxis(world, actor, 'z', d.dz, { carry: true });
+    }
+    settleOnSurface(world, actor);
+    actor.vx += actor.x - x0;
+    actor.vy += actor.y - y0;
+    actor.vz += actor.z - z0;
+    if (actor.carrying !== null) {
+      const item = ctx.state.entities[actor.carrying];
+      if (item) attachToCarrier(item, actor);
+    }
+  }
+}
+
+/**
  * Advances the simulation by exactly one tick. Pure function of (runtime, state, frames) — mutates `state`
  * in place. `frames[i]` drives `state.actors[i]`. Events are appended to `sink` (pass null to suppress, e.g.
  * during snapshot re-simulation).
@@ -225,9 +251,11 @@ function moveActor(
  *   1. per actor (array order): read input, flag echo replay finished
  *   2. INTERACTIONS: per actor (array order): E then Space; ownership resolved immediately; echo outcomes are
  *      compared with the recording -> divergence events
- *   3. MOVEMENT: build collision world once, then per actor (array order): carrier ride, walk X then Z,
- *      settle on surface, carried items follow
+ *   3. MOVEMENT: build collision world once, then per actor (array order): walk X then Z, settle on surface,
+ *      carried items follow; then note each actor's carrier (deck/lift surface under its centre), if any
  *   4. ENTITY UPDATE: per entity (id order): behaviour.update reads previous-tick signals, writes next
+ *   4b. CARRY: per rider (array order): move by its carrier's delta of this tick (collision-checked), re-seat on
+ *      the surface, carried items follow
  *   5. swap signal buffers
  *   6. WIN CHECK: exit portal output (new buffer) is true and the PLAYER's centre is on the exit cell
  *   7. tick += 1; if tick >= loopDurationTicks and still playing -> 'timeUp'
@@ -291,6 +319,13 @@ export function stepSim(
     moveActor(ctx, world, state.actors[i] as ActorState, (frames[i] as ActorFrame).input);
   }
 
+  // 3b. riders: who stands on a carrier surface now, before the carriers move
+  let riders: { actor: ActorState; carrier: AnySimEntity }[] | null = null;
+  for (const actor of state.actors) {
+    const carrier = carrierUnder(rt, state, actor);
+    if (carrier) (riders ??= []).push({ actor, carrier });
+  }
+
   // 4. entity update
   for (const id of rt.entityOrder) {
     const e = state.entities[id];
@@ -298,6 +333,10 @@ export function stepSim(
     const b = rt.behaviourFor(e.kind);
     if (b.update) b.update(ctx.forEntity(e as SimEntity<EntityKind>));
   }
+
+  // 4b. carry: riders follow the delta their carrier applied in THIS tick's update (no one-tick lag), then re-seat
+  //     on the carrier's new surface height (elevators)
+  if (riders) carryRiders(ctx, riders);
 
   // 5. swap signals
   state.signals = ctx.nextSignals;

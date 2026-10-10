@@ -9,8 +9,12 @@ import { clampStep } from './common';
  *    wraps from the last waypoint to the first.
  *  - Signal: when wired it only moves while its combined input is powered (it freezes in place otherwise); with
  *    config.requiresSignal and no wires it never moves.
- *  - Surface: every cell its 1x1 deck overlaps is walkable at the deck height (so riders are never dropped while
- *    it straddles two cells). Riders are carried by state.dx/dz (carrierDelta, collision-checked by the engine).
+ *  - Surface: exactly the deck's real 1x1 extent [x-500, x+500) x [z-500, z+500) is walkable at the deck height.
+ *    While it straddles two cells it reports both, each clipped to that extent (SurfaceCell.clip), so the half of a
+ *    cell the deck has already left is void again (QA-1: it used to stay walkable and left riders over the pit).
+ *    Riders (actors whose centre is on the deck) are carried by state.dx/dz in the same tick the deck moves
+ *    (carrierDelta, engine carry phase, collision-checked); they can neither step onto the uncovered part of a
+ *    straddled cell nor be left on it.
  *  - Output: docked (resting at a waypoint). Events: platformDepart / platformArrive.
  */
 export const movingPlatformBehaviour: PuzzleEntityBehaviour<'movingPlatform'> = {
@@ -29,8 +33,11 @@ export const movingPlatformBehaviour: PuzzleEntityBehaviour<'movingPlatform'> = 
     const c1 = fdiv(e.x + h - 1, UNITS_PER_TILE);
     const r0 = fdiv(e.z - h, UNITS_PER_TILE);
     const r1 = fdiv(e.z + h - 1, UNITS_PER_TILE);
+    const docked = c0 === c1 && r0 === r1;
     const out: SurfaceCell[] = [];
-    for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) out.push({ col, row, y: e.y });
+    for (let row = r0; row <= r1; row++)
+      for (let col = c0; col <= c1; col++)
+        out.push(docked ? { col, row, y: e.y } : { col, row, y: e.y, clip: { minX: e.x - h, maxX: e.x + h, minZ: e.z - h, maxZ: e.z + h } });
     return out;
   },
   carrierDelta: (e) => (e.state.dx !== 0 || e.state.dz !== 0 ? { dx: e.state.dx, dy: 0, dz: e.state.dz } : null),

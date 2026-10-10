@@ -22,10 +22,9 @@ const BASE_SEED = Number(process.env['FUZZ_SEED'] ?? 1);
  * and src/testing/qa/known-bugs.test.ts). They are tallied, not failed, so they cannot mask other violations.
  * Delete an entry once its bug is fixed.
  */
-export function knownIssue(v: Violation): string | null {
-  if (v.rule === 'platform') return 'QA-1 rider left floating beside a moving deck';
-  if (v.rule === 'solid' && v.entityKind === 'temporalGate') return 'QA-2 temporal gate closes on an occupant';
-  if (v.rule === 'ledge' && v.entityKind === 'elevator') return 'QA-3 actor steps off a moving lift and clips its edge';
+export function knownIssue(_v: Violation): string | null {
+  // QA-1 (platform), QA-2 (solid temporalGate) and QA-3 (ledge elevator) were fixed in round 2 (see
+  // docs/agent-progress/temporal-gameplay-physics-round2.md); their violations now fail the fuzz run.
   return null;
 }
 

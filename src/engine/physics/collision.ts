@@ -26,6 +26,11 @@ import { buildSurfaceOverrides, cellSurfaceAtPoint, surfaceAt, type SurfaceOverr
  *    entry rule (no stepping off a ramp's side onto a far lower floor or a pit), and a move that raises the cell's
  *    surface (sampled at the candidate centre) further above the step tolerance is blocked (no sliding into a
  *    ramp's side wall).
+ *  - Support (QA-1): a walking move may not carry the actor's centre from a supported point to an unsupported one
+ *    (or one beyond the step tolerance) inside the SAME cell — this only happens on clipped surfaces such as a
+ *    deck straddling two cells; the move stops at the last supported point.
+ *  - Carry moves (opts.carry, a rider moved with its deck) are not blocked by bare void cells: the rider's centre
+ *    travels with the deck, so its footprint may overhang the pit; walls, ledges and solid entities still block.
  *  - Actors never collide with other actors (echoes and the player pass through each other). This keeps
  *    replays robust: an echo is never shoved off its recorded path by a body.
  */
@@ -104,8 +109,14 @@ export function cellBlocks(world: CollisionWorld, col: number, row: number, cx: 
  * Moves `actor` along one axis by `delta` units with collision. Mutates actor.x / actor.z.
  * Returns the displacement actually applied.
  */
-export function moveAxis(world: CollisionWorld, actor: ActorState, axis: 'x' | 'z', delta: number): number {
+export interface MoveOptions {
+  /** A carry move (rider moved by its carrier): bare void cells do not block. */
+  carry?: boolean;
+}
+
+export function moveAxis(world: CollisionWorld, actor: ActorState, axis: 'x' | 'z', delta: number, opts: MoveOptions = {}): number {
   if (delta === 0) return 0;
+  const carry = opts.carry === true;
   const H = PHYS.ACTOR_HALF;
   const ox = actor.x;
   const oz = actor.z;
@@ -166,6 +177,7 @@ export function moveAxis(world: CollisionWorld, actor: ActorState, axis: 'x' | '
         const sOld = cellSurfaceAtPoint(world.rt, world.overrides, col, row, ox, oz);
         if (sOld !== null && sNew <= sOld) continue;
       } else if (!cellBlocks(world, col, row, cx, cz, y)) continue;
+      else if (carry && world.rt.tileAt(col, row).kind === 'void' && cellSurfaceAtPoint(world.rt, world.overrides, col, row, cx, cz) === null) continue;
       if (axis === 'x') clampTo(bx0, bx1);
       else clampTo(bz0, bz1);
     }
@@ -183,9 +195,41 @@ export function moveAxis(world: CollisionWorld, actor: ActorState, axis: 'x' | '
     else clampTo(b.minZ, b.maxZ);
   }
 
+  // Support (QA-1): the centre may not walk off a clipped surface within its own cell.
+  if (!carry && target !== origin) target = keepSupported(world, actor, axis, origin, target);
+
   if (axis === 'x') actor.x = target;
   else actor.z = target;
   return target - origin;
+}
+
+function supportedAt(world: CollisionWorld, x: number, z: number, y: number): boolean {
+  const s = cellSurfaceAtPoint(world.rt, world.overrides, fdiv(x, UNITS_PER_TILE), fdiv(z, UNITS_PER_TILE), x, z);
+  return s !== null && s - y <= PHYS.STEP_TOLERANCE && y - s <= PHYS.STEP_TOLERANCE;
+}
+
+/**
+ * Largest displacement toward `target` (same cell as the origin) that keeps the centre supported. A no-op unless the
+ * origin is supported and the target is not; cell changes are governed by the centre-entry rule above. Integer
+ * bisection (support along one axis inside one cell is an interval for flat clipped overrides).
+ */
+function keepSupported(world: CollisionWorld, actor: ActorState, axis: 'x' | 'z', origin: number, target: number): number {
+  const at = (v: number): [number, number] => (axis === 'x' ? [v, actor.z] : [actor.x, v]);
+  const [tx, tz] = at(target);
+  if (supportedAt(world, tx, tz, actor.y)) return target;
+  const [ox, oz] = at(origin);
+  if (!supportedAt(world, ox, oz, actor.y)) return target;
+  if (fdiv(tx, UNITS_PER_TILE) !== fdiv(ox, UNITS_PER_TILE) || fdiv(tz, UNITS_PER_TILE) !== fdiv(oz, UNITS_PER_TILE)) return target;
+  const sign = target > origin ? 1 : -1;
+  let lo = 0; // supported
+  let hi = (target - origin) * sign; // unsupported
+  while (hi - lo > 1) {
+    const mid = lo + ((hi - lo) >> 1);
+    const [mx, mz] = at(origin + mid * sign);
+    if (supportedAt(world, mx, mz, actor.y)) lo = mid;
+    else hi = mid;
+  }
+  return origin + lo * sign;
 }
 
 /** Re-seats the actor on the surface under its centre (no-op if none, e.g. transiently over a void). */

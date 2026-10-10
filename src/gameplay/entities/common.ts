@@ -44,15 +44,22 @@ export function surfaceProviderIds(rt: LevelRuntime): readonly EntityId[] {
 }
 
 /**
- * The surface-providing entity whose surface covers (col,row) within STEP_TOLERANCE of `y`, if any. Mirrors the
- * terrain rule "first override in entity id order wins".
+ * The surface-providing entity whose surface covers the point (x,z) of cell (col,row) within STEP_TOLERANCE of
+ * `y`, if any. Mirrors the terrain rule "first override in entity id order covering the point wins" (clipped deck
+ * surfaces only cover the deck's real extent).
  */
 export function surfaceProviderAt(
   ctx: SimContext,
   col: number,
   row: number,
   y: number,
+  x: number = col * UNITS_PER_TILE + 500,
+  z: number = row * UNITS_PER_TILE + 500,
 ): { entity: AnySimEntity; y: number } | null {
+  const x0 = col * UNITS_PER_TILE;
+  const z0 = row * UNITS_PER_TILE;
+  const px = x < x0 ? x0 : x > x0 + UNITS_PER_TILE - 1 ? x0 + UNITS_PER_TILE - 1 : x;
+  const pz = z < z0 ? z0 : z > z0 + UNITS_PER_TILE - 1 ? z0 + UNITS_PER_TILE - 1 : z;
   const rt = ctx.runtime;
   for (const id of surfaceProviderIds(rt)) {
     const e = ctx.state.entities[id];
@@ -61,6 +68,8 @@ export function surfaceProviderAt(
     if (!b.surfaceCells) continue;
     for (const sc of b.surfaceCells(e, rt.def(id))) {
       if (sc.col !== col || sc.row !== row) continue;
+      const c = sc.clip;
+      if (c && !(px >= c.minX && px < c.maxX && pz >= c.minZ && pz < c.maxZ)) continue;
       const d = sc.y - y;
       // The first provider covering the cell owns it (terrain rule); report it only if the item rests on it.
       return d <= PHYS.STEP_TOLERANCE && d >= -PHYS.STEP_TOLERANCE ? { entity: e, y: sc.y } : null;
@@ -80,7 +89,7 @@ export function rideSurface<K extends EntityKind>(ctx: SimContext, item: SimEnti
   if (item.carriedBy !== null) return;
   if (surfaceProviderIds(ctx.runtime).length === 0) return;
   const { col, row } = entityCell(item);
-  const p = surfaceProviderAt(ctx, col, row, item.y);
+  const p = surfaceProviderAt(ctx, col, row, item.y, item.x, item.z);
   if (!p) return;
   const b = ctx.runtime.behaviourFor(p.entity.kind);
   const d = b.carrierDelta ? b.carrierDelta(p.entity) : null;

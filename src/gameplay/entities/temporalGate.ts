@@ -1,4 +1,5 @@
 import type { ActorState, EntityDefinitionOf, PuzzleEntityBehaviour, SimEntity } from '../../engine/contracts';
+import { entityCell } from './common';
 
 /**
  * Temporal gate — a shimmering field across one cell that filters actors by TIMELINE, not by body:
@@ -10,6 +11,10 @@ import type { ActorState, EntityDefinitionOf, PuzzleEntityBehaviour, SimEntity }
  * Signal: when wired (and config.requiresSignal !== false) the gate is OPEN only while its combined input is
  * powered; while closed it blocks EVERYONE. Unwired gates are always open.
  * Items: carried items pass with their carrier; nothing can be dropped into the field (isSolid for drops).
+ * Occupants (QA-2): a gate never closes on an actor. While it should close but any actor's footprint overlaps its
+ * cell (within one height level), it stays OPEN — like a door held by an occupant — and closes on the first tick
+ * the cell is clear. (While open it only admits the actors `allows` lets through, so an occupant is always one it
+ * admitted.) A held gate keeps reporting open on its output.
  * Lasers pass through the field. Output: open. Events: gateOpen / gateClose.
  */
 function isOpenFor(e: SimEntity<'temporalGate'>, def: EntityDefinitionOf<'temporalGate'>, actor: ActorState): boolean {
@@ -38,7 +43,11 @@ export const temporalGateBehaviour: PuzzleEntityBehaviour<'temporalGate'> = {
     const e = ctx.entity;
     const s = e.state;
     const powered = ctx.inputsPowered(e.id);
-    const open = powered === null || ctx.config.requiresSignal === false ? true : powered;
+    let open = powered === null || ctx.config.requiresSignal === false ? true : powered;
+    if (!open && s.open) {
+      const { col, row } = entityCell(e);
+      if (ctx.actorsOverlappingCell(col, row, e.y).length > 0) open = true; // held open by an occupant
+    }
     if (open !== s.open) {
       ctx.emit({ type: open ? 'gateOpen' : 'gateClose', tick: ctx.tick, entityId: e.id });
       s.open = open;

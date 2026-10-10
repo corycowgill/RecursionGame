@@ -88,13 +88,38 @@ interface PuzzleEntityBehaviour<K> {
   carriable?; canPickUp?(e, ctx);         // carry model
   plateWeight?;                           // weight on pressure plates when resting
   isSolid?(e, def); isSolidFor?(e, def, actor); blocksLaser?(e, def);
-  surfaceCells?(e, def): {col,row,y}[];   // walk-surface overrides (elevators, platforms)
-  carrierDelta?(e): {dx,dy,dz} | null;    // carries actors standing on its surface
+  surfaceCells?(e, def): {col,row,y,clip?}[]; // walk-surface overrides (elevators, platforms); clip = sub-cell extent
+  carrierDelta?(e): {dx,dy,dz} | null;    // carries actors standing on its surface (carry phase, §6 step 4b)
   interact?(ctx): InteractionResult|null; // E while facing (null = not interactable, continue)
   acceptItem?(ctx): InteractionResult|null; // E while carrying ctx.item and facing
   action?(ctx): InteractionResult|null;   // Space while facing
 }
 ```
+
+### Physical safety rules for moving entities (round 2: QA-1 / QA-2 / QA-3)
+
+Nothing that moves or closes may leave an actor floating over a pit or inside a solid. The chosen rules:
+
+* **Moving platforms (QA-1): the deck's walk surface is exactly its real 1×1 extent.** While a deck straddles two
+  cells it reports both, each with `SurfaceCell.clip` = the deck's extent `[x−500, x+500) × [z−500, z+500)`
+  (additive optional field); the part of a cell outside every clip keeps the tile's own surface (void in a deck
+  lane). `cellSurfaceAtPoint` and `isFlatCell` honour clips, so collision, settling, drops, rideSurface and the QA
+  invariants all see the same extent. Consequences: an actor can step across the pit edge onto a deck only where
+  the deck actually touches that edge (a deck that has pulled away is a pit edge: the actor stops flush); a rider
+  cannot walk off the deck's real edge into the uncovered half of a straddled cell (the move stops at the last
+  supported point, `keepSupported` in `physics/collision.ts`); and **a rider is carried in the same tick the deck
+  moves** (§6 step 4b), so it can never be left behind on the uncovered half. Items cannot be dropped onto a cell
+  whose centre the deck does not cover.
+* **Temporal gates (QA-2): a gate never closes on an actor.** When its signal drops while any actor's footprint
+  overlaps the gate cell (within one height level), the gate stays **open** (output stays true, no `gateClose`)
+  and closes on the first tick the cell is clear. An occupant is always someone the open gate admitted, so the
+  `allows` filter is unchanged. Same rule as doors (`doorBlocked`).
+* **Elevators (QA-3): a lift never moves into a body.** The departure is held while anyone straddles the shaft
+  edge (unchanged). During travel each step is clamped so the platform never rises more than `STEP_TOLERANCE`
+  above the feet of an actor straddling the shaft (someone who stepped off a rising lift, or is stepping on), and
+  never sinks a rider more than `STEP_TOLERANCE` below a neighbouring surface its footprint overhangs. When the
+  clamp stops it the lift waits in place (`state.held = true`) and resumes as soon as the actor clears the edge or
+  boards fully. Riders follow the platform height in the same tick (§6 step 4b).
 
 Register a behaviour with `registry.register(behaviour)` (see `src/gameplay/entities/index.ts`).
 `loadLevel` throws if a level uses a kind with no registered behaviour. Behaviours may **read** anything
@@ -110,10 +135,16 @@ through the context. They may only **mutate** their own entity, and may change o
    (`echoFinished` event).
 2. **Interactions:** per actor, in array order: E first, then Space. Each is resolved immediately, so later
    actors see the result. Echo outcomes are compared with the recording (see §8).
-3. **Movement:** the collision world is built once. Then per actor, in array order: ride the carrier surface,
-   walk X then Z, settle on the surface, and carried items follow the carrier.
+3. **Movement:** the collision world is built once. Then per actor, in array order: walk X then Z, settle on
+   the surface, and carried items follow the carrier. Then each actor's **carrier** is noted: the deck/lift whose
+   (clipped) surface is under its centre, within `STEP_TOLERANCE` (first provider in id order covering the point).
 4. **Entity update:** per entity, in ascending id order. `update(ctx)` reads previous-tick signals and writes
    the next buffer.
+4b. **Carry** (round 2): per rider noted in step 3, in array order: move by the carrier's `carrierDelta` of *this*
+   tick (collision-checked against walls, ledges and solids; the bare pit its footprint overhangs does not block a
+   carry move), re-seat on the surface under the centre (lift height), carried items follow. Riders therefore never
+   lag their carrier by a tick. (Before round 2 the ride happened at the start of step 3 with the previous tick's
+   delta; the change re-blessed the L04/L05/L10 goldens — completion ticks unchanged except L04, one tick earlier.)
 5. **Signal buffer swap.**
 6. **Win check:** the exit portal's new output is true **and** the *player's* centre is on the exit cell
    (within the step tolerance). This sets `complete` and emits `levelComplete`. Echoes never complete a level.

@@ -105,6 +105,12 @@ export interface SurfaceCell {
   row: number;
   /** Surface height in units. */
   y: number;
+  /**
+   * (additive, round 2) Optional planar clip in world units, half-open [minX,maxX) x [minZ,maxZ): the surface exists
+   * only at points of the cell inside it (a moving deck straddling two cells covers only part of each). Absent =
+   * the whole cell. Points outside the clip fall back to the tile's own surface (void for a deck lane).
+   */
+  clip?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 
 /**
@@ -113,7 +119,7 @@ export interface SurfaceCell {
  * imports gameplay code.
  *
  * Tick order (see docs/architecture/contracts.md): inputs -> interactions (actors in order) -> movement
- * (actors in order) -> entity update (entities in id order) -> signal buffer swap -> win check.
+ * (actors in order) -> entity update (entities in id order) -> carry (riders follow their carrier) -> signal buffer swap -> win check.
  */
 export interface PuzzleEntityBehaviour<K extends EntityKind> {
   readonly kind: K;
@@ -144,8 +150,9 @@ export interface PuzzleEntityBehaviour<K extends EntityKind> {
   /** Walk-surface overrides (elevators, moving platforms). */
   surfaceCells?(entity: SimEntity<K>, def: EntityDefinitionOf<K>): SurfaceCell[];
   /**
-   * Displacement this entity applied to its surface during its last update; actors standing on its surface
-   * cells are carried by it at the start of their movement (collision-checked).
+   * Displacement this entity applied to its surface during its last update. Actors whose centre stood on its
+   * surface (within STEP_TOLERANCE) when the entity-update phase began are carried by it right after that phase,
+   * in the same tick (collision-checked, see contracts §6 step 4b).
    */
   carrierDelta?(entity: SimEntity<K>): { dx: number; dy: number; dz: number } | null;
 

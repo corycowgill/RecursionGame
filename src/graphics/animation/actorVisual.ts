@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import type { ActorView } from '../../engine/contracts';
+import { PHYS, unitsToWorld, type ActorView, type InteractionKind } from '../../engine/contracts';
 import { PALETTE, echoTint } from '../materials/palette';
 import type { MaterialLibrary } from '../materials/library';
 import { labelTexture } from '../materials/textures';
 import { createTrailMaterial } from '../shaders/fx';
-import { Character, CHARACTER_RENDER_ORDER } from './character';
+import { Character, CHARACTER_RENDER_ORDER, type GestureKind } from './character';
 
 /**
  * ActorVisual — one actor on screen: the animated Character plus readability layers:
@@ -16,6 +16,21 @@ import { Character, CHARACTER_RENDER_ORDER } from './character';
 export const CHARACTER_SCALE = 1.15;
 const TRAIL_POINTS = 36;
 const TRAIL_SAMPLE = 0.045;
+/** Interact probe distance (metres, sim PHYS.REACH) — where the faced interactable sits. */
+const REACH_M = unitsToWorld(PHYS.REACH);
+
+function gestureFor(kind: InteractionKind): GestureKind {
+  if (kind === 'pickup' || kind === 'extract') return 'lift';
+  if (kind === 'drop' || kind === 'insert') return 'place';
+  return 'reach';
+}
+
+/** Stable per-actor seed (render-side variety: idle timing, hologram flicker phase). */
+function seedOf(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
 
 export class ActorVisual {
   readonly root = new THREE.Group();
@@ -33,7 +48,11 @@ export class ActorVisual {
   private hasLast = false;
   private yaw = 0;
   private gesture = 0;
+  private gestureKind: GestureKind = 'reach';
   private lastInteractionTick = -1;
+  private lookTarget: THREE.Vector3 | null = null;
+  private vy = 0;
+  private lastY = 0;
   private fade = 1;
   private glitch = 0;
   private speed = 0;
@@ -47,7 +66,7 @@ export class ActorVisual {
   ) {
     this.isPlayer = actor.kind === 'player';
     const tint = this.isPlayer ? PALETTE.gold : echoTint(actor.echoIndex);
-    this.character = new Character(lib, this.isPlayer ? 'player' : 'echo', tint);
+    this.character = new Character(lib, this.isPlayer ? 'player' : 'echo', tint, seedOf(actor.id));
     this.character.root.scale.setScalar(CHARACTER_SCALE);
     this.root.add(this.character.root);
 
@@ -143,6 +162,15 @@ export class ActorVisual {
     }
   }
 
+  /**
+   * Optional world-space point the head should turn toward (e.g. the nearest interactable). When unset the
+   * character looks at its faced cell (actor centre + facing × PHYS.REACH), where the sim probes for interactions.
+   */
+  setLookTarget(target: THREE.Vector3 | null): void {
+    if (!target) this.lookTarget = null;
+    else (this.lookTarget ??= new THREE.Vector3()).copy(target);
+  }
+
   /** Divergence feedback: coral glitch that decays. */
   pulseGlitch(): void {
     this.glitch = 1;
@@ -152,6 +180,7 @@ export class ActorVisual {
   remanifest(): void {
     if (!this.isPlayer) this.fade = 0;
     this.hasLast = false;
+    this.vy = 0;
     this.trailPts = [];
   }
 
@@ -163,6 +192,16 @@ export class ActorVisual {
       dist = Math.hypot(pos.x - this.lastPos.x, pos.z - this.lastPos.z);
       if (dist > 1.2) dist = 0;
     }
+    // vertical motion -> landing squash when a height change (step, lift, ramp) ends
+    let landing = 0;
+    if (this.hasLast && dt > 0) {
+      const dyv = pos.y - this.lastY;
+      const inst = Math.abs(dyv) > 1.5 ? 0 : dyv / dt;
+      const prevVy = this.vy;
+      this.vy += (inst - this.vy) * (1 - Math.exp(-20 * dt));
+      if (Math.abs(prevVy) > 0.6 && Math.abs(this.vy) < 0.25) landing = Math.min(1, Math.abs(prevVy) / 3);
+    }
+    this.lastY = pos.y;
     this.lastPos.copy(pos);
     this.hasLast = true;
     const instSpeed = dt > 0 ? dist / dt : 0;
@@ -179,18 +218,42 @@ export class ActorVisual {
     const li = actor.lastInteraction;
     if (li && li.tick !== this.lastInteractionTick) {
       this.lastInteractionTick = li.tick;
-      if (li.kind !== 'none') this.gesture = 0.0001;
+      if (li.kind !== 'none') {
+        this.gesture = 0.0001;
+        this.gestureKind = gestureFor(li.kind);
+      }
     }
     if (this.gesture > 0) {
       this.gesture += dt / 0.45;
       if (this.gesture >= 1) this.gesture = 0;
     }
+    // head look: toward the explicit target, else toward the faced cell (only matters when facing != heading)
+    const facingYaw = Math.PI - (actor.facing * Math.PI) / 2;
+    let lookYaw = facingYaw - this.yaw;
+    let lookPitch = 0.12;
+    if (this.lookTarget) {
+      const dx = this.lookTarget.x - pos.x;
+      const dz = this.lookTarget.z - pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 0.3 && d < 8) {
+        lookYaw = Math.atan2(dx, dz) - this.yaw;
+        lookPitch = Math.atan2(1.6 - (this.lookTarget.y - pos.y), d) * 0.8;
+      }
+    } else if (this.gesture > 0 || actor.interactHeld) {
+      lookPitch = Math.atan2(1.0, REACH_M);
+    }
+    lookYaw = Math.atan2(Math.sin(lookYaw), Math.cos(lookYaw));
+    const moving = Math.min(1, this.speed / 2);
     this.character.update(dt, {
       speed: this.speed,
       distance: dist,
       carrying: carryingVisual,
       gesture: this.gesture,
+      gestureKind: this.gestureKind,
       holding: actor.interactHeld && !carryingVisual,
+      lookYaw: lookYaw * (1 - moving * 0.7),
+      lookPitch: lookPitch * (1 - moving),
+      landing,
     });
 
     if (!this.isPlayer) {

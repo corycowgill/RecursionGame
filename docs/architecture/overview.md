@@ -54,7 +54,8 @@ Nothing on the bottom row writes to the simulation.
 
 * 60 Hz fixed step, integer units (1 tile = 1000), axes match Three.js (x east, y up, z south).
 * Tick order: inputs → interactions (actors in order) → movement (actors in order) → entity update (ids in
-  order) → signal swap → win check → tick++. See contracts §6.
+  order) → carry (riders follow their deck/lift in the same tick) → signal swap → win check → tick++. See
+  contracts §6.
 * Actors: echoes first (by index), then the player. Earlier actors win same-tick contests. There is no
   actor-actor collision.
 * Crates follow a **carry** model (E to pick up or drop, cell-snapped). Ramps and elevators change height

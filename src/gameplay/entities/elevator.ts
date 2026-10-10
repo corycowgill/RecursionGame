@@ -1,5 +1,47 @@
-import { idiv, type PuzzleEntityBehaviour } from '../../engine/contracts';
+import { PHYS, UNITS_PER_TILE, fdiv, idiv, type EntityContext, type PuzzleEntityBehaviour } from '../../engine/contracts';
+import { buildSurfaceOverrides, cellSurfaceAtPoint } from '../../engine/physics/terrain';
 import { clampStep, entityCell } from './common';
+
+/**
+ * QA-3: limits one travel step (`step`, signed) of the platform at height `y` in shaft (col,row) so it never moves
+ * into an actor:
+ *  - rising: not above (feet + STEP_TOLERANCE) of any actor whose footprint overlaps the shaft but who is not riding;
+ *  - sinking: not below (surface - STEP_TOLERANCE) of any other cell a rider's footprint overhangs.
+ * Returns the allowed step (same sign as `step`, possibly 0). Pure function of the current state.
+ */
+function clampTravel(ctx: EntityContext<'elevator'>, col: number, row: number, y: number, step: number): number {
+  const riders = ctx.actorsOnCell(col, row, y);
+  if (step > 0) {
+    let maxY = y + step;
+    for (const a of ctx.actorsOverlappingCell(col, row, y)) {
+      if (riders.includes(a)) continue;
+      const limit = a.y + PHYS.STEP_TOLERANCE;
+      if (limit < maxY) maxY = limit;
+    }
+    return maxY > y ? maxY - y : 0;
+  }
+  let minY = y + step;
+  if (riders.length === 0) return step;
+  const rt = ctx.runtime;
+  const overrides = buildSurfaceOverrides(rt, ctx.state);
+  const H = PHYS.ACTOR_HALF;
+  for (const a of riders) {
+    const c0 = fdiv(a.x - H, UNITS_PER_TILE);
+    const c1 = fdiv(a.x + H - 1, UNITS_PER_TILE);
+    const r0 = fdiv(a.z - H, UNITS_PER_TILE);
+    const r1 = fdiv(a.z + H - 1, UNITS_PER_TILE);
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        if (c === col && r === row) continue;
+        const sy = cellSurfaceAtPoint(rt, overrides, c, r, a.x, a.z);
+        if (sy === null) continue;
+        const limit = sy - PHYS.STEP_TOLERANCE;
+        if (limit > minY) minY = limit;
+      }
+    }
+  }
+  return minY < y ? minY - y : 0;
+}
 
 /**
  * Elevator — a one-cell platform that provides a walk surface at state.y and travels between height levels
@@ -15,8 +57,13 @@ import { clampStep, entityCell } from './common';
  *  In 'cycle'/'ride' a wired input is a call button (each rising edge advances). config.returnDelayTicks sends an
  *  empty platform home to startIndex.
  *
- * Deterministic blocking: a departure is HELD (state.held) while any actor straddles the shaft edge (footprint
- * overlaps the cell but is not standing on the platform), so nobody is ever clipped by a moving platform.
+ * Deterministic blocking — a lift never moves into an actor's body:
+ *  - a departure is HELD (state.held) while any actor straddles the shaft edge (footprint overlaps the cell but is
+ *    not standing on the platform);
+ *  - during travel (QA-3) each step is clamped so the platform never rises more than STEP_TOLERANCE above the feet
+ *    of an actor straddling the shaft (someone who just stepped off, or is stepping on), and never sinks a rider more
+ *    than STEP_TOLERANCE below a neighbouring surface its footprint overhangs. When the clamp stops it, the lift
+ *    waits in place (state.held) and resumes as soon as the actor clears the edge or boards fully.
  * Speed: ceil(1000 / ticksPerLevel) units per tick (default 60 ticks per level). Riders are carried through the
  * surface override (and state.dy via carrierDelta). Output: at rest on the top level.
  * Events: elevatorStart / elevatorArrive.
@@ -122,7 +169,9 @@ export const elevatorBehaviour: PuzzleEntityBehaviour<'elevator'> = {
       if (s.moving) {
         const tpl = Math.max(1, cfg.ticksPerLevel ?? 60);
         const speed = idiv(1000 + tpl - 1, tpl);
-        s.dy = clampStep(targetY - s.y, speed);
+        const step = clampStep(targetY - s.y, speed);
+        s.dy = clampTravel(ctx, col, row, s.y, step);
+        s.held = s.dy === 0;
         s.y += s.dy;
         if (s.y === targetY) {
           s.moving = false;
