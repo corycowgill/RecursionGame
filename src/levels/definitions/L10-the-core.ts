@@ -21,19 +21,19 @@ import type { LevelDefinition } from '../../engine/contracts';
  *   r0   ##########################
  *   r1   #########...##############   crown (h2)            X exit (10,1)
  *   r2   ##########D####R........L#   D Crown Door (10,2)    R Core Receiver (15,2) <-beam- L Core Laser (24,2)
- *   r3   #######.......############   Core dais (h2, 7..13 x 3..5)
- *   r4   #######.......#######K####   K Reliquary socket (21,4)
- *   r5   #######.......#######.####   Reliquary (21,5)
- *   r6   #######===^===#######G####   ^ Core Lift (10,6) h0<->h2      G echo-only temporal gate (21,6)
- *   r7   #######..................#   Great Hall (h0, 7..24 x 7..15)
- *   r8   #######..................#
+ *   r3   #______.......############   Core dais (h2, 7..13 x 3..5) beside the Great Abyss (1..6)
+ *   r4   #______.......#######K####   K Reliquary socket (21,4)
+ *   r5   #______.......#######.####   Reliquary (21,5)
+ *   r6   #______===^===#######G####   ^ Core Lift (10,6) h0<->h2      G echo-only temporal gate (21,6)
+ *   r7   #______..................#   Great Hall (h0, 7..24 x 7..15)
+ *   r8   #______..................#
  *   r9   #______..p...............#   p Crown Plate (9,9)
  *   r10  #..____.......@...c......#   Relic Island (1..2, 10..12)   @ spawn (14,10)   c energy cell (18,10)
  *   r11  #bF____......O.....O.....#   b crate (1,11)   F Ferry (6,11) <-> (3,11)
  *   r12  #..____..................#
  *   r13  #______..................#
- *   r14  #######..................#
- *   r15  #######.w...............e#   w West Timer (8,15)   e East Timer (24,15)
+ *   r14  #______..................#
+ *   r15  #______.w...............e#   w West Timer (8,15)   e East Timer (24,15)
  *   r16  ##########################
  *
  * Minimum echoes is 3 in practice: at the finish both timers need a hand each (they are 6.7 s apart and lit for
@@ -57,19 +57,19 @@ export const level10TheCore: LevelDefinition = {
       '##########################',
       '#########...##############',
       '##########.####..........#',
-      '#######.......############',
-      '#######.......#######.####',
-      '#######.......#######.####',
-      '#######===_===#######.####',
-      '#######..................#',
-      '#######..................#',
+      '#______.......############',
+      '#______.......#######.####',
+      '#______.......#######.####',
+      '#______===_===#######.####',
+      '#______..................#',
+      '#______..................#',
       '#______..................#',
       '#..____..................#',
       '#..____......O.....O.....#',
       '#..____..................#',
       '#______..................#',
-      '#######..................#',
-      '#######..................#',
+      '#______..................#',
+      '#______..................#',
       '##########################',
     ],
     heights: [
@@ -217,11 +217,13 @@ export const level10TheCore: LevelDefinition = {
     { type: 'machinery', col: 16, row: 14, facing: 0, params: { variant: 'gears' } },
     { type: 'conduit', col: 20, row: 4, facing: 0, params: { to: 'laser-core', color: 'teal' } },
     { type: 'conduit', col: 14, row: 2, facing: 3, params: { to: 'lift-core', color: 'cyan' } },
-    { type: 'conduit', col: 6, row: 8, facing: 1, params: { to: 'ferry', color: 'cyan', span: 'abyss' } },
+    { type: 'conduit', col: 7, row: 16, facing: 0, params: { to: 'ferry', color: 'cyan', span: 'abyss' } },
     { type: 'conduit', col: 9, row: 15, facing: 0, params: { to: 'door-crown', color: 'gold' } },
     { type: 'conduit', col: 23, row: 15, facing: 0, params: { to: 'door-crown', color: 'gold' } },
     { type: 'abyssLight', col: 4, row: 9, params: { color: 'cyan' } },
     { type: 'abyssLight', col: 5, row: 13, params: { color: 'violet' } },
+    { type: 'abyssLight', col: 3, row: 5, params: { color: 'gold' } },
+    { type: 'ring', col: 3, row: 14, facing: 0, params: { scale: 2.0, clockwork: true } },
     { type: 'lamp', col: 24, row: 8, facing: 3 },
     { type: 'lamp', col: 7, row: 13, facing: 1 },
     { type: 'lamp', col: 16, row: 7, facing: 2 },

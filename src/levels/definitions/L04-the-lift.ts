@@ -91,7 +91,7 @@ export const level04TheLift: LevelDefinition = {
   exitId: 'exit',
   maxEchoes: 3,
   loopDurationTicks: 60 * 60,
-  parTimeSeconds: 14,
+  parTimeSeconds: 18,
   parEchoes: 2,
   hints: [
     { text: 'The lift climbs only while the Call Plate is held — and drops again when it is released.' },

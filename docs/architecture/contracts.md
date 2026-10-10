@@ -44,7 +44,7 @@ existing recording and solution, so treat those changes as versioned.
 
 ## 3. Actors and loops
 
-* `ActorId` = `'player'` | `` `echo:${loopId}` ``. `loopId` is stable and never reused. `echoIndex` (0-based,
+* `ActorId` = `'player'` | `` `echo:${loopId}` `` (nested-loop copies: `` `echo:${loopId}.${k}` ``, see §8b). `loopId` is stable and never reused. `echoIndex` (0-based,
   shown as "Echo 1…N") changes when a loop is deleted.
 * `SimState.actors` order is the **processing order**: echoes by `echoIndex` ascending, then the player last.
   Older recordings act first in every phase, so the live player is the one who adapts. When the same tick is
@@ -149,6 +149,30 @@ mismatch the engine:
 
 The echo then **keeps replaying its inputs**. The engine never teleports it or fabricates a result.
 
+## 8b. Nested loops (`LevelDefinition.recursion`, Level 8+)
+
+Additive, opt-in per level: `recursion?: { delayTicks: number; copies?: number /*1*/ }`. When set, every committed
+loop is replayed by its echo **and** by `copies` *recursive copies*. Copy k replays the very same `inputs`
+delayed by `k * delayTicks`: before that it stands idle on the spawn cell, after `offset + durationTicks` it is
+`finished` and idles in place like any echo. Copies are ordinary echo actors in every respect (physical, they press
+plates, carry, block lasers and are blocked by `allows:'player'` gates).
+
+* **Single source of truth:** `replayTracks(level, loops)` in `src/engine/simulation/recursion.ts` expands loops into
+  replay tracks. Both `createInitialState` (actor list) and `TemporalGame` (frames, expectations, timeline) use it.
+  Without `recursion` it yields exactly one track per loop, so existing levels, recordings and hashes are unchanged
+  (verified by the golden replays).
+* **Actor order** (= processing order): `loop0, loop0.copy1, …, loop1, loop1.copy1, …, player`. Older recordings still
+  act first; a copy acts right after the echo it repeats.
+* **Identity:** copy ids are `recursiveEchoActorId(loopId, k)` = `'echo:<loopId>.<k>'` (still starts with `echo:`;
+  never parse it). `ActorState.recursion = k` (absent on echoes and the player); `loopId` and `echoIndex` are those
+  of the loop it repeats.
+* **Divergence:** a copy is compared with the loop's recorded outcomes at its own local tick (`tick − offset`), so a
+  copy that meets a world changed by its own echo diverges visibly (and keeps replaying inputs).
+* **Timeline:** each copy gets its own `TimelineTrack` with `recursion = k` and `startTick = offset`; its `planned`
+  markers are already shifted by `startTick`.
+* **Echo budget:** copies are free. `echoesRemaining`, `maxEchoes` and `levelComplete.echoesUsed` count recordings
+  (loops), not bodies. UI echo counts must filter `track.recursion === undefined`.
+
 ## 9. Signals and wiring
 
 Each entity has one boolean output channel, keyed by its id. `LevelDefinition.wires: { from, to, invert? }[]`.
@@ -157,6 +181,12 @@ A consumer combines its inputs with `def.logic` (`'and'` by default, or `'or'`) 
 reads during tick t see the values written during t−1, so each hop adds 1 tick of latency, and evaluation is
 order-independent and safe with cycles. Unwired defaults: doors keep their `startsOpen` state, and exit
 portals are active.
+
+### Component additions made for level design
+
+* `TimedSwitchConfig.cooldownTicks?` (default 0): after a switch runs out it is locked for that many ticks
+  (`TimedSwitchState.cooldown?` counts down, present only when configured). Presses meanwhile fail with reason
+  `'cooldown'`. With `retrigger:false` this makes a switch's window a real timing resource (L05).
 
 ## 10. Events (`SimEvent`)
 
@@ -177,7 +207,7 @@ audio, VFX and UI.
 
 `id, order, name, subtitle?, story?[], grid { width, height, tiles[], heights?[] }, entities[], wires[],
 playerSpawn { col,row,facing? }, exitId, maxEchoes, loopDurationTicks, parTimeSeconds, parEchoes?, hints[],
-solution: InputScript[], camera?, decor?[], seed?, teaches?[]`
+solution: InputScript[], camera?, decor?[], seed?, recursion? (nested loops, §8b), teaches?[]`
 
 * **solution** is one `InputScript` per loop. Every script except the last is committed as an echo, in
   order. The last is the final player run and must reach the exit. Scripts are closed-loop (for example,

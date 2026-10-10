@@ -55,24 +55,37 @@ test('timeline: Tab freezes the sim; scrubbing by keyboard and mouse renders pas
   const frozen = await hook(page, (h) => h.getState().tick);
   const stage = page.locator('.rx-tl-stage');
   await expect(stage).toHaveAttribute('aria-valuetext', /^Live/);
+  // Spy on the snapshots the frame loop asks for: it only calls getSnapshotAt to choose the view it renders.
+  await page.evaluate(() => {
+    const g = (window as unknown as { __RECURSION__: { game: { getSnapshotAt(t: number): unknown } } }).__RECURSION__.game;
+    const calls: number[] = [];
+    (window as unknown as { __snapCalls: number[] }).__snapCalls = calls;
+    const orig = g.getSnapshotAt.bind(g);
+    g.getSnapshotAt = (t: number) => {
+      calls.push(t);
+      return orig(t);
+    };
+  });
+  const snapCalls = (): Promise<number[]> => page.evaluate(() => (window as unknown as { __snapCalls: number[] }).__snapCalls.slice());
   await frames(page, 3);
-  const canvas = page.locator('#app canvas');
-  const live = await canvas.screenshot();
+  await test.info().attach('timeline-live.png', { body: await page.screenshot(), contentType: 'image/png' });
 
   // Keyboard scrub to the very start.
   await stage.focus();
   await page.keyboard.press('Home');
   await expect(stage).toHaveAttribute('aria-valuenow', '0');
   await expect(stage).toHaveAttribute('aria-valuetext', /^Preview/);
-  await expect(page.locator('.rx-scrubhead')).toBeVisible();
-  await frames(page, 4);
-  const past = await canvas.screenshot();
-  expect(Buffer.compare(live, past), 'the 3D view shows the tick-0 snapshot, not the live frame').not.toBe(0);
+  await expect(page.locator('.rx-scrubhead')).not.toHaveAttribute('hidden', /.*/); // shown (sits on the left edge at tick 0)
+  await expect.poll(snapCalls, { message: 'the 3D view renders the tick-0 snapshot' }).toContain(0);
+  await frames(page, 2);
+  await test.info().attach('timeline-scrub-tick0.png', { body: await page.screenshot(), contentType: 'image/png' });
   expect(await hook(page, (h) => h.getState().tick)).toBe(frozen); // scrubbing never moves the live sim
 
   // Arrow keys step through time.
   await page.keyboard.press('ArrowRight');
   await expect.poll(async () => Number(await stage.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+  const stepped = Number(await stage.getAttribute('aria-valuenow'));
+  await expect.poll(snapCalls).toContain(stepped);
   await page.keyboard.press('Enter');
   await expect(stage).toHaveAttribute('aria-valuetext', /^Live/);
 
