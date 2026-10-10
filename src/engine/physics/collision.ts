@@ -22,8 +22,10 @@ import { buildSurfaceOverrides, cellSurfaceAtPoint, surfaceAt, type SurfaceOverr
  *    around the entity : full cell square. Vertical extent [y, y + height] must overlap the actor's.
  *  - Blockers already overlapping the actor before the move are ignored (lets actors escape if an elevator or
  *    door ever ends up overlapping them; never used to pass through walls since those are never overlapped).
- *    Exception: an already-overlapped terrain cell still blocks a move that raises its surface (sampled at the
- *    candidate centre) further above the step tolerance — e.g. sliding along the side of a ramp.
+ *    Exceptions for already-overlapped terrain cells: the actor's CENTRE may only cross into one under the normal
+ *    entry rule (no stepping off a ramp's side onto a far lower floor or a pit), and a move that raises the cell's
+ *    surface (sampled at the candidate centre) further above the step tolerance is blocked (no sliding into a
+ *    ramp's side wall).
  *  - Actors never collide with other actors (echoes and the player pass through each other). This keeps
  *    replays robust: an echo is never shoved off its recorded path by a body.
  */
@@ -146,9 +148,20 @@ export function moveAxis(world: CollisionWorld, actor: ActorState, axis: 'x' | '
       const bx1 = bx0 + UNITS_PER_TILE;
       const bz1 = bz0 + UNITS_PER_TILE;
       if (overlaps1(oMinX, oMaxX, bx0, bx1) && overlaps1(oMinZ, oMaxZ, bz0, bz1)) {
-        // Already overlapping (e.g. walking beside a ramp): only block a move that pushes the body deeper into
-        // terrain rising above the step tolerance, so actors cannot slide into a ramp's side wall (QA fuzz finding).
+        // Already overlapping (e.g. walking beside a ramp). QA fuzz findings:
         const sNew = cellSurfaceAtPoint(world.rt, world.overrides, col, row, cx, cz);
+        const centreEnters =
+          fdiv(cx, UNITS_PER_TILE) === col && fdiv(cz, UNITS_PER_TILE) === row && !(fdiv(ox, UNITS_PER_TILE) === col && fdiv(oz, UNITS_PER_TILE) === row);
+        if (centreEnters) {
+          // (a) the centre may only cross into the cell under the normal entry rule: no stepping off a ramp's side
+          //     onto a floor far below (or onto a pit), no climbing. Stop with the centre just short of the cell.
+          if (sNew !== null && sNew - y <= PHYS.STEP_TOLERANCE && y - sNew <= PHYS.STEP_TOLERANCE) continue;
+          if (axis === 'x') target = delta > 0 ? Math.min(target, bx0 - 1) : Math.max(target, bx1);
+          else target = delta > 0 ? Math.min(target, bz0 - 1) : Math.max(target, bz1);
+          continue;
+        }
+        // (b) otherwise only block a move that pushes the body deeper into terrain rising above the step tolerance,
+        //     so actors cannot slide into a ramp's side wall.
         if (sNew === null || sNew - y <= PHYS.STEP_TOLERANCE) continue;
         const sOld = cellSurfaceAtPoint(world.rt, world.overrides, col, row, ox, oz);
         if (sOld !== null && sNew <= sOld) continue;

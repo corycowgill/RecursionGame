@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import type { LevelDefinition } from '../../engine/contracts';
 import { LEVELS, TEST_LEVELS, validateLevel } from '../../levels';
 import { crateRoom, openRoom, terrainRoom } from '../harness/fixtures';
@@ -31,7 +31,16 @@ export function knownIssue(v: Violation): string | null {
 
 const targets: LevelDefinition[] = [...LEVELS, ...TEST_LEVELS, openRoom(3), crateRoom(3), terrainRoom(), componentGauntlet(3)];
 
+/** Known-issue hits across this run (printed at the end so reported bugs stay visible). */
+const knownTally = new Map<string, { count: number; where: string }>();
+
 describe('fuzz: random inputs, rewinds, deletes, restarts, save/load and scrubs', () => {
+  afterAll(() => {
+    if (knownTally.size === 0) return;
+    const lines = [...knownTally].map(([id, k]) => `  ${id}: ${k.count} tick(s), e.g. ${k.where}`);
+    process.stdout.write(`\n[fuzz] known issues reproduced (tallied, not failed):\n${lines.join('\n')}\n`);
+  });
+
   it('the QA component gauntlet is a structurally valid level', () => {
     const errors = validateLevel(componentGauntlet()).filter((i) => i.severity === 'error');
     expect(errors).toEqual([]);
@@ -42,6 +51,11 @@ describe('fuzz: random inputs, rewinds, deletes, restarts, save/load and scrubs'
       const seed = BASE_SEED + s;
       it(`${level.id} seed ${seed}: ${TICKS} ticks without exceptions or invariant violations`, { timeout: 120_000 }, () => {
         const r = runFuzz(level, { seed, ticks: TICKS, known: knownIssue });
+        for (const [id, k] of Object.entries(r.known)) {
+          const t = knownTally.get(id) ?? { count: 0, where: `${level.id} seed ${seed} t=${k.first.tick}: ${k.first.message}` };
+          t.count += k.count;
+          knownTally.set(id, t);
+        }
         expect(r.error, `exception (level ${level.id}, seed ${seed})`).toBeNull();
         expect(r.violations, `${level.id} seed ${seed}: ${summarizeViolations(r.violations)}`).toEqual([]);
         expect(r.ticks).toBe(TICKS);

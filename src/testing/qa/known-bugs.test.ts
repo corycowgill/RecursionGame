@@ -43,7 +43,7 @@ function violations(level: LevelDefinition, seq: InputSequenceBuilder): Violatio
   return out;
 }
 
-describe('fixed: QA-0 actors slid into the side of a ramp (engine collision)', () => {
+describe('fixed: QA-0 actors slid into / stepped off the side of a ramp (engine collision)', () => {
   // Walking east along row 3 with the footprint overlapping the ramp (4,2) that rises eastward: the
   // "already-overlapping cells never block" rule let the body slide up to 0.72 levels deep into the ramp side.
   it('walking along a rising ramp side stops at the step tolerance instead of clipping into it', () => {
@@ -56,6 +56,24 @@ describe('fixed: QA-0 actors slid into the side of a ramp (engine collision)', (
     const p = game.getState().actors[0]!;
     expect(p.z).toBeLessThan(3280); // the footprint really overlaps the ramp row
     expect(p.x).toBeLessThan(4400); // stopped where the ramp side rises past STEP_TOLERANCE
+  });
+
+  it('cannot step off the side of a ramp onto the floor far below (no ledge drops through the side)', () => {
+    const level = terrainRoom();
+    // Hug the south edge of the ramp row so the footprint already overlaps the lower row 3, climb the ramp, then
+    // turn south: the centre must not cross into row 3 (a 0.7-level drop) and the body must not end inside the ramp.
+    const climb = inputs().move(0, 1, 7).move(1, 0, 55);
+    const game = createGame(level);
+    for (const i of climb.build()) game.step(i);
+    const onRamp = game.getState().actors[0]!;
+    expect(onRamp.y).toBeGreaterThan(500);
+    expect(onRamp.z + 280).toBeGreaterThan(3000); // footprint overlaps row 3
+    const v = violations(level, inputs().move(0, 1, 7).move(1, 0, 55).move(0, 1, 20).wait(5));
+    expect(v, summarizeViolations(v)).toEqual([]);
+    for (const i of inputs().move(0, 1, 20).build()) game.step(i);
+    const after = game.getState().actors[0]!;
+    expect(Math.floor(after.z / 1000)).toBe(2); // the centre stayed on the ramp row
+    expect(after.y).toBe(onRamp.y);
   });
 
   it('can still walk up the ramp from its low edge and back down', () => {
@@ -103,7 +121,7 @@ describe('open bugs (it.fails until fixed)', () => {
     const level = room('qa3', ['#######', '#.._..#', '#.....#', '#######'], [
       { id: 'lift', kind: 'elevator', col: 3, row: 1, level: 0, config: { levels: [0, 1], mode: 'ride', rideDelayTicks: 20 } },
     ], { grid: { width: 7, height: 4, tiles: [], heights: ['0000000', '0000110', '0000000', '0000000'] } });
-    const v = violations(level, inputs().move(1, 0, 50).wait(18).move(-1, 0, 25).wait(10));
+    const v = violations(level, inputs().move(1, 0, 50).wait(8).move(-1, 0, 25).wait(10));
     expect(v.filter((x) => x.rule === 'ledge'), summarizeViolations(v)).toEqual([]);
   });
 });
