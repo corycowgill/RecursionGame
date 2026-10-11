@@ -9,8 +9,9 @@ cell through a door that is only open because a third pressed a switch eight sec
 - One deterministic 60 Hz simulation shared by the player and every echo (integer maths, seeded RNG, state hashes)
 - Paradoxes are real: if an echo's recorded action can no longer happen, it fails visibly and the timeline marks
   the divergence; nothing is faked to keep a recording "working"
-- A signature temporal timeline (track per echo, interaction markers, scrubbing, delete / hide loops) and
-  in-world badges showing which echo will use which object, and when
+- A signature temporal timeline (track per echo, interaction markers, scrubbing, delete / hide loops),
+  in-world badges showing which echo will use or step on which object, and when, and ghost paths of every echo's
+  route while you hold Q
 - Stylized sci-fi visuals in Three.js (PBR materials, procedural textures, bloom, colour grade), fully
   procedural audio, save/load and quality presets
 
@@ -28,13 +29,14 @@ Current status: [`docs/agent-progress/release-notes.md`](docs/agent-progress/rel
 | **R** | End the recording: it becomes an echo and the chamber rewinds (at the echo limit, R discards the take) |
 | **Shift + R** | Restart the chamber (removes all echoes) |
 | **Tab** | Expand the timeline: time freezes, the camera pulls back, scrub with mouse or ←/→ |
-| **Hold Q** | Temporal preview: watch your echoes play out the rest of the loop (the live game is untouched) |
+| **Hold Q** | Temporal preview: watch your echoes play out the rest of the loop, with each echo's future path drawn on the floor (the live game is untouched) |
 | **1 – 5** | Select an echo · **Delete** removes the selected echo |
 | **Esc** | Pause (settings, hints, level select) |
 | Mouse wheel | Camera zoom |
 
-Key bindings, volumes, quality, interface scale and accessibility options (reduced motion, a colour-blind-safe
-echo palette) are in **Settings**. Audio starts on the first click or key press.
+Key bindings, volumes, quality, camera sensitivity, interface scale and accessibility options (reduced motion,
+which also removes camera shake and shortens the intro fly-in; a colour-blind-safe echo palette for the UI) are in
+**Settings**. Audio starts on the first click or key press.
 
 ## Running
 
@@ -45,7 +47,8 @@ npm install
 npm run dev        # http://localhost:5173 — hot-reloading dev server
 ```
 
-URL options: `?quality=low|medium|high` forces a renderer preset (handy on weak GPUs and in tests).
+URL options: `?quality=low|medium|high|ultra` forces a renderer preset for the session (handy on weak GPUs and in
+tests); Settings then shows it and locks the quality selector. An unknown value is ignored.
 `graphics-preview.html` is a standalone renderer test bed (`?scene=level&id=3`, `?scene=showcase`).
 
 ## Building and deploying
@@ -74,7 +77,7 @@ server configuration. There is no backend: progress and settings are stored in t
 | `npm run bench` | Simulation tick-cost benchmark |
 
 Headless Chromium renders WebGL in software (SwiftShader, ~1–2 fps), so the e2e suite drives the deterministic
-simulation through the `window.__RECURSION__` debug hook instead of wall-clock timing and takes ~20 minutes.
+simulation through the `window.__RECURSION__` debug hook instead of wall-clock timing and takes ~26 minutes.
 Run it with `CI=1` (fresh preview server) and, when other servers may be running, a private port:
 `CI=1 E2E_PORT=4311 npm run test:e2e`.
 

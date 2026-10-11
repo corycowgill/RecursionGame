@@ -11,7 +11,8 @@ import type { GhostPath } from './forecast';
  * the future (static with reduced motion). Read-only: built from `extractGhostPaths` output.
  */
 
-const RIBBON_WIDTH = 0.22;
+// Wide enough to read from the overview camera the Q preview switches to.
+const RIBBON_WIDTH = 0.36;
 const FLOOR_LIFT = 0.07;
 
 const RibbonShader = {
