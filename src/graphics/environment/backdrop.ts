@@ -4,6 +4,7 @@ import type { MaterialLibrary } from '../materials/library';
 import { createCloudMaterial, createSkyMaterial } from '../shaders/fx';
 import { AnimatedParts, ClockworkGeometry, addClockworkRing } from './animatedParts';
 import { hazeMaterial, shaftMaterial } from './fxMaterials';
+import { DEFAULT_MOOD, type ChamberMood } from './moods';
 import { archFrameGeometry, archGateGeometry } from './shapes';
 
 /**
@@ -67,9 +68,12 @@ export function buildBackdrop(
   lib: MaterialLibrary,
   centre: THREE.Vector3,
   span: number,
-  opts: { shafts: boolean; seed?: number; detail?: 'full' | 'reduced' },
+  opts: { shafts: boolean; seed?: number; detail?: 'full' | 'reduced'; mood?: ChamberMood },
 ): Backdrop {
   const reduced = opts.detail === 'reduced';
+  // round 5: per-chamber mood (sky, cloud sea, haze, accents, windows, shafts). Same meshes and draw calls for every
+  // mood: only colours/uniforms differ, and accent materials are private copies of the same shader program.
+  const mood = opts.mood ?? DEFAULT_MOOD;
   const group = new THREE.Group();
   group.name = 'backdrop';
   const disposables: { dispose(): void }[] = [];
@@ -82,6 +86,14 @@ export function buildBackdrop(
 
   // Sky
   const skyMat = own(createSkyMaterial());
+  {
+    const u = skyMat.uniforms;
+    (u['uZenith']!.value as THREE.Color).set(mood.sky.zenith);
+    (u['uHorizon']!.value as THREE.Color).set(mood.sky.horizon);
+    (u['uBelow']!.value as THREE.Color).set(mood.sky.below);
+    (u['uWarm']!.value as THREE.Color).set(mood.sky.sun).multiplyScalar(mood.sky.sunStrength / 0.6);
+    (u['uWarmDir']!.value as THREE.Vector3).set(...mood.sky.sunDir).normalize();
+  }
   const sky = new THREE.Mesh(own(reduced ? new THREE.SphereGeometry(900, 32, 16) : new THREE.SphereGeometry(900, 48, 24)), skyMat);
   sky.renderOrder = -10;
   sky.frustumCulled = false;
@@ -90,7 +102,7 @@ export function buildBackdrop(
   updaters.push((t) => (skyMat.uniforms['uTime']!.value = t));
 
   // Cloud sea
-  const cloudMat = own(createCloudMaterial(0x0f3550, 0x5aa6cf));
+  const cloudMat = own(createCloudMaterial(mood.clouds.low, mood.clouds.lowHi));
   const clouds = new THREE.Mesh(own(new THREE.PlaneGeometry(1400, 1400)), cloudMat);
   clouds.rotation.x = -Math.PI / 2;
   clouds.position.set(centre.x, -55, centre.z);
@@ -98,7 +110,7 @@ export function buildBackdrop(
   group.add(clouds);
   updaters.push((t) => (cloudMat.uniforms['uTime']!.value = t));
   if (!reduced) {
-    const clouds2 = new THREE.Mesh(clouds.geometry, own(createCloudMaterial(0x16466a, 0x9fd6f0)));
+    const clouds2 = new THREE.Mesh(clouds.geometry, own(createCloudMaterial(mood.clouds.high, mood.clouds.highHi)));
     (clouds2.material as THREE.ShaderMaterial).uniforms['uOpacity']!.value = 0.45;
     clouds2.rotation.x = -Math.PI / 2;
     clouds2.position.set(centre.x, -32, centre.z);
@@ -110,7 +122,7 @@ export function buildBackdrop(
   // Towers (instanced): body + tier + spire + glowing crown ring
   const winTex = own(windowTexture());
   const towerMat = own(
-    new THREE.MeshStandardMaterial({ color: 0x1b2836, roughness: 0.7, metalness: 0.4, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0x1b2836, roughness: 0.7, metalness: 0.4, emissive: mood.windows, emissiveMap: winTex, emissiveIntensity: 0.9 }),
   );
   const towerTrim = own(new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.4, metalness: 0.9, emissive: 0x3a2008, emissiveIntensity: 0.6 }));
   const bodyGeo = own(new THREE.CylinderGeometry(0.42, 0.62, 1, 6, 1));
@@ -124,7 +136,7 @@ export function buildBackdrop(
   const FAR = reduced ? 30 : 70; // far horizon spires (needles only, very tall, fogged to silhouettes)
   const bodies = new THREE.InstancedMesh(bodyGeo, towerMat, N * 2 + FAR);
   const spires = new THREE.InstancedMesh(spireGeo, towerTrim, N + FAR);
-  const crowns = new THREE.InstancedMesh(crownGeo, lib.emissive(PALETTE.cyan, 2.0), N + 24);
+  const crowns = new THREE.InstancedMesh(crownGeo, mood === DEFAULT_MOOD ? lib.emissive(PALETTE.cyan, 2.0) : own(lib.emissiveUnique(mood.accent, 2.0)), N + 24);
   const o = new THREE.Object3D();
   let bi = 0;
   for (let i = 0; i < N; i++) {
@@ -194,7 +206,7 @@ export function buildBackdrop(
   const archGeo = own(archFrameGeometry(14, 34, 3));
   const arcadeMat = own(new THREE.MeshStandardMaterial({ color: 0x223040, roughness: 0.6, metalness: 0.5 }));
   const archGlowGeo = own(new THREE.BoxGeometry(0.35, 22, 0.35));
-  const archGlow = lib.emissive(PALETTE.cyan, 1.6);
+  const archGlow = mood === DEFAULT_MOOD ? lib.emissive(PALETTE.cyan, 1.6) : own(lib.emissiveUnique(mood.accent, 1.6));
   const NA = 7 + 9 + 8;
   const arches = new THREE.InstancedMesh(archGeo, arcadeMat, NA);
   const archLights = new THREE.InstancedMesh(archGlowGeo, archGlow, NA * 2);
@@ -281,19 +293,19 @@ export function buildBackdrop(
   const ringSpecs: { m: THREE.Matrix4; r: number; speed: number; teeth: number; glow: number; color?: number }[] = [
     { m: at(centre.x - 6, centre.y + 12, centre.z - span * 0.75 - 24, 0, 0.12), r: 22, speed: 0.03, teeth: 0.8, glow: 1.5 },
     // gyroscope partner crossing the first ring
-    { m: at(centre.x - 6, centre.y + 12, centre.z - span * 0.75 - 24, 0, 1.25), r: 18, speed: -0.04, teeth: 0.6, glow: 1.3, color: PALETTE.gold },
+    { m: at(centre.x - 6, centre.y + 12, centre.z - span * 0.75 - 24, 0, 1.25), r: 18, speed: -0.04, teeth: 0.6, glow: 1.3, color: mood.accent2 },
     { m: at(centre.x + span * 0.9 + 18, centre.y + 6, centre.z - span * 0.4 - 12, 0, -0.9), r: 13, speed: -0.05, teeth: 0.8, glow: 1.5 },
     { m: at(centre.x - span - 40, centre.y + 20, centre.z - span - 50, 0, 0.7), r: 36, speed: 0.018, teeth: 0.8, glow: 1.5 },
-    { m: at(centre.x - span - 40, centre.y + 20, centre.z - span - 50, 0.5, 0.7), r: 29, speed: -0.025, teeth: 0.6, glow: 1.2, color: PALETTE.violet },
+    { m: at(centre.x - span - 40, centre.y + 20, centre.z - span - 50, 0.5, 0.7), r: 29, speed: -0.025, teeth: 0.6, glow: 1.2, color: mood.accent3 },
     // the great gate ring on the skyline (concept exterior), half sunk into the cloud sea
     { m: at(centre.x + 40, centre.y - 10, centre.z - span * 1.6 - 190, 0, -0.15), r: 70, speed: 0.008, teeth: 0.7, glow: 1.4 },
-    { m: at(centre.x + 40, centre.y - 10, centre.z - span * 1.6 - 190, 0, -0.15), r: 52, speed: -0.012, teeth: 0.5, glow: 1.0, color: PALETTE.gold },
+    { m: at(centre.x + 40, centre.y - 10, centre.z - span * 1.6 - 190, 0, -0.15), r: 52, speed: -0.012, teeth: 0.5, glow: 1.0, color: mood.accent2 },
     // horizontal halos encircling the chamber below the floor
     { m: at(centre.x, -9, centre.z, -Math.PI / 2, 0), r: span * 0.62 + 4, speed: 0.02, teeth: 0.3, glow: 0.9 },
-    { m: at(centre.x, -30, centre.z, -Math.PI / 2, 0), r: span * 0.72 + 6, speed: -0.012, teeth: 0.3, glow: 0.8, color: PALETTE.gold },
+    { m: at(centre.x, -30, centre.z, -Math.PI / 2, 0), r: span * 0.72 + 6, speed: -0.012, teeth: 0.3, glow: 0.8, color: mood.accent2 },
   ];
   const RING_SUBSET = [0, 2, 5, 7];
-  for (const sp of reduced ? ringSpecs.filter((_, i) => RING_SUBSET.includes(i)) : ringSpecs) addClockworkRing(parts, clock, lib, sp.m, sp.r, { teeth: sp.teeth, speed: sp.speed, glow: sp.glow, ...(sp.color !== undefined ? { color: sp.color } : {}) });
+  for (const sp of reduced ? ringSpecs.filter((_, i) => RING_SUBSET.includes(i)) : ringSpecs) addClockworkRing(parts, clock, lib, sp.m, sp.r, { teeth: sp.teeth, speed: sp.speed, glow: sp.glow, color: sp.color ?? mood.accent });
   group.add(parts.build('backdrop-rings'));
   updaters.push((t) => parts.update(t));
 
@@ -302,9 +314,9 @@ export function buildBackdrop(
   hazeGeo.translate(0, 0.5, 0);
   const hazeMat = own(hazeMaterial());
   const hazeSpecs = [
-    { r: span * 1.6 + 70, y: -50, h: 70, c: 0x1f4a68, k: 1.0 },
-    { r: span * 1.6 + 150, y: -60, h: 110, c: 0x2a5f80, k: 1.0 },
-    { r: 300, y: -60, h: 150, c: 0x2f6a8c, k: 1.0 },
+    { r: span * 1.6 + 70, y: -50, h: 70, c: mood.haze[0], k: 1.0 },
+    { r: span * 1.6 + 150, y: -60, h: 110, c: mood.haze[1], k: 1.0 },
+    { r: 300, y: -60, h: 150, c: mood.haze[2], k: 1.0 },
   ];
   if (reduced) hazeSpecs.splice(0, hazeSpecs.length, hazeSpecs[1]!);
   const haze = new THREE.InstancedMesh(hazeGeo, hazeMat, hazeSpecs.length);
@@ -328,14 +340,14 @@ export function buildBackdrop(
     const shaftGeo = own(new THREE.CylinderGeometry(1, 3.2, 1, 24, 1, true));
     shaftGeo.translate(0, -0.5, 0);
     const specs = [
-      { c: PALETTE.warmLight, s: 1.0, p: new THREE.Vector3(centre.x - span * 0.25, centre.y + 40, centre.z - span * 0.2), tilt: 0.35, rot: 0.6, len: 60, w: 2.6 },
-      { c: PALETTE.warmLight, s: 0.75, p: new THREE.Vector3(centre.x + span * 0.2, centre.y + 40, centre.z - span * 0.45), tilt: 0.3, rot: 0.9, len: 58, w: 2.0 },
-      { c: 0x7cc8ff, s: 0.8, p: new THREE.Vector3(centre.x + span * 0.7, centre.y + 50, centre.z - span * 0.9), tilt: 0.25, rot: -0.4, len: 90, w: 4.0 },
-      { c: 0x7cc8ff, s: 0.65, p: new THREE.Vector3(centre.x - span * 0.9, centre.y + 50, centre.z - span * 0.6), tilt: 0.22, rot: 0.2, len: 90, w: 5.0 },
+      { c: mood.shafts.warm, s: 1.0, p: new THREE.Vector3(centre.x - span * 0.25, centre.y + 40, centre.z - span * 0.2), tilt: 0.35, rot: 0.6, len: 60, w: 2.6 },
+      { c: mood.shafts.warm, s: 0.75, p: new THREE.Vector3(centre.x + span * 0.2, centre.y + 40, centre.z - span * 0.45), tilt: 0.3, rot: 0.9, len: 58, w: 2.0 },
+      { c: mood.shafts.cool, s: 0.8, p: new THREE.Vector3(centre.x + span * 0.7, centre.y + 50, centre.z - span * 0.9), tilt: 0.25, rot: -0.4, len: 90, w: 4.0 },
+      { c: mood.shafts.cool, s: 0.65, p: new THREE.Vector3(centre.x - span * 0.9, centre.y + 50, centre.z - span * 0.6), tilt: 0.22, rot: 0.2, len: 90, w: 5.0 },
       // great shafts falling through the far arcade
-      { c: 0x9fd8ff, s: 0.7, p: new THREE.Vector3(centre.x - 30, centre.y + 90, centre.z - span * 1.3 - 90), tilt: 0.3, rot: 0.5, len: 160, w: 9.0 },
-      { c: PALETTE.warmLight, s: 0.55, p: new THREE.Vector3(centre.x + 55, centre.y + 90, centre.z - span * 1.3 - 110), tilt: 0.28, rot: 0.75, len: 170, w: 8.0 },
-      { c: 0x9fd8ff, s: 0.5, p: new THREE.Vector3(centre.x + 110, centre.y + 80, centre.z - span - 60), tilt: 0.25, rot: -0.3, len: 150, w: 7.0 },
+      { c: mood.shafts.coolFar ?? mood.shafts.cool, s: 0.7, p: new THREE.Vector3(centre.x - 30, centre.y + 90, centre.z - span * 1.3 - 90), tilt: 0.3, rot: 0.5, len: 160, w: 9.0 },
+      { c: mood.shafts.warm, s: 0.55, p: new THREE.Vector3(centre.x + 55, centre.y + 90, centre.z - span * 1.3 - 110), tilt: 0.28, rot: 0.75, len: 170, w: 8.0 },
+      { c: mood.shafts.coolFar ?? mood.shafts.cool, s: 0.5, p: new THREE.Vector3(centre.x + 110, centre.y + 80, centre.z - span - 60), tilt: 0.25, rot: -0.3, len: 150, w: 7.0 },
     ];
     const m = own(shaftMaterial(0.14));
     const shafts = new THREE.InstancedMesh(shaftGeo, m, specs.length);

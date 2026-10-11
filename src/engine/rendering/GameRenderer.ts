@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { unitsToWorld, type ActorView, type EntityView, type LevelDefinition, type SimEvent, type SimView, type Timeline } from '../contracts';
+import { unitsToWorld, type ActorState, type ActorView, type EntityView, type LevelDefinition, type SimEvent, type SimView, type Timeline } from '../contracts';
 import { ActorVisual } from '../../graphics/animation/actorVisual';
 import { selectLookTarget } from '../../graphics/animation/lookTarget';
 import { ContactShadows } from '../../graphics/effects/contactShadows';
@@ -10,6 +10,7 @@ import { createAmbientMotes } from '../../graphics/effects/particles';
 import { VfxSystem } from '../../graphics/effects/vfx';
 import { buildBackdrop, type Backdrop } from '../../graphics/environment/backdrop';
 import { buildKit, type BuiltKit } from '../../graphics/environment/kit';
+import { DEFAULT_MOOD, moodFor, type ChamberMood } from '../../graphics/environment/moods';
 import { WireNetwork } from '../../graphics/environment/wires';
 import { CARRIABLE_VISUAL_KINDS, createEntityVisual, MovingPlatformVisual, type EntityVisual } from '../../graphics/entities';
 import { MaterialLibrary } from '../../graphics/materials/library';
@@ -139,6 +140,8 @@ class GameRendererImpl implements GameRenderer {
   private readonly lookTmp = new THREE.Vector3();
   private readonly defById = new Map<string, LevelDefinition['entities'][number]>();
   private levelId = '';
+  /** Round 5: the chamber's lighting mood / accent / material variant (graphics-side table, from the level id). */
+  private mood: ChamberMood = DEFAULT_MOOD;
   private readonly key: THREE.DirectionalLight;
   private readonly rim: THREE.DirectionalLight;
   private readonly hemi: THREE.HemisphereLight;
@@ -171,6 +174,16 @@ class GameRendererImpl implements GameRenderer {
   private lastFrameAt = 0;
   private contextLost = false;
   private envTexture: THREE.Texture;
+  /**
+   * Shader warm-up (round 5): an off-scene echo visual and ghost-path layer kept alive so their programs stay in
+   * three's program cache; compiled against the chamber's lights on every level load (see `prewarm`).
+   */
+  private warmEcho: ActorVisual | null = null;
+  private warmKey = '';
+  private warmGhosts: GhostPathLayer | null = null;
+  private warmGeneration = 0;
+  /** Resolves when the last level load's shader warm-up finished (tests / perf tooling). */
+  private warmPromise: Promise<void> = Promise.resolve();
   private readonly onContextLost = (e: Event): void => {
     e.preventDefault(); // allow the browser to restore it
     this.contextLost = true;
@@ -288,6 +301,8 @@ class GameRendererImpl implements GameRenderer {
     this.clearLevel();
     this.level = level;
     this.levelId = level.id;
+    this.mood = moodFor(level);
+    this.applyMood();
     this.defById.clear();
     for (const d of level.entities) this.defById.set(d.id, d);
     const kit = buildKit(level, this.lib);
@@ -316,7 +331,7 @@ class GameRendererImpl implements GameRenderer {
 
     this.layoutLights();
     this.fitShadowCamera();
-    this.scene.fog = new THREE.FogExp2(0x24506e, 0.0085);
+    this.scene.fog = new THREE.FogExp2(this.mood.fog.color, this.mood.fog.density);
 
     const rigCentre = this.centre.clone().setY(b.maxLevel > 0 ? 0.8 : 0);
     if (level.camera?.focus) rigCentre.set((level.camera.focus.col + 0.5) * 2, rigCentre.y, (level.camera.focus.row + 0.5) * 2);
@@ -325,6 +340,76 @@ class GameRendererImpl implements GameRenderer {
     else this.rig.mode = 'follow';
     this.hasFocus = false;
     if (initialState) this.syncActors(initialState, initialState, 1, 0);
+    this.prewarm();
+  }
+
+  /**
+   * Precompiles every shader program the chamber can need before it is first drawn (round 5): the level itself
+   * (kit, entities, pooled VFX rings, intent badges, which already sit in the scene, visible or not) and, through
+   * off-scene stand-ins, what only appears later: echo holograms (body, x-ray, halo, number badge, trail) and the
+   * temporal-preview ghost paths. Programs depend on the chamber's light count, so this runs on every level load.
+   * Uses compileAsync (KHR_parallel_shader_compile where available), so on a real GPU it overlaps the intro fly-in
+   * instead of stalling the frame in which the first echo spawns.
+   */
+  private prewarm(): void {
+    if (this.disposed || this.contextLost) return;
+    const gen = ++this.warmGeneration;
+    const key = `${this.q.characterLod}|${this.q.trails}`;
+    if (!this.warmEcho || this.warmKey !== key) {
+      this.warmEcho?.dispose();
+      this.warmEcho = new ActorVisual(this.lib, warmupEcho(), { trail: this.q.trails, lod: this.q.characterLod, palette: this.echoPalette });
+      this.warmKey = key;
+    }
+    if (!this.warmGhosts) {
+      this.warmGhosts = new GhostPathLayer();
+      this.warmGhosts.setPaths([
+        {
+          actorId: 'echo:warm',
+          echoIndex: 0,
+          points: [
+            { tick: 0, x: 0, y: 0, z: 0 },
+            { tick: 60, x: 2000, y: 0, z: 0 },
+          ],
+          markers: [{ tick: 60, x: 2000, y: 0, z: 0, seconds: 1 }],
+        },
+      ]);
+    }
+    const stage = new THREE.Group();
+    stage.add(this.warmEcho.root, this.warmGhosts.group);
+    if (this.warmEcho.trailMesh) stage.add(this.warmEcho.trailMesh);
+    const camera = this.rig.camera;
+    // With KHR_parallel_shader_compile the driver compiles in the background (overlapping the intro); without it
+    // (e.g. SwiftShader, some mobile GPUs) compileAsync would only poll, so compile synchronously here: the cost
+    // moves into the level load instead of the frame in which the first echo appears.
+    const parallel = this.renderer.extensions.has('KHR_parallel_shader_compile');
+    const compile = (root: THREE.Object3D, target: THREE.Scene): Promise<unknown> => {
+      if (parallel) return this.renderer.compileAsync(root, camera, target);
+      const mats = this.renderer.compile(root, camera, target);
+      // the driver may defer the link until first use: query the program now (what the first draw would do)
+      for (const m of mats) {
+        const prog = (this.renderer.properties.get(m) as { currentProgram?: { getUniforms(): unknown; getAttributes(): unknown } }).currentProgram;
+        prog?.getUniforms();
+        prog?.getAttributes();
+      }
+      return Promise.resolve();
+    };
+    try {
+      this.warmPromise = Promise.all([compile(this.scene, this.scene), compile(stage, this.scene)])
+        .then(() => undefined)
+        .catch(() => undefined)
+        .finally(() => {
+          if (gen === this.warmGeneration) stage.clear();
+        });
+    } catch {
+      // compile is an optimisation only: never let it break a level load
+      stage.clear();
+      this.warmPromise = Promise.resolve();
+    }
+  }
+
+  /** Resolves once the current chamber's shader warm-up has finished (debug / perf tooling). */
+  whenWarm(): Promise<void> {
+    return this.warmPromise;
   }
 
   private buildBackdropLayer(): void {
@@ -332,7 +417,7 @@ class GameRendererImpl implements GameRenderer {
       this.backdrop.group.removeFromParent();
       this.backdrop.dispose();
     }
-    this.backdrop = buildBackdrop(this.lib, this.centre, this.span, { shafts: this.q.shafts, seed: hashString(this.levelId), detail: this.q.backdrop });
+    this.backdrop = buildBackdrop(this.lib, this.centre, this.span, { shafts: this.q.shafts, seed: hashString(this.levelId), detail: this.q.backdrop, mood: this.mood });
     this.levelRoot.add(this.backdrop.group);
   }
 
@@ -401,13 +486,49 @@ class GameRendererImpl implements GameRenderer {
       if (chosen.length >= Math.max(0, budget - entityLights)) break;
       if (chosen.every((c) => c.position.distanceTo(l.position) > 3.5)) chosen.push(l);
     }
+    const pr = this.mood.practical;
+    const tint = new THREE.Color(pr.tint);
     for (const l of chosen) {
-      const pl = new THREE.PointLight(l.color, l.intensity, l.distance, 1.7);
+      // warm practicals (sconces, niches, lamp posts) take the chamber mood's lamp tint; coloured decor lights keep theirs
+      const practical = l.color === PALETTE.warmLamp || l.color === PALETTE.gold;
+      const pl = new THREE.PointLight(practical ? new THREE.Color(l.color).lerp(tint, pr.mix) : l.color, l.intensity * (practical ? pr.scale : 1), l.distance, 1.7);
       pl.position.copy(l.position);
       this.levelRoot.add(pl);
       this.pointLights.push(pl);
     }
     for (const v of this.entityVisuals.values()) if (v.light) v.light.visible = budget > 0;
+  }
+
+  /**
+   * Applies the chamber mood (round 5): key / rim / fill, exposure, environment strength, background, display grade and
+   * the shared material variant. Fog and the backdrop read `this.mood` when they are (re)built. Only light colours,
+   * intensities and uniforms change, so no program recompiles (light counts stay the same).
+   */
+  private applyMood(): void {
+    const m = this.mood;
+    this.key.color.set(m.key.color);
+    this.key.intensity = m.key.intensity;
+    this.rim.color.set(m.rim.color);
+    this.rim.intensity = m.rim.intensity;
+    this.hemi.color.set(m.hemi.sky);
+    this.hemi.groundColor.set(m.hemi.ground);
+    this.hemi.intensity = m.hemi.intensity;
+    this.renderer.toneMappingExposure = m.exposure;
+    this.scene.environmentIntensity = m.env;
+    (this.scene.background as THREE.Color).set(m.background);
+    const u = this.post.grade.uniforms;
+    (u['uWarm']!.value as THREE.Color).setRGB(...m.grade.warm, THREE.LinearSRGBColorSpace);
+    (u['uCool']!.value as THREE.Color).setRGB(...m.grade.cool, THREE.LinearSRGBColorSpace);
+    u['uSplit']!.value = m.grade.split;
+    u['uSaturation']!.value = m.grade.saturation;
+    u['uContrast']!.value = m.grade.contrast;
+    u['uVignette']!.value = m.grade.vignette;
+    this.lib.applyMood(m.material, { wear: this.q.materialWear });
+  }
+
+  /** The active chamber mood (debug / tests / preview tooling). */
+  getMood(): ChamberMood {
+    return this.mood;
   }
 
   private fitShadowCamera(): void {
@@ -611,6 +732,7 @@ class GameRendererImpl implements GameRenderer {
     this.quality = level;
     this.q = QUALITY_PRESETS[level];
     this.applyQuality();
+    this.lib.applyMood(this.mood.material, { wear: this.q.materialWear });
     // a new preset starts at full scale with its own floor
     this.dynres = this.makeResolutionController();
     this.renderScale = 1;
@@ -652,6 +774,8 @@ class GameRendererImpl implements GameRenderer {
       if (Array.isArray(m)) m.forEach((x) => (x.needsUpdate = true));
       else if (m) m.needsUpdate = true;
     });
+    // shadow / LOD settings changed the programs: warm the new ones up front
+    if (this.level) this.prewarm();
   }
 
   getQuality(): QualityLevel {
@@ -766,6 +890,10 @@ class GameRendererImpl implements GameRenderer {
     this.domElement.removeEventListener('webglcontextlost', this.onContextLost);
     this.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);
     this.clearLevel();
+    this.warmEcho?.dispose();
+    this.warmEcho = null;
+    this.warmGhosts?.dispose();
+    this.warmGhosts = null;
     this.contactShadows?.dispose();
     this.contactShadows = null;
     this.vfx.dispose();
@@ -778,6 +906,33 @@ class GameRendererImpl implements GameRenderer {
     this.renderer.dispose();
     this.domElement.remove();
   }
+}
+
+/** Idle stand-in echo for the shader warm-up (never added to the scene, never simulated). */
+function warmupEcho(): ActorState {
+  return {
+    id: 'echo:warm' as ActorState['id'],
+    kind: 'echo',
+    echoIndex: 0,
+    loopId: 0,
+    x: 0,
+    y: 0,
+    z: 0,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    facing: 2,
+    heading: 4,
+    moving: false,
+    carrying: null,
+    strideUnits: 0,
+    foot: 0,
+    finished: false,
+    divergedAtTick: null,
+    divergenceCount: 0,
+    lastInteraction: null,
+    interactHeld: false,
+  };
 }
 
 function easeOut(x: number): number {

@@ -17,7 +17,8 @@
     "test:fuzz": "FUZZ_TICKS=${FUZZ_TICKS:-30000} FUZZ_SEEDS=${FUZZ_SEEDS:-4} vitest run src/testing/qa/fuzz.test.ts",
     "bench": "vitest run --config src/testing/benchmarks/vitest.bench.config.ts",
     "test:e2e:update-snapshots": "playwright test tests/e2e/visual.spec.ts --update-snapshots",
-    "test:e2e:perf": "playwright test tests/e2e/perf.spec.ts"
+    "test:e2e:perf": "playwright test tests/e2e/perf.spec.ts",
+    "solve": "node src/testing/solver/run.mjs"
   },
   "engines": {
     "node": ">=20"

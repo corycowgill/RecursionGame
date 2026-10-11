@@ -19,6 +19,8 @@ const TRAIL_POINTS = 36;
 const TRAIL_SAMPLE = 0.045;
 /** Interact probe distance (metres, sim PHYS.REACH) — where the faced interactable sits. */
 const REACH_M = unitsToWorld(PHYS.REACH);
+/** Eye height above the feet (metres, scaled character). */
+const EYE_HEIGHT = 1.6 * CHARACTER_SCALE;
 
 function gestureFor(kind: InteractionKind): GestureKind {
   if (kind === 'pickup' || kind === 'extract') return 'lift';
@@ -265,7 +267,8 @@ export class ActorVisual {
       const d = Math.hypot(dx, dz);
       if (d > 0.3 && d < 8) {
         lookYaw = Math.atan2(dx, dz) - this.yaw;
-        lookPitch = Math.atan2(1.6 - (this.lookTarget.y - pos.y), d) * 0.8;
+        // eye height of the scaled character (1.6 m model eyes x CHARACTER_SCALE)
+        lookPitch = Math.atan2(EYE_HEIGHT - (this.lookTarget.y - pos.y), d) * 0.8;
       }
     } else if (this.gesture > 0 || actor.interactHeld) {
       lookPitch = Math.atan2(1.0, REACH_M);

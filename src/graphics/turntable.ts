@@ -18,6 +18,8 @@ import { PALETTE, echoTint, playerTint, type EchoPaletteName } from './materials
  *  ?spin=1                      rotate continuously (turntable) instead of holding the angle
  *  ?look=camera|forward         head looks at the camera (default) or straight ahead
  *  ?palette=highContrast        echo palette (Settings → Echo colours)
+ *  ?focus=body|head             framing: full body (default) or a head-and-shoulders close-up (face / hair review)
+ *  ?dist=<m>                    camera distance override
  *  ?quality=…  ?t=<frames>      deterministic screenshot mode: render <frames> fixed 1/60 s frames, then
  *                               window.__PREVIEW__.ready = true (Playwright waits on it)
  *
@@ -29,6 +31,9 @@ export interface TurntableOptions {
   spin: boolean;
   lookAtCamera: boolean;
   palette: EchoPaletteName;
+  focus: 'body' | 'head';
+  /** Camera distance override (metres), null = framing default. */
+  distance: number | null;
   quality: QualityLevel;
   /** Fixed-step frame count for screenshots (null = live). */
   frames: number | null;
@@ -43,6 +48,8 @@ export function turntableOptions(params: URLSearchParams): TurntableOptions {
     spin: params.get('spin') === '1',
     lookAtCamera: params.get('look') !== 'forward',
     palette: params.get('palette') === 'highContrast' ? 'highContrast' : 'default',
+    focus: params.get('focus') === 'head' ? 'head' : 'body',
+    distance: params.has('dist') && Number(params.get('dist')) > 0 ? Number(params.get('dist')) : null,
     quality: q && QUALITY_PRESETS[q] ? q : 'high',
     frames: params.has('t') ? Math.max(1, Number(params.get('t')) || 1) : null,
   };
@@ -102,7 +109,10 @@ export function startTurntable(root: HTMLElement, opts: TurntableOptions, previe
   scene.environmentIntensity = 0.65;
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 200);
-  const target = new THREE.Vector3(0, 0.98 * CHARACTER_SCALE, 0);
+  const headY = 1.62 * CHARACTER_SCALE;
+  const target = new THREE.Vector3(0, opts.focus === 'head' ? headY - 0.04 : 0.98 * CHARACTER_SCALE, 0);
+  const camDist = opts.distance ?? (opts.focus === 'head' ? 1.35 : 4.9);
+  const camHeight = opts.focus === 'head' ? headY + 0.02 : 1.55;
 
   // studio lighting in the game's language: warm key from the front-left, cool rim behind, warm/cool hemisphere
   const hemi = new THREE.HemisphereLight(0x8ab4d8, 0x4a3420, 0.6);
@@ -113,7 +123,7 @@ export function startTurntable(root: HTMLElement, opts: TurntableOptions, previe
   key.shadow.bias = -0.0005;
   key.shadow.normalBias = 0.02;
   Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 20 });
-  const rim = new THREE.DirectionalLight(0x5fb6ff, 2.2);
+  const rim = new THREE.DirectionalLight(0x5fb6ff, 1.9);
   rim.position.set(-4, 4, -5);
   const fill = new THREE.DirectionalLight(0xbfd8ff, 0.6);
   fill.position.set(-5, 2, 4);
@@ -171,7 +181,7 @@ export function startTurntable(root: HTMLElement, opts: TurntableOptions, previe
   const frame = (dt: number): void => {
     time += dt;
     const angle = opts.spin ? opts.angleDeg + time * 30 : opts.angleDeg;
-    camera.position.copy(turntableCamera(angle));
+    camera.position.copy(turntableCamera(angle, camDist, camHeight));
     camera.lookAt(target);
     visual.setLookTarget(opts.lookAtCamera ? camera.position : null);
     visual.update(dt, actor, pos, false);

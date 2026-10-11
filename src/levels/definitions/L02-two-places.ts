@@ -8,12 +8,17 @@ import type { LevelDefinition } from '../../engine/contracts';
  * reachable THROUGH door A. One echo can hold plate A, but somebody else must already be standing on plate B
  * when you reach door B. Two echoes, acting at the same time.
  *
+ * Door B needs BOTH plates (round 5, puzzle analyst): the solver found a 1-echo route where you stand in the
+ * Atrium doorway (a door never closes on a body) while your only echo walks off plate A, through the door you
+ * are holding, out to plate B. Wiring plate A into door B makes the minimum a plain body count: whenever door B
+ * opens, two bodies stand on two plates and a third is about to walk through.
+ *
  *   col: 0         1
  *        01234567890123456
  *   r0   #################
  *   r1   #######...#######   sanctum
  *   r2   #######.X.#######   X exit (8,2)
- *   r3   ########.########   B sanctum door (8,3)  <- plate B
+ *   r3   ########.########   B sanctum door (8,3)  <- plate A AND plate B
  *   r4   #__=.........=__#   atrium
  *   r5   #__=.O.....O...b#   b plate B (15,5) at the end of the east bridge
  *   r6   #__=.........=__#
@@ -66,6 +71,7 @@ export const level02TwoPlaces: LevelDefinition = {
   wires: [
     { from: 'plate-a', to: 'door-a' },
     { from: 'plate-b', to: 'door-b' },
+    { from: 'plate-a', to: 'door-b' },
   ],
   playerSpawn: { col: 8, row: 10, facing: 0 },
   exitId: 'exit',
@@ -120,6 +126,7 @@ export const level02TwoPlaces: LevelDefinition = {
     { type: 'archway', col: 8, row: 3, facing: 0 },
     { type: 'conduit', col: 2, row: 9, facing: 1, params: { to: 'door-a', color: 'teal' } },
     { type: 'conduit', col: 14, row: 5, facing: 3, params: { to: 'door-b', color: 'teal' } },
+    { type: 'conduit', col: 7, row: 4, facing: 0, params: { to: 'door-b', from: 'plate-a', color: 'teal' } },
     { type: 'machinery', col: 1, row: 4, facing: 1, params: { variant: 'gears' } },
     { type: 'machinery', col: 15, row: 11, facing: 3, params: { variant: 'pistons' } },
     { type: 'lamp', col: 4, row: 4, facing: 1 },

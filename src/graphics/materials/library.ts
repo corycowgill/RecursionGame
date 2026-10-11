@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { MaterialMood } from '../environment/moods';
 import { PALETTE } from './palette';
 import {
   bannerTexture,
@@ -13,6 +14,7 @@ import {
   wallPanelTextures,
   type PBRSet,
 } from './textures';
+import { applyWear, createWearUniforms, type WearUniforms } from './wear';
 
 /**
  * MaterialLibrary — the shared PBR material set for one renderer. Everything here is created once and reused
@@ -44,6 +46,11 @@ export class MaterialLibrary {
   readonly banner: THREE.MeshStandardMaterial;
   readonly sprite: THREE.Texture;
   readonly spriteHard: THREE.Texture;
+
+  /** Shared wear-mask uniforms (round 5, see wear.ts); written by applyMood. */
+  readonly wear: WearUniforms = createWearUniforms();
+  private readonly baseColors = new Map<THREE.MeshStandardMaterial, THREE.Color>();
+  private readonly baseRough = new Map<THREE.MeshStandardMaterial, number>();
 
   private readonly sets: PBRSet[] = [];
   private readonly emissives = new Map<string, THREE.MeshStandardMaterial>();
@@ -178,8 +185,46 @@ export class MaterialLibrary {
     this.banner = this.own(
       new THREE.MeshStandardMaterial({ map: bannerMap, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.82, metalness: 0.05, envMapIntensity: 0.6 }),
     );
+    // round 5: chamber material variants. Wear hooks are installed once; applyMood only writes colours/uniforms.
+    for (const m of [this.floorTile, this.floorGrate, this.floorEmblem, this.floorPlate, this.floorPlain]) applyWear(m, 'floor', this.wear);
+    for (const m of [this.wallPanel, this.ivory, this.gunmetal, this.gunmetalDark]) applyWear(m, 'wall', this.wear);
+    for (const m of [this.brass, this.brassPolished]) applyWear(m, 'metal', this.wear);
+    for (const m of [this.floorTile, this.floorGrate, this.floorEmblem, this.floorPlate, this.floorPlain, this.wallPanel, this.ivory, this.gunmetal, this.brass, this.brassPolished]) {
+      this.baseColors.set(m, m.color.clone());
+      this.baseRough.set(m, m.roughness);
+    }
     this.sprite = radialSprite(128, 0.18);
     this.spriteHard = radialSprite(64, 0.55);
+  }
+
+  /**
+   * Per-chamber material variant (round 5, `ChamberMood.material`): tints brass / gunmetal / panels / floors, sets the
+   * brass polish, and drives the shared wear masks (patina, grime, chrome). Only uniform values change, so no shader
+   * recompiles and no extra draw calls. `wear: false` (low / mobile presets) keeps the tints but skips the noise.
+   * The library is shared by every level, so the renderer calls this on every level load.
+   */
+  applyMood(m: MaterialMood, opts: { wear?: boolean } = {}): void {
+    const tint = (mat: THREE.MeshStandardMaterial, hex: number) => mat.color.copy(this.baseColors.get(mat)!).multiply(new THREE.Color(hex));
+    for (const f of [this.floorTile, this.floorGrate, this.floorEmblem, this.floorPlate, this.floorPlain]) tint(f, m.floorTint);
+    tint(this.wallPanel, m.panelTint);
+    tint(this.ivory, m.panelTint);
+    this.gunmetal.color.set(m.gunmetalTint);
+    tint(this.brass, m.brassTint);
+    tint(this.brassPolished, m.brassTint);
+    this.brass.roughness = this.baseRough.get(this.brass)! * m.brassRough;
+    this.brassPolished.roughness = Math.min(1, this.baseRough.get(this.brassPolished)! * m.brassRough);
+    const w = this.wear;
+    w.uPatina.value = m.patina;
+    w.uPatinaColor.value.set(m.patinaColor);
+    w.uGrime.value = m.grime;
+    w.uChrome.value = m.chrome;
+    // chrome is a colour/roughness shift, not a noise mask: it stays on without wear detail
+    w.uWearOn.value = (opts.wear ?? true) && m.patina + m.grime + m.chrome > 0 ? 1 : 0;
+    if (!w.uWearOn.value && m.chrome > 0) {
+      // cheap path: approximate the chrome shift with the base colour only
+      this.brass.color.lerp(new THREE.Color(0xd8dde4), m.chrome * 0.6);
+      this.brassPolished.color.lerp(new THREE.Color(0xd8dde4), m.chrome * 0.6);
+    }
   }
 
   private track(set: PBRSet): PBRSet {

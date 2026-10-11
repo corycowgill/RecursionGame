@@ -32,6 +32,8 @@ export interface QualitySettings {
   backdrop: 'full' | 'reduced';
   /** Character mesh level of detail (0 = full, 1 = ~half the triangles, no clearcoat). */
   characterLod: 0 | 1;
+  /** Round 5: per-chamber wear masks (patina / grime noise in the kit shaders). Off on low / mobile (fill rate). */
+  materialWear: boolean;
   /**
    * Procedural texture resolution multiplier. Fixed when the renderer is created (textures are generated once per
    * renderer), so it applies to the initial / auto-selected preset only.
@@ -61,6 +63,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     trails: false,
     backdrop: 'full',
     characterLod: 0,
+    materialWear: false,
     textureScale: 1,
     envMapSize: 256,
     minRenderScale: 0.6,
@@ -83,6 +86,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     trails: false,
     backdrop: 'reduced',
     characterLod: 1,
+    materialWear: false,
     textureScale: 0.5,
     envMapSize: 128,
     minRenderScale: 0.5,
@@ -104,6 +108,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     trails: true,
     backdrop: 'full',
     characterLod: 0,
+    materialWear: true,
     textureScale: 1,
     envMapSize: 256,
     minRenderScale: 0.6,
@@ -125,6 +130,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualitySettings> = {
     trails: true,
     backdrop: 'full',
     characterLod: 0,
+    materialWear: true,
     textureScale: 1,
     envMapSize: 256,
     minRenderScale: 0.6,

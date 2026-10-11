@@ -75,9 +75,16 @@ const P = {
   orange: { color: 0xff8a2a, rough: 0.42, metal: 0.1, emit: 0.35, coat: 0.3 },
   cyan: { color: 0x3bb8ff, rough: 0.25, metal: 0, emit: 2.2, coat: 0 },
   skin: { color: 0xe9b596, rough: 0.55, metal: 0, emit: 0, coat: 0 },
-  lip: { color: 0xb8685c, rough: 0.45, metal: 0, emit: 0, coat: 0.2 },
-  hair: { color: 0x5b3321, rough: 0.46, metal: 0.05, emit: 0, coat: 0.3 },
-  eye: { color: 0x2a1a14, rough: 0.15, metal: 0, emit: 0, coat: 1 },
+  lip: { color: 0xc07468, rough: 0.45, metal: 0, emit: 0, coat: 0.2 },
+  skinShade: { color: 0xd99c7e, rough: 0.55, metal: 0, emit: 0, coat: 0 },
+  // round 5: softer sheen (the clearcoat used to catch the rim light as a hard blue blob on the crown)
+  hair: { color: 0x5b3321, rough: 0.66, metal: 0, emit: 0, coat: 0.06 },
+  hairHi: { color: 0x7c4a2c, rough: 0.62, metal: 0, emit: 0, coat: 0.06 },
+  brow: { color: 0x3a2014, rough: 0.6, metal: 0, emit: 0, coat: 0 },
+  lash: { color: 0x1c120e, rough: 0.5, metal: 0, emit: 0, coat: 0.2 },
+  eye: { color: 0x6a3c1e, rough: 0.15, metal: 0, emit: 0, coat: 1 },
+  pupil: { color: 0x120a08, rough: 0.1, metal: 0, emit: 0, coat: 1 },
+  catchlight: { color: 0xffffff, rough: 0.1, metal: 0, emit: 0.7, coat: 0 },
   sclera: { color: 0xf2efe9, rough: 0.2, metal: 0, emit: 0, coat: 1 },
   sole: { color: 0xf6f5f1, rough: 0.6, metal: 0, emit: 0, coat: 0.1 },
   tread: { color: 0x2a2b30, rough: 0.9, metal: 0, emit: 0, coat: 0 },
@@ -540,12 +547,19 @@ function buildModel(): Record<BoneName, THREE.BufferGeometry> {
       cz: (y) => 0.016 - 0.006 * (y / 0.13),
     }),
   );
-  b.add('head', sphere(0.008, 8, 6), P.skin, T(0, 0.064, 0.084, -0.3, 0, 0, 0.8, 1.1, 0.7));
-  b.add('head', rbox(0.024, 0.005, 0.006, 0.0024), P.lip, T(0, 0.036, 0.079));
+  // round 5 face polish: a slimmer nose ridge, a softer mouth, eyes with a brown iris, pupil, catchlight and an upper
+  // lash line (they used to read as two black beads), heavier brows. All merged into the head mesh (no draw calls).
+  b.add('head', sphere(0.0075, 8, 6), P.skinShade, T(0, 0.066, 0.083, -0.35, 0, 0, 0.62, 1.35, 0.62));
+  b.add('head', rbox(0.026, 0.0042, 0.006, 0.002), P.lip, T(0, 0.037, 0.0785));
+  b.add('head', rbox(0.016, 0.003, 0.005, 0.0014), P.skinShade, T(0, 0.031, 0.077));
   for (const s of [-1, 1]) {
-    b.add('head', sphere(0.017, 12, 8), P.sclera, T(s * 0.032, 0.088, 0.071, 0, 0, s * -0.12, 1.25, 0.82, 0.5));
-    b.add('head', sphere(0.0105, 10, 8), P.eye, T(s * 0.031, 0.087, 0.078, 0, 0, 0, 0.95, 1.15, 0.5));
-    b.add('head', new THREE.CapsuleGeometry(0.0045, 0.024, 2, 6), P.hair, T(s * 0.034, 0.107, 0.08, 0, 0, s * (Math.PI / 2 - 0.18)));
+    b.add('head', sphere(0.0165, 12, 8), P.sclera, T(s * 0.032, 0.088, 0.071, 0, 0, s * -0.12, 1.22, 0.8, 0.45));
+    b.add('head', sphere(0.0098, 12, 8), P.eye, T(s * 0.0305, 0.0875, 0.0772, 0, 0, 0, 0.92, 1.1, 0.42));
+    b.add('head', sphere(0.0052, 8, 6), P.pupil, T(s * 0.0303, 0.0875, 0.0806, 0, 0, 0, 0.9, 1.1, 0.4));
+    b.add('head', sphere(0.0021, 6, 4), P.catchlight, T(s * 0.0303 + 0.0035, 0.0915, 0.0822));
+    // upper lid / lash line hugging the top of the eye, flicked out at the outer corner
+    b.add('head', new THREE.TorusGeometry(0.0175, 0.0024, 4, 12, 2.3), P.lash, T(s * 0.032, 0.0885, 0.0745, 0, 0, Math.PI / 2 - 1.15 + s * -0.12, 1.2, 0.8, 0.6));
+    b.add('head', new THREE.CapsuleGeometry(0.0048, 0.026, 2, 6), P.brow, T(s * 0.034, 0.1075, 0.0795, 0, 0, s * (Math.PI / 2 - 0.2)));
     b.add('head', sphere(0.02, 8, 8), P.skin, T(s * 0.084, 0.088, -0.005, 0, 0, 0, 0.45, 1, 0.75));
   }
   // comm earpiece (left ear)
@@ -556,22 +570,24 @@ function buildModel(): Record<BoneName, THREE.BufferGeometry> {
   b.add('head', sphere(0.111, 30, 18, 0, Math.PI * 0.68), P.hair, T(0, 0.122, -0.012, -0.8, 0, 0, 0.93, 1.0, 1.02));
   const bangs: [number, number, number, number][] = [
     // phi around the hairline, length, sideways sweep, width
-    [-0.62, 0.07, 0.75, 1.0],
-    [-0.28, 0.075, 0.6, 1.15],
-    [0.06, 0.07, 0.5, 1.2],
-    [0.38, 0.06, 0.4, 1.1],
-    [0.7, 0.055, 0.25, 0.9],
+    [-0.7, 0.066, 0.75, 1.0],
+    [-0.46, 0.074, 0.66, 1.15],
+    [-0.22, 0.072, 0.56, 1.2],
+    [0.04, 0.066, 0.5, 1.2],
+    [0.28, 0.06, 0.42, 1.1],
+    [0.52, 0.054, 0.32, 1.0],
+    [0.74, 0.05, 0.22, 0.9],
   ];
-  for (const [phi, len, sweep, wd] of bangs) {
-    // flat locks hanging from the hairline, following the forehead, tips swept to one side
+  bangs.forEach(([phi, len, sweep, wd], i) => {
+    // flat locks hanging from the hairline, following the forehead, tips swept to one side (two-tone for depth)
     const r = 0.1;
     b.add(
       'head',
-      cone(0.028, len, 6),
-      P.hair,
-      T(Math.sin(phi) * r * 0.9, 0.163 - len * 0.5, Math.cos(phi) * r * 0.93 - 0.006, Math.PI + 0.12, phi, sweep * 0.55, wd, 1, 0.35),
+      cone(0.026, len, 8),
+      i % 2 === 0 ? P.hair : P.hairHi,
+      T(Math.sin(phi) * r * 0.9, 0.163 - len * 0.5, Math.cos(phi) * r * 0.93 - 0.004, Math.PI + 0.14, phi, sweep * 0.55, wd, 1, 0.26),
     );
-  }
+  });
   for (const s of [-1, 1]) {
     b.add('head', cone(0.022, 0.15), P.hair, T(s * 0.08, 0.06, 0.035, Math.PI - 0.12, 0, s * -0.12));
     b.add('head', cone(0.02, 0.1), P.hair, T(s * 0.088, 0.05, -0.02, Math.PI - 0.05, 0, s * -0.2));
@@ -581,12 +597,13 @@ function buildModel(): Record<BoneName, THREE.BufferGeometry> {
     const bz = -0.035;
     b.add('head', sphere(0.044, 14, 10), P.hair, T(bx, by, bz, 0, 0, 0, 1, 0.9, 1));
     b.add('head', new THREE.TorusGeometry(0.033, 0.007, 6, 16), P.gold, T(bx * 0.92, by - 0.03, bz, Math.PI / 2 - 0.2, 0, s * 0.3));
+    // a few short wisps (round 5: shorter, so the buns read as buns, not chestnuts)
     const spikes: [number, number, number][] = [
-      [0.2, 0.0, 0.035],
-      [0.9, 0.6, 0.03],
-      [-0.5, -0.7, 0.032],
-      [0.4, 2.4, 0.03],
-      [-0.2, 3.6, 0.026],
+      [0.2, 0.0, 0.022],
+      [0.9, 0.6, 0.019],
+      [-0.5, -0.7, 0.02],
+      [0.4, 2.4, 0.018],
+      [-0.2, 3.6, 0.016],
     ];
     for (const [rx, ry, len] of spikes)
       b.add('head', cone(0.014, len, 5), P.hair, T(bx + Math.sin(ry) * 0.03 * s, by + 0.03, bz + Math.cos(ry) * 0.03, rx * 0.8, 0, -s * (0.35 + Math.sin(ry) * 0.4)));

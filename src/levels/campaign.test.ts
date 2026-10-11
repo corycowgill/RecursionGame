@@ -3,7 +3,7 @@ import { ENTITY_KINDS, type InputScript, type LevelDefinition, type SimEvent } f
 import { completionFromEvents, evaluateCompletion } from '../gameplay/puzzles/completion';
 import { getObjectiveStatus } from '../gameplay/puzzles/objectives';
 import { createGame, firstHashMismatch, playScript, replayLoops, runScripts, runSolution } from '../testing/harness/harness';
-import { S } from '../testing/harness/script';
+import { S, inputs } from '../testing/harness/script';
 import { CAMPAIGN, LEVELS, VERTICAL_SLICE_LEVEL, emptyProgress, recordCompletion, validateLevel } from './index';
 import { level01FirstEcho } from './definitions/L01-first-echo';
 import { level02TwoPlaces } from './definitions/L02-two-places';
@@ -137,6 +137,18 @@ describe('L02 Two Places at Once', () => {
   it('one echo is not enough: an echo sent toward plate B alone cannot pass door A', () => {
     const res = runScripts(level02TwoPlaces, [toB, final]);
     expect(res.completed).toBe(false);
+  });
+
+  it('the doorstop route is closed: you hold door A with your body while your one echo walks on to plate B', () => {
+    // Found by the round-5 solver (src/testing/solver): before door B also needed plate A, this completed with 1 echo.
+    // Echo (open loop): hold plate A for 2 s, then walk the route to plate B through door A.
+    const echo = inputs().move(-1, 0, 175).move(0, -1, 25).wait(120).move(0, -1, 25).move(1, 0, 175).move(0, -1, 50).move(1, 0, 100).move(0, -1, 25).move(1, 0, 75).build();
+    const game = createGame(level02TwoPlaces);
+    game.setLoops([{ id: 1, durationTicks: echo.length, inputs: echo, outcomes: [] }]);
+    const res = playScript(game, [S.moveTo(8, 8), S.moveTo(8, 7), S.wait(360), S.moveTo(8, 4, 900), S.moveTo(8, 2, 600)]);
+    expect(res.completed).toBe(false);
+    // the echo did get through the door the player was holding and reached plate B: only door B's wiring stops it
+    expect(game.getState().signals['plate-b']).toBe(true);
   });
 });
 

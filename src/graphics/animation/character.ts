@@ -153,6 +153,11 @@ export class Character {
     at('device', b.chest, RIG.device);
     at('neck', b.chest, RIG.neck);
     at('head', b.neck, RIG.head);
+    // Head look = yaw about the vertical first, then pitch about the turned head's own ear-to-ear axis. With the
+    // default XYZ order a pitch was applied about the *unturned* axis, which rolled the head sideways whenever it
+    // looked up/down while turned (the round-4 turntable tilt).
+    b.neck.rotation.order = 'YXZ';
+    b.head.rotation.order = 'YXZ';
     at('tail0', b.head, RIG.tail0);
     at('tail1', b.tail0, RIG.tail1);
     at('shoulderL', b.chest, RIG.shoulder, 1);
@@ -258,7 +263,7 @@ export class Character {
     b.head.rotation.set(
       this.lookPitch * 0.6 - lean * 0.3 + idle * Math.sin(t * 0.5) * 0.025 - 0.04 * w,
       this.lookYaw * 0.6 - counter * 0.4,
-      -this.lookYaw * 0.08 + ws * 0.04,
+      -this.lookYaw * 0.025 + ws * 0.03,
     );
 
     // ---------------------------------------------------------------- legs
