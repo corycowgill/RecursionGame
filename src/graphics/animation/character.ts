@@ -263,7 +263,9 @@ export class Character {
     b.head.rotation.set(
       this.lookPitch * 0.6 - lean * 0.3 + idle * Math.sin(t * 0.5) * 0.025 - 0.04 * w,
       this.lookYaw * 0.6 - counter * 0.4,
-      -this.lookYaw * 0.025 + ws * 0.03,
+      // Roll: the idle contrapposto rolls hips / spine / chest / neck by a net +0.041 x ws; -0.01 x ws here (instead
+      // of the old +0.03) keeps the head level in world space (the residual round-5 turntable lean, ~2.3 deg).
+      -this.lookYaw * 0.025 - ws * 0.01,
     );
 
     // ---------------------------------------------------------------- legs

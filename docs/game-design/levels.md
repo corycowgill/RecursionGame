@@ -19,28 +19,30 @@ golden replays in `src/testing/replays` and the QA fuzz/softlock suites in `src/
    the job: "Call Plate", "Gate Switch", "Reliquary Gate".
 4. **Determinism first.** Every solution is a closed-loop `InputScript` compiled through the real engine. Each
    level has golden per-tick hashes, and its winning pass replays identically in pure re-simulation.
-5. **Humane timing.** Every window has at least 0.5–1 s of slack over the scripted optimum. Par times sit
-   3–7 s above the verified optimum.
+5. **Humane timing.** Every window has at least 0.5–1 s of slack over the scripted optimum. Since round 5 every par
+   time comes from one formula: fastest verified completion (authored or solver) × 1.25 + 3 s, rounded up; hint
+   delays are derived from the same playtime model (see [`difficulty-report.md`](./difficulty-report.md)).
 
 ## Difficulty curve
 
 | # | Chamber | New idea | Echoes: min / limit / par | Par time (verified best) | Difficulty (1–10) |
 |---|---|---|---|---|---|
-| 1 | First Echo | record → rewind → echo holds a plate | 1 / 2 / 1 | 12 s (4.8 s) | 1 |
+| 1 | First Echo | record → rewind → echo holds a plate | 1 / 2 / 1 | 9 s (4.8 s) | 1 |
 | 2 | Two Places at Once | echoes act simultaneously; chained doors | 2 / 3 / 2 | 14 s (8.1 s) | 2 |
-| 3 | The Relay | carrying crates; timed switch; three loops | 2 / 2 / 2 | 15 s (9.8 s) | 3.5 |
-| 4 | The Lift | elevators; vertical separation; boarding before the call | 2 / 3 / 2 | 18 s (13.4 s) | 4 |
-| 5 | Perfect Timing | moving platform; switch windows + cooldown; scheduling two echoes against a ride | 2 / 3 / 2 | 16 s (11.4 s) | 5 |
-| 6 | Chain Reaction | lasers & receivers; signal chains; 3-echo dependency chain | 3 / 3 / 3 | 20 s (12.3 s) | 6 |
-| 7 | Broken Sequence | echoes replay inputs, not results; intentional "broken" recording; divergence as a tool | 2 / 2 / 2 | 14 s (12.6 s) | 7 |
-| 8 | Recursive Machine | nested loop: one recording, two bodies 5 s apart | 1 / 1 / 1 | 22 s (19.8 s) | 7.5 |
-| 9 | The Paradox Chamber | mutual dependency; delete and re-record an earlier loop; inverted wire | 2 / 2 / 2 | 18 s (14.8 s) | 8.5 |
-| 10 | The Core | everything: echo-only gate, socket, laser, lift, ferry, crate, twin timers | 3 / 3 / 3 | 24 s (17.7 s) | 9.5 |
+| 3 | The Relay | carrying crates; timed switch; three loops | 2 / 2 / 2 | 14 s (8.6 s) | 3.5 |
+| 4 | The Lift | elevators; vertical separation; boarding before the call | 2 / 3 / 2 | 20 s (12.9 s) | 4 |
+| 5 | Perfect Timing | moving platform; switch windows + cooldown; scheduling two echoes against a ride | 2 / 3 / 2 | 15 s (9.4 s) | 5 |
+| 6 | Chain Reaction | lasers & receivers; signal chains; 3-echo dependency chain | 3 / 3 / 3 | 19 s (12.3 s) | 6 |
+| 7 | Broken Sequence | echoes replay inputs, not results; intentional "broken" recording; divergence as a tool | 2 / 2 / 2 | 17 s (10.9 s) | 7 |
+| 8 | Recursive Machine | nested loop: one recording, two bodies 5 s apart | 1 / 1 / 1 | 21 s (14.3 s) | 7.5 |
+| 9 | The Paradox Chamber | mutual dependency; delete and re-record an earlier loop; inverted wire | 2 / 2 / 2 | 19 s (12.3 s) | 8.5 |
+| 10 | The Core | everything: echo-only gate, socket, laser, lift, ferry, crate, twin timers | 3 / 3 / 3 | 26 s (17.7 s) | 9.5 |
 
 L01–L03 were authored by the gameplay engineer and kept as they are. They already ramp from 1 to 3.5, and L04 starts
 just above L03 by reusing its "be in the right place before the moment" timing in a new, vertical space. No retune
-was needed. Expected play time is about 3–6 min per early chamber and 8–15 min per late chamber, roughly 60–90 min
-for the campaign.
+was needed. Round 5's playtime model (solution complexity, not playtest data) estimates about 2.5–5 min per early
+chamber and 4.5–17 min per late chamber: 31–134 min for the campaign, median about 61 min. Details and assumptions
+are in [`difficulty-report.md`](./difficulty-report.md).
 
 Component introduction order: plate, door and exit (L01) → crate, timed switch (L03) → elevator (L04) → moving
 platform, cooldown (L05) → laser emitter and receiver (L06) → inverted wires (L09) → energy cell, socket and temporal
@@ -57,7 +59,7 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
   the hall. The Gallery Plate at the east end of the gallery opens the sanctum door. *"Whoever presses the call will
   watch the others rise without them."*
 * **Objective:** ride the lift up and walk into the sanctum.
-* **Echo limit / par:** 3 / 2 echoes, 18 s.
+* **Echo limit / par:** 3 / 2 echoes, 20 s.
 * **Hints:** (1) the lift climbs only while the Call Plate is held; (2) the caller can never ride, so someone
   must be aboard before the call; (3) Echo 1 calls, Echo 2 rides and holds the Gallery Plate, and you ride with Echo 2.
 * **Intended solution:** Echo 1 walks to the Call Plate (it arrives at about 4.8 s). Echo 2 boards the lift first, rides
@@ -76,7 +78,7 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
   out. The island door opens for 2.5 s from the Gate Switch in the far south-west. Both switches use
   `retrigger:false` with a cooldown, so you can't hold them on by mashing E.
 * **Objective:** cross on the ferry and pass the island door.
-* **Echo limit / par:** 3 / 2 echoes, 16 s.
+* **Echo limit / par:** 3 / 2 echoes, 15 s.
 * **Hints:** (1) the ferry moves only while the Drive Switch is lit; (2) you can't press it and still catch the
   ferry; (3) watch when the ferry lands and record the Gate Switch press for that moment.
 * **Intended solution:** Echo 1 presses the Drive Switch at about 5 s. Echo 2 presses the Gate Switch as the ferry
@@ -102,7 +104,7 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
   Core Door. The Vault Plate is the Core Door's other input. The relay sits in the lab's west wing, away from every
   walking line. *"Light carries the signal. Bodies stop light."*
 * **Objective:** light the relay and pass the Core Door.
-* **Echo limit / par:** 3 / 3 echoes, 20 s.
+* **Echo limit / par:** 3 / 3 echoes, 19 s.
 * **Hints:** (1) follow the light; (2) the Hall Plate holder can never follow, and the switch presser can't reach the
   Core Door in time; (3) Echo 1 holds the plate, Echo 2 presses twice, Echo 3 goes into the vault.
 * **Intended solution:** Echo 1 holds the Hall Plate. Echo 2 enters the lab and presses the Relay Switch at 8 s (for
@@ -124,7 +126,7 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
   Archive Switch sits behind the Archive Door and lights the Exit Door far away in the south-west. *"Change the world
   around them, and the same steps can carry them somewhere you have never been."*
 * **Objective:** have an echo light the Archive Switch.
-* **Echo limit / par:** 2 / 2 echoes, 14 s.
+* **Echo limit / par:** 2 / 2 echoes, 17 s.
 * **Hints:** (1) the switch is too far from the exit to press yourself; (2) echoes repeat inputs: an echo pushing into a
   shut door walks on once it opens; (3) the full recipe.
 * **Intended solution:** Echo 1 holds the Hall Plate until 5.5 s, then walks to the shut Archive Door and pushes north,
@@ -147,7 +149,7 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
   sits at the top of the shaft behind that door, and the Threshold Plate sits directly in front of it. The Core Door
   needs both plates at once. One echo is allowed.
 * **Objective:** hold the Shaft and Threshold plates at the same time.
-* **Echo limit / par:** 1 / 1 echo, 22 s.
+* **Echo limit / par:** 1 / 1 echo, 21 s.
 * **Hints:** (1) every echo has a copy 5 s behind; (2) stand on the Feed Plate long enough and your copy arrives
   before you leave; (3) feed for 6 s, then push north into the door and keep pushing.
 * **Intended solution:** record one loop: walk to the Feed Plate, stand on it for 5.5 s, then walk to the Machine
@@ -169,7 +171,7 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
   Vault Door. The Vault Door needs the Reading Plate held and the Hall Plate empty. The Vault Plate, at the far end of
   the vault, opens the Spire Door to the exit.
 * **Objective:** unseal the vault and hold the Vault Plate.
-* **Echo limit / par:** 2 / 2 echoes, 18 s.
+* **Echo limit / par:** 2 / 2 echoes, 19 s.
 * **Hints:** (1) read the Vault Door's wiring; (2) the Hall Plate echo must step off after the reader is inside, but it
   was recorded first; (3) delete Echo 1 and record it again.
 * **Intended solution (the paradox route, tested step by step):** Echo 1 holds the Hall Plate. Echo 2 walks through the
@@ -193,7 +195,7 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
   good. The Ferryman crosses to the Relic Island, brings the crate to the Crown Plate, then takes the West Timer. The
   Timekeeper takes the East Timer. The Crown Door needs the crate plate and both timers (2.5 s each, 16 tiles apart).
 * **Objective:** wake the Core and pass the Crown Door.
-* **Echo limit / par:** 3 / 3 echoes, 24 s.
+* **Echo limit / par:** 3 / 3 echoes, 26 s.
 * **Hints:** (1) only echoes cross the Reliquary Gate, so carry the cell in and press E; (2) the cell wakes the lift and
   the ferry together, so be aboard; (3) the Crown Door needs the crate and both timers at once; (4) the full role
   list.
@@ -224,8 +226,9 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
 
 ## Known limits / follow-ups
 
-* Minimum-echo claims are argued and spot-tested, not exhaustively searched. A bounded brute-force search tool in
-  `src/testing` would turn them into proofs (L10's 3 is a practical minimum, see above).
+* Minimum-echo claims are argued and spot-tested, and since round 5 also checked by a bounded macro-action solver
+  (`npm run solve -- L07`). Its proofs are exhaustive only within documented bounds; per-level status is in
+  [`difficulty-report.md`](./difficulty-report.md). L05 can be solved with one echo (flagged, see L05).
 * Unknown decor types (`archway`, `machinery`, `hologram`, `banner`, `abyssLight`) are ignored by the current renderer.
   They describe intent for Graphics. Only `conduit`, `observationWindow`, `ring` and `lamp` render today, and all my
   conduits are wall-mounted.
