@@ -119,14 +119,14 @@ export class MaterialLibrary {
     );
     this.gunmetal = this.own(
       new THREE.MeshStandardMaterial({
-        color: 0x8a919b,
+        color: 0x9ba4b0,
         map: gun.map,
         normalMap: gun.normalMap,
         roughnessMap: gun.ormMap,
         metalnessMap: gun.ormMap,
         roughness: 1,
         metalness: 1,
-        envMapIntensity: 1,
+        envMapIntensity: 1.1,
       }),
     );
     this.gunmetalDark = this.own(
@@ -141,11 +141,11 @@ export class MaterialLibrary {
         metalnessMap: brushed.ormMap,
         roughness: 1,
         metalness: 1,
-        envMapIntensity: 1.25,
+        envMapIntensity: 1.15,
       }),
     );
     this.brassPolished = this.own(
-      new THREE.MeshPhysicalMaterial({ color: PALETTE.brass, roughness: 0.22, metalness: 1, clearcoat: 0.6, clearcoatRoughness: 0.2, envMapIntensity: 1.4 }),
+      new THREE.MeshPhysicalMaterial({ color: 0xd2933f, roughness: 0.24, metalness: 1, clearcoat: 0.6, clearcoatRoughness: 0.2, envMapIntensity: 1.4 }),
     );
     this.concrete = this.own(
       new THREE.MeshStandardMaterial({ color: 0xffffff, map: conc.map, normalMap: conc.normalMap, roughnessMap: conc.ormMap, roughness: 1, metalness: 0 }),

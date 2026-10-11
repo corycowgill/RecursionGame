@@ -264,11 +264,10 @@ export function floorTileTextures(size = 512): PBRSet {
   p.line(u * 32, u * 3, u * 32, u * 61, u * 0.35, SEAM);
   p.line(u * 3, u * 32, u * 61, u * 32, u * 0.35, SEAM);
   // inset centre panel
-  p.rect(u * 18, u * 18, u * 28, u * 28, { color: '#67645e', height: 172, rough: 0.45, metal: 0.45, bevel: Math.round(u * 1.6) });
-  p.rect(u * 21, u * 21, u * 22, u * 22, { color: '#726f68', height: 186, rough: 0.5, metal: 0.4, bevel: Math.round(u) });
-  const soft = { color: '#55524c', height: 150, rough: 0.6, metal: 0.3 };
-  p.line(u * 21.5, u * 21.5, u * 42.5, u * 42.5, u * 0.3, soft);
-  p.line(u * 42.5, u * 21.5, u * 21.5, u * 42.5, u * 0.3, soft);
+  p.rect(u * 20, u * 20, u * 24, u * 24, { color: '#716d66', height: 180, rough: 0.5, metal: 0.38, bevel: Math.round(u * 1.4) });
+  p.rect(u * 22.5, u * 22.5, u * 19, u * 19, { color: '#78746c', height: 190, rough: 0.54, metal: 0.32, bevel: Math.round(u) });
+  const soft = { color: '#66625b', height: 172, rough: 0.6, metal: 0.3 };
+  p.line(u * 23, u * 32, u * 41, u * 32, u * 0.25, soft);
   // slim brass corner inlays
   const brass = { color: '#b48a45', height: 220, rough: 0.3, metal: 1 };
   for (const [cx, cy, dx, dy] of [
@@ -510,7 +509,7 @@ export function hologramTexture(text: string): THREE.Texture {
   g.fillStyle = '#fff';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  let px = 112;
+  let px = 150;
   g.font = `600 ${px}px Orbitron, Rajdhani, "Segoe UI", system-ui, sans-serif`;
   while (px > 40 && g.measureText(text).width > 860) {
     px -= 6;
@@ -525,9 +524,10 @@ export function hologramTexture(text: string): THREE.Texture {
 /** Brushed brass/gold: subtle long streaks, tight rough variation. Used tiled on trims and fittings. */
 export function brushedMetalTextures(size = 256): PBRSet {
   const p = new Painter(size, false);
-  p.rect(0, 0, size, size, { color: '#c8963f', height: 128, rough: 0.32, metal: 1 });
-  p.brushed(5, true, 0.22);
-  p.grime(41, 0.05, 0.1);
+  // warm, slightly orange albedo: metal tints its reflections, and the navy sky would otherwise push it olive
+  p.rect(0, 0, size, size, { color: '#d08f3c', height: 128, rough: 0.36, metal: 1 });
+  p.brushed(5, true, 0.12);
+  p.grime(41, 0.04, 0.06);
   return p.build(0.6, 1);
 }
 

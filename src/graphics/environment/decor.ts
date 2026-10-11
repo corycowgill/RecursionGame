@@ -584,12 +584,12 @@ export class DecorBuilder {
     // flush projector disc (walkable)
     b.tube(lib.gunmetalDark, { x: cx, y: base + 0.015, z: cz }, 0.46, 0.03, { seg: 24, cast: false });
     b.add(clock.torus, lib.brass, { x: cx, y: base + 0.03, z: cz }, { rotX: Math.PI / 2, scale: new THREE.Vector3(0.44, 0.44, 0.6), cast: false });
-    b.tube(lib.glow, { x: cx, y: base + 0.035, z: cz }, 0.2, 0.012, { seg: 20, cast: false, receive: false, color: lib.glowColor(color, 2.4) });
+    b.tube(lib.glow, { x: cx, y: base + 0.035, z: cz }, 0.2, 0.012, { seg: 20, cast: false, receive: false, color: lib.glowColor(color, 1.3) });
     // text panel facing the camera side (south), tilted back toward the iso camera
     const text = typeof d.params?.['text'] === 'string' ? d.params['text'] : '';
     const tex = hologramTexture(text);
     const mat = hologramMaterial(tex, color);
-    const geo = new THREE.PlaneGeometry(2.8, 0.7);
+    const geo = new THREE.PlaneGeometry(3.4, 0.85);
     owned.push(geo);
     ownedMats.push(mat);
     ownedTex.push(tex);
@@ -601,7 +601,7 @@ export class DecorBuilder {
     this.uniforms.push(mat.uniforms['uTime']!);
     // projection cone from the disc (narrow end) up to the panel (wide end)
     this.cones.push({
-      m: new THREE.Matrix4().compose(new THREE.Vector3(cx, base + 0.05, cz), new THREE.Quaternion(), new THREE.Vector3(1.3, 2.05, 0.45)),
+      m: new THREE.Matrix4().compose(new THREE.Vector3(cx, base + 0.05, cz), new THREE.Quaternion(), new THREE.Vector3(1.55, 2.0, 0.45)),
       color: new THREE.Color(color).multiplyScalar(0.8),
     });
   }

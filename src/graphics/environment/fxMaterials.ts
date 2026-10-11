@@ -98,10 +98,10 @@ export function abyssBeamMaterial(): THREE.ShaderMaterial {
     ${HEAD}
     ${NOISE}
     void main() {
-      float facing = pow(abs(dot(normalize(vN), normalize(vV))), 1.3);
-      float vert = smoothstep(0.0, 0.12, vUv.y) * pow(1.0 - vUv.y, 1.4);
+      float facing = 0.35 + 0.65 * pow(abs(dot(normalize(vN), normalize(vV))), 0.8);
+      float vert = smoothstep(0.0, 0.55, vUv.y) * smoothstep(1.0, 0.86, vUv.y);
       float flow = 0.55 + 0.45 * eFbm(vec2(vUv.x * 8.0, vUv.y * 6.0 - uTime * 0.35));
-      float a = facing * vert * flow * 0.55;
+      float a = facing * vert * flow * 0.8;
       gl_FragColor = vec4(vTint * a, a);
       ${OUT}
     }`,
@@ -179,7 +179,7 @@ export function hologramMaterial(map: THREE.Texture, color: number): THREE.Shade
         float flicker = 0.9 + 0.1 * sin(uTime * 13.0) * sin(uTime * 3.7);
         float edge = smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
         float a = (t * scan + 0.05) * flicker * edge;
-        gl_FragColor = vec4(uColor * a * 1.6, a);
+        gl_FragColor = vec4(uColor * a * 2.4, a);
         ${OUT}
       }`,
     transparent: true,

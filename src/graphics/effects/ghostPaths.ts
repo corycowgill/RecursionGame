@@ -11,7 +11,7 @@ import type { GhostPath } from './forecast';
  * the future (static with reduced motion). Read-only: built from `extractGhostPaths` output.
  */
 
-const RIBBON_WIDTH = 0.16;
+const RIBBON_WIDTH = 0.22;
 const FLOOR_LIFT = 0.07;
 
 const RibbonShader = {
@@ -42,7 +42,7 @@ const DotShader = {
     varying float vTick; varying float vBig;
     void main() {
       vTick = aTick; vBig = aBig;
-      gl_PointSize = (aBig > 0.5 ? 15.0 : 9.0) * uPx;
+      gl_PointSize = (aBig > 0.5 ? 18.0 : 11.0) * uPx;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }`,
   fragmentShader: /* glsl */ `

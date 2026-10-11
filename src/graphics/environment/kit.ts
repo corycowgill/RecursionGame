@@ -176,6 +176,17 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
         const rotY = d % 2 === 0 ? 0 : Math.PI / 2;
         b.cube(lib.brass, { x: ex, y: top - 0.06, z: ez }, T, 0.09, 0.12, { rotY, cast: false });
         b.cube(lib.glow, { x: ex + DX[d]! * 0.02, y: top - 0.32, z: ez + DZ[d]! * 0.02 }, T + 0.01, 0.05, 0.04, { rotY, cast: false, receive: false, color: amber });
+        if (nt.kind !== 'void' && nt.kind !== 'wall' && top - nTop >= T - 0.01) {
+          // exposed plinth face down to a lower floor (concept "platform edge"): recessed dark panel between
+          // brass stiles, ivory kick plate and a warm glow line
+          const lo = nTop;
+          const h = top - lo;
+          const f = face(cx, lo, cz, d as Dir4);
+          b.cube(lib.gunmetalDark, f.at(0, h / 2 + 0.1, 0.03), T - 0.42, h - 0.75, 0.06, { rotY: f.rotY, cast: false });
+          for (const s of [-1, 1]) b.cube(lib.brass, f.at(s * (T / 2 - 0.08), h / 2, 0.035), 0.08, h - 0.3, 0.07, { rotY: f.rotY, cast: false });
+          b.cube(lib.ivory, f.at(0, 0.2, 0.03), T - 0.42, 0.24, 0.06, { rotY: f.rotY, cast: false, color: new THREE.Color(0.7, 0.72, 0.75) });
+          b.cube(lib.glow, f.at(0, 0.42, 0.065), T - 0.5, 0.035, 0.02, { rotY: f.rotY, cast: false, receive: false, color: amberSoft });
+        }
         if (nt.kind === 'void') {
           b.cube(lib.glow, { x: ex + DX[d]! * 0.02, y: top - 1.6, z: ez + DZ[d]! * 0.02 }, T + 0.01, 0.06, 0.05, { rotY, cast: false, receive: false, color: amberSoft });
           // foundation ribs every other cell: gunmetal buttresses under the platform lip
