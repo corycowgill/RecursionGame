@@ -3,7 +3,7 @@ import { IDLE_INPUT } from '../engine/contracts';
 import { TemporalGame } from '../engine/temporal/TemporalGame';
 import { createDefaultRegistry } from '../gameplay/entities';
 import { LEVELS } from '../levels';
-import { rendererQuality, sampleRewind, solutionFor, withoutHiddenEchoes } from './flow';
+import { attractSuspended, comfortOf, qualityOverrideOf, rendererQuality, sampleRewind, solutionFor, withoutHiddenEchoes } from './flow';
 
 describe('app flow helpers', () => {
   it('maps settings quality presets onto renderer presets', () => {
@@ -12,6 +12,27 @@ describe('app flow helpers', () => {
     expect(rendererQuality('high')).toBe('high');
     expect(rendererQuality('ultra')).toBe('high');
     expect(rendererQuality(null)).toBe('high');
+  });
+
+  it('validates ?quality= overrides against the settings presets', () => {
+    expect(qualityOverrideOf('low')).toBe('low');
+    expect(qualityOverrideOf('ultra')).toBe('ultra');
+    expect(qualityOverrideOf('potato')).toBeNull();
+    expect(qualityOverrideOf(null)).toBeNull();
+    expect(qualityOverrideOf('')).toBeNull();
+  });
+
+  it('suspends the attract replay only while a main-menu sub-screen covers it', () => {
+    expect(attractSuspended('menu', 'menu')).toBe(false);
+    expect(attractSuspended('menu', 'settings')).toBe(true);
+    expect(attractSuspended('menu', 'levels')).toBe(true);
+    expect(attractSuspended('menu', 'credits')).toBe(true);
+    expect(attractSuspended('playing', 'settings')).toBe(false); // in-game the pause flow already stops the sim
+    expect(attractSuspended('menu', null)).toBe(false);
+  });
+
+  it('passes the comfort settings to the renderer', () => {
+    expect(comfortOf({ cameraSensitivity: 1.5, reducedMotion: true })).toEqual({ cameraSensitivity: 1.5, reducedMotion: true });
   });
 
   it('solutionFor drives every campaign level to completion through the public game API (attract mode / debug solve)', () => {

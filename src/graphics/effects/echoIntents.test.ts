@@ -70,4 +70,46 @@ describe('EchoIntentLayer (in-world "which echo uses what, when")', () => {
     expect(visible(layer)).toHaveLength(0);
     layer.dispose();
   });
+
+  it('walk-on triggers: counts down to the step-on, then holds a dim segmented ring while the echo stands there', () => {
+    const layer = new EchoIntentLayer(() => new THREE.Texture());
+    layer.setTimeline(timeline([track('echo:1', 0, [])]));
+    layer.setWalkOns([
+      { entityId: 'sw1', entityKind: 'pressurePlate', actorId: 'echo:1', echoIndex: 0, enterTick: 400, leaveTick: 700 },
+      { entityId: 'sw1', entityKind: 'pressurePlate', actorId: 'echo:1', echoIndex: 0, enterTick: 1000, leaveTick: null },
+    ]);
+    const ring = (l: EchoIntentLayer) => (visible(l)[0]!.children[0] as THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>).material.uniforms;
+    layer.update(view(100, ['echo:1']), 'L', cam, 0);
+    expect(visible(layer)).toHaveLength(0); // 5 s ahead
+    layer.update(view(280, ['echo:1']), 'L', cam, 0);
+    expect(visible(layer)).toHaveLength(1);
+    expect(ring(layer)['uSegments']!.value).toBe(1);
+    expect(ring(layer)['uProgress']!.value).toBeCloseTo(0.5, 2);
+    expect(visible(layer)[0]!.userData['walkOn']).toBe(true);
+    layer.update(view(600, ['echo:1']), 'L', cam, 0);
+    expect(visible(layer)).toHaveLength(1); // standing on it: steady
+    expect(ring(layer)['uOpacity']!.value).toBeCloseTo(0.55, 2);
+    layer.update(view(720, ['echo:1']), 'L', cam, 0);
+    expect(visible(layer)).toHaveLength(0); // left, next stay is > 4 s away
+    layer.update(view(1500, ['echo:1']), 'L', cam, 0);
+    expect(visible(layer)).toHaveLength(1); // open-ended stay (finished echo parked on the plate)
+    layer.update(view(1500, []), 'L', cam, 0);
+    expect(visible(layer)).toHaveLength(0); // hidden echo
+    layer.setWalkOns(null);
+    layer.update(view(1500, ['echo:1']), 'L', cam, 0);
+    expect(visible(layer)).toHaveLength(0);
+    layer.dispose();
+  });
+
+  it('interaction and walk-on badges on the same object stack instead of overlapping', () => {
+    const layer = new EchoIntentLayer(() => new THREE.Texture());
+    layer.setTimeline(timeline([track('echo:1', 0, [200])]));
+    layer.setWalkOns([{ entityId: 'sw1', entityKind: 'pressurePlate', actorId: 'echo:2', echoIndex: 1, enterTick: 210, leaveTick: null }]);
+    layer.update(view(150, ['echo:1', 'echo:2']), 'L', cam, 0);
+    const shown = visible(layer);
+    expect(shown).toHaveLength(2);
+    expect(Math.abs(shown[0]!.position.y - shown[1]!.position.y)).toBeGreaterThan(0.2);
+    layer.dispose();
+  });
 });
+

@@ -167,8 +167,9 @@ export class EchoIntentLayer {
     time: number,
     height: number,
   ): void {
-    const stack = perEntity.get(entityId) ?? 0;
-    perEntity.set(entityId, stack + 1);
+    // stack badges sharing an object: each sits at its own base height or just above the previous one
+    const y = Math.max(height, perEntity.get(entityId) ?? -Infinity);
+    perEntity.set(entityId, y + 0.75);
     this.setIndex(b, echoIndex);
     const progress = dtTicks <= 0 ? 1 : 1 - dtTicks / LOOKAHEAD;
     let flare = dtTicks <= 0 ? Math.max(0, 1 - -dtTicks / AFTERGLOW) : 0;
@@ -185,7 +186,7 @@ export class EchoIntentLayer {
     u['uSegments']!.value = walkOn ? 1 : 0;
     (b.label.material as THREE.SpriteMaterial).opacity = opacity;
     const bob = Math.sin(time * 2.2 + echoIndex) * 0.05 * this.motion;
-    b.group.position.set(unitsToWorld(e.x), unitsToWorld(e.y) + height + stack * 0.75 + bob, unitsToWorld(e.z));
+    b.group.position.set(unitsToWorld(e.x), unitsToWorld(e.y) + y + bob, unitsToWorld(e.z));
     b.ring.quaternion.copy(camera.quaternion);
     const pulse = dtTicks > 0 && dtTicks < 30 ? Math.sin(time * 18) * 0.03 * this.motion : 0;
     b.ring.scale.setScalar(0.92 + flare * 0.35 + pulse);

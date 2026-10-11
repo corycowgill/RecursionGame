@@ -235,6 +235,26 @@ describe('createUI', () => {
     expect(ui.back()).toBe(true); // closes settings
   });
 
+  it('settings show a ?quality= URL override as the active, locked preset and name the saved one', () => {
+    const r2 = document.createElement('div');
+    document.body.append(r2);
+    const ui2 = createUI(r2, cb as unknown as UICallbacks, { qualityOverride: 'low', settings: { ...ui.settings, quality: 'ultra' } });
+    ui2.showSettings();
+    const seg = r2.querySelector('.rx-seg[aria-label="Quality preset"]') as HTMLElement;
+    expect(seg.classList.contains('locked')).toBe(true);
+    const pressed = [...seg.querySelectorAll('button')].filter((b) => b.getAttribute('aria-pressed') === 'true');
+    expect(pressed.map((b) => b.textContent)).toEqual(['Low']);
+    expect([...seg.querySelectorAll('button')].every((b) => b.hasAttribute('disabled'))).toBe(true);
+    expect(r2.textContent).toMatch(/\?quality=low/);
+    expect(r2.textContent).toMatch(/Saved preset: Ultra/);
+    ui2.dispose();
+    // without an override the saved preset is shown and selectable
+    ui.showSettings();
+    const seg1 = root.querySelector('.rx-seg[aria-label="Quality preset"]') as HTMLElement;
+    expect(seg1.classList.contains('locked')).toBe(false);
+    expect(seg1.querySelector('button[aria-pressed="true"]')!.textContent).toBe('High');
+  });
+
   it('level intro and completion screens', () => {
     ui.showLevelIntro(L1);
     expect(ui.screen).toBe('intro');
