@@ -13,8 +13,30 @@
       #ui { position: fixed; inset: 0; pointer-events: none; }
       #ui > * { pointer-events: auto; }
     </style>
+    <!-- Hallucinated Games studio ident. Vendored from gameCentral/intro/hallucinated-intro.js
+         (same copy as AlienDigger) so this game stays a self-contained deploy; re-copy to update.
+         Plain script, not a module: it defines window.HallucinatedIntro. Lives in public/ so Vite
+         copies it verbatim. -->
+    <script src="./intro/hallucinated-intro.js"></script>
   </head>
   <body>
+    <!-- Started from a classic script at the top of <body> so the ident covers the page before
+         the deferred module boots. main.ts awaits window.__studioIntro before bootstrapping, so
+         the key or tap that skips the ident can't also activate the main menu. -->
+    <script>
+      window.__studioIntro = (function () {
+        try {
+          var q = new URLSearchParams(location.search);
+          // Automated browsers (Playwright sets navigator.webdriver) and ?nointro/?dev skip it,
+          // otherwise the overlay would swallow the tests' first clicks.
+          if (q.has('nointro') || q.has('dev') || navigator.webdriver || !window.HallucinatedIntro) {
+            return Promise.resolve();
+          }
+          // No sound: a cold load has no user gesture yet, so the sting would be dropped.
+          return window.HallucinatedIntro.play({ skippable: true, sound: false }).catch(function () {});
+        } catch (e) { return Promise.resolve(); }
+      })();
+    </script>
     <div id="app"></div>
     <div id="ui"></div>
     <script type="module" src="/src/main.ts"></script>
