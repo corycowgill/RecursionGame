@@ -18,7 +18,8 @@ import { installDebugHook, type DebugHook } from './debugHook';
 import { wireGamepad, type GamepadWiring } from './gamepad';
 import { wireTouch } from './touch';
 import { EchoForecastController, type ForecastFrame } from './forecast';
-import { attractSuspended, comfortOf, qualityOverrideOf, rendererQuality, sampleRewind, solutionFor, withoutHiddenEchoes, type AppMode } from './flow';
+import { attractSuspended, comfortOf, qualityOverrideOf, rendererQuality, sampleRewind, withoutHiddenEchoes, type AppMode } from './flow';
+import { loadedSolutions, loadSolutions } from './lazySolutions';
 
 export interface AppHandle {
   readonly game: TemporalGame;
@@ -196,6 +197,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
     { settings: save.data.settings, keybinds: save.data.keybinds, seenTutorials: save.data.seenTutorials, qualityOverride, padbinds: save.data.padbinds, padsConnected: () => gamepad.input.connectedCount },
   );
   renderer.setComfort(comfortOf(save.data.settings));
+  renderer.setEchoPalette(save.data.settings.echoPalette); // round 4: 3D echoes/badges/ghost paths match the timeline
 
   // ------------------------------------------------------------------ flow
   function menuData(): MainMenuData {
@@ -313,14 +315,42 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
 
   function restartAttract(): void {
     if (!attractLevel) return;
+    // Load path (round 4): the solution compiler (+ headless harness) is a lazy chunk. Until it arrives the chamber
+    // idles; it is fetched and compiled only after the menu has painted, then the attract replay restarts with it.
+    const solutions = loadedSolutions();
+    if (!solutions) {
+      game.restartChamber();
+      autopilot = null;
+      scheduleAttractSolutions();
+      return;
+    }
     try {
-      const sol = solutionFor(attractLevel);
+      const sol = solutions.solutionFor(attractLevel);
       game.setLoops(sol.echoes);
       autopilot = sol.final;
     } catch {
       game.restartChamber();
       autopilot = null;
     }
+  }
+
+  let attractSolutionsScheduled = false;
+  /** After the next paint: load the solutions chunk, then (still on the menu) restart the attract replay with it. */
+  function scheduleAttractSolutions(): void {
+    if (attractSolutionsScheduled) return;
+    attractSolutionsScheduled = true;
+    requestAnimationFrame(() =>
+      window.setTimeout(() => {
+        loadSolutions().then(
+          () => {
+            if (mode === 'menu' && attractLevel) restartAttract();
+          },
+          () => {
+            attractSolutionsScheduled = false; // offline / failed fetch: retry on the next attract restart
+          },
+        );
+      }, 0),
+    );
   }
 
   function setPaused(p: boolean): void {
@@ -507,6 +537,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
   function applySettings(s: Settings): void {
     if (!qualityOverride) renderer.setQuality(rendererQuality(s.quality));
     renderer.setComfort(comfortOf(s));
+    renderer.setEchoPalette(s.echoPalette);
     audio.setVolumes(volumesOf(s));
   }
 

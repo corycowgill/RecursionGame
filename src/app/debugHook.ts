@@ -6,7 +6,9 @@ import type { CompletionResult } from '../gameplay/puzzles/completion';
 import { CAMPAIGN, LEVELS, TEST_LEVELS } from '../levels';
 import type { SaveStore } from '../persistence/save';
 import type { UIHandle } from '../ui';
-import { solutionFor, type AppMode } from './flow';
+import type { AppMode } from './flow';
+import { loadedSolutions, loadSolutions } from './lazySolutions';
+import type { KnownSolution } from './solutions';
 
 /** What the app exposes to the hook (all reads go through TemporalGame's public API). */
 export interface DebugHookDeps {
@@ -55,6 +57,9 @@ export interface SolveResult {
  *   startLevel(idOrIndex)          go through the normal transition + intro card
  *   runSolution({instant})         install the level's verified echo loops and drive the final run with its inputs.
  *                                  instant (default) steps synchronously; otherwise the player is autopiloted at 60 Hz.
+ *                                  The solution compiler is a lazy chunk: once loaded (it is fetched right after the
+ *                                  menu paints) this returns synchronously; before that it returns a Promise
+ *                                  (page.evaluate awaits it). solutionsReady() reports which; loadSolutions() preloads.
  *   stepIdle(n)                    advance n ticks with idle player input (synchronous)
  *   commit() / restart()           same as R / Shift+R
  *   preview(tick|null)             hold the temporal preview (Q) frozen at a tick (ghost paths shown), or release it
@@ -75,7 +80,11 @@ export interface DebugHook {
   startLevel(idOrIndex: string | number): string;
   goMenu(): void;
   /** `untilTick` (instant only) stops the final run at that tick, leaving the chamber mid-solve with echoes acting. */
-  runSolution(opts?: { instant?: boolean; untilTick?: number }): SolveResult;
+  runSolution(opts?: { instant?: boolean; untilTick?: number }): SolveResult | Promise<SolveResult>;
+  /** True once the lazy solution-compiler chunk (attract replay / runSolution) has loaded. */
+  solutionsReady(): boolean;
+  /** Loads the solution-compiler chunk (resolves when runSolution is synchronous). */
+  loadSolutions(): Promise<void>;
   stepIdle(ticks: number): number;
   commit(): void;
   restart(): void;
@@ -101,6 +110,22 @@ export function installDebugHook(d: DebugHookDeps): DebugHook {
   const result = (): SolveResult => {
     const st = d.game.getState();
     return { completed: st.status === 'complete', status: st.status, tick: st.tick, echoes: d.game.getLoops().length, hash: d.game.hash() };
+  };
+
+  /** Installs the verified echo loops and drives the final run (synchronously, or autopiloted at 60 Hz). */
+  const solve = (sol: KnownSolution, opts: { instant?: boolean; untilTick?: number }): SolveResult => {
+    d.game.setLoops(sol.echoes);
+    if (opts.instant === false) {
+      d.setAutopilot(sol.final);
+      return result();
+    }
+    d.setAutopilot(null);
+    const max = Math.min(d.level.loopDurationTicks + 1, opts.untilTick ?? Infinity);
+    for (let i = 0; i < max && d.game.getState().status === 'playing'; i++) {
+      const t = d.game.getState().tick;
+      d.game.step(sol.final[t] ?? { ...IDLE_INPUT, tick: t });
+    }
+    return result();
   };
 
   const hook: DebugHook = {
@@ -137,20 +162,16 @@ export function installDebugHook(d: DebugHookDeps): DebugHook {
     goMenu: () => d.goMenu(),
     runSolution(opts = {}) {
       if (d.mode !== 'playing') throw new Error(`__RECURSION__.runSolution: app is in '${d.mode}', not playing`);
-      const sol = solutionFor(d.level);
-      d.game.setLoops(sol.echoes);
-      if (opts.instant === false) {
-        d.setAutopilot(sol.final);
-        return result();
-      }
-      d.setAutopilot(null);
-      const max = Math.min(d.level.loopDurationTicks + 1, opts.untilTick ?? Infinity);
-      for (let i = 0; i < max && d.game.getState().status === 'playing'; i++) {
-        const t = d.game.getState().tick;
-        d.game.step(sol.final[t] ?? { ...IDLE_INPUT, tick: t });
-      }
-      return result();
+      const ready = loadedSolutions();
+      if (ready) return solve(ready.solutionFor(d.level), opts);
+      const level = d.level;
+      return loadSolutions().then((m) => {
+        if (d.mode !== 'playing' || d.level !== level) throw new Error('__RECURSION__.runSolution: level changed while loading');
+        return solve(m.solutionFor(level), opts);
+      });
     },
+    solutionsReady: () => loadedSolutions() !== null,
+    loadSolutions: () => loadSolutions().then(() => undefined),
     stepIdle(ticks) {
       for (let i = 0; i < ticks && d.game.getState().status === 'playing'; i++) {
         const t = d.game.getState().tick;

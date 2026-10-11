@@ -65,7 +65,7 @@ export const testChamber: LevelDefinition = {
   parTimeSeconds: 20,
   parEchoes: 1,
   hints: [
-    { text: 'Stand on the plate, then press R to rewind. Your echo will repeat what you did.' },
+    { text: 'Stand on the plate, then press {echo} to rewind. Your echo will repeat what you did.' },
     { text: 'While your echo holds the plate, walk through the door.', afterSeconds: 30 },
   ],
   solution: [

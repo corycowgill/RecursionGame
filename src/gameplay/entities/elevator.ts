@@ -66,7 +66,8 @@ function clampTravel(ctx: EntityContext<'elevator'>, col: number, row: number, y
  *    waits in place (state.held) and resumes as soon as the actor clears the edge or boards fully.
  * Speed: ceil(1000 / ticksPerLevel) units per tick (default 60 ticks per level). Riders are carried through the
  * surface override (and state.dy via carrierDelta). Output: at rest on the top level.
- * Events: elevatorStart / elevatorArrive.
+ * Events: elevatorStart / elevatorArrive, and elevatorHeld (once, when the lift starts waiting in place — feedback
+ * only, emitted on the false → true edge of state.held).
  */
 export const elevatorBehaviour: PuzzleEntityBehaviour<'elevator'> = {
   kind: 'elevator',
@@ -113,6 +114,7 @@ export const elevatorBehaviour: PuzzleEntityBehaviour<'elevator'> = {
     const atRest = !s.moving && s.y === (levels[s.targetIndex] ?? 0) * 1000;
     const powered = ctx.inputsPowered(e.id);
     const home = Math.min(Math.max(cfg.startIndex ?? 0, 0), n - 1);
+    const wasHeld = s.held === true;
 
     if (mode === 'signal') {
       if (powered !== null) s.targetIndex = powered ? n - 1 : 0;
@@ -182,6 +184,7 @@ export const elevatorBehaviour: PuzzleEntityBehaviour<'elevator'> = {
       s.moving = false;
       s.held = false;
     }
+    if (s.held && !wasHeld) ctx.emit({ type: 'elevatorHeld', tick: ctx.tick, entityId: e.id, y: s.y });
     e.y = s.y;
     ctx.setOutput(!s.moving && n > 1 && s.targetIndex === n - 1 && s.y === targetY);
   },

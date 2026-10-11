@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { unitsToWorld } from '../../engine/contracts';
-import { echoTint } from '../materials/palette';
+import { echoTint, type EchoPaletteName } from '../materials/palette';
 import { labelTexture } from '../materials/textures';
 import type { GhostPath } from './forecast';
 
@@ -77,6 +77,7 @@ export class GhostPathLayer {
   private pixelScale = 1;
   private flow = 1;
   private opacity = 0;
+  private palette: EchoPaletteName = 'default';
 
   constructor(
     private readonly makeBadge: TextTextureFactory = labelTexture,
@@ -92,6 +93,20 @@ export class GhostPathLayer {
     this.clear();
     if (!paths) return;
     for (const p of paths) this.visuals.push(this.build(p));
+  }
+
+  /** Echo colour palette (same colours as the timeline tracks); rebuilds the current paths in the new colours. */
+  setPalette(palette: EchoPaletteName): void {
+    if (palette === this.palette) return;
+    this.palette = palette;
+    const paths = this.paths;
+    this.paths = null;
+    this.setPaths(paths);
+  }
+
+  /** Ribbon tints of the current paths, in path order (tests / debug). */
+  pathColors(): number[] {
+    return this.visuals.map((v) => (v.ribbon.material.uniforms['uColor']!.value as THREE.Color).getHex());
   }
 
   get pathCount(): number {
@@ -134,7 +149,7 @@ export class GhostPathLayer {
   }
 
   private build(path: GhostPath): PathVisual {
-    const tint = new THREE.Color(echoTint(path.echoIndex));
+    const tint = new THREE.Color(echoTint(path.echoIndex, this.palette));
     const css = `#${tint.getHexString()}`;
     const pts = path.points.map((p) => new THREE.Vector3(unitsToWorld(p.x), unitsToWorld(p.y) + FLOOR_LIFT, unitsToWorld(p.z)));
     // nested-loop copies sit slightly to the side so overlapping trails stay readable

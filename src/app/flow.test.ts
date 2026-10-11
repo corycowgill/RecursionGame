@@ -3,7 +3,8 @@ import { IDLE_INPUT } from '../engine/contracts';
 import { TemporalGame } from '../engine/temporal/TemporalGame';
 import { createDefaultRegistry } from '../gameplay/entities';
 import { LEVELS } from '../levels';
-import { attractSuspended, comfortOf, qualityOverrideOf, rendererQuality, sampleRewind, solutionFor, withoutHiddenEchoes } from './flow';
+import { attractSuspended, comfortOf, qualityOverrideOf, rendererQuality, sampleRewind, withoutHiddenEchoes } from './flow';
+import { solutionFor } from './solutions';
 
 describe('app flow helpers', () => {
   it('maps settings quality presets onto renderer presets', () => {

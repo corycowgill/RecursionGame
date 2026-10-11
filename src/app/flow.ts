@@ -1,8 +1,7 @@
-import type { LevelDefinition, PlayerInput, SimView, TemporalLoop } from '../engine/contracts';
+import type { SimView } from '../engine/contracts';
 import { deviceProfile, resolveQuality, type QualityLevel } from '../engine/rendering';
 import type { ComfortSettings } from '../engine/rendering/comfort';
 import { QUALITY_PRESETS, type QualityPreset, type Settings } from '../persistence/settings';
-import { compileSolution } from '../testing/harness/harness';
 
 /**
  * App-level helpers (director-owned). Nothing here touches the simulation rules: these only decide which state
@@ -41,17 +40,8 @@ export function attractSuspended(mode: AppMode, screen: string | null): boolean 
   return mode === 'menu' && screen !== null && screen !== 'menu';
 }
 
-/** Compiled known solutions (echo loops + final run inputs), cached per level id. Pure: runs a headless game. */
-const solutionCache = new Map<string, { echoes: TemporalLoop[]; final: PlayerInput[] }>();
-export function solutionFor(level: LevelDefinition): { echoes: TemporalLoop[]; final: PlayerInput[] } {
-  let s = solutionCache.get(level.id);
-  if (!s) {
-    const loops = compileSolution(level);
-    s = { echoes: loops.slice(0, -1), final: (loops[loops.length - 1]?.inputs ?? []).slice() };
-    solutionCache.set(level.id, s);
-  }
-  return s;
-}
+// solutionFor (attract replay / debug solve) lives in ./solutions and is loaded lazily via ./lazySolutions, so the
+// headless test harness stays out of the boot bundle.
 
 /**
  * Presentation filter for the timeline's per-echo visibility toggles: returns a view without the hidden echoes.

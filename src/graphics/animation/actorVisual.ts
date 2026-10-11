@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PHYS, unitsToWorld, type ActorView, type InteractionKind } from '../../engine/contracts';
-import { PALETTE, echoTint } from '../materials/palette';
+import { echoTint, playerTint, type EchoPaletteName } from '../materials/palette';
 import type { MaterialLibrary } from '../materials/library';
 import { labelTexture } from '../materials/textures';
 import { createTrailMaterial } from '../shaders/fx';
@@ -58,15 +58,18 @@ export class ActorVisual {
   private glitch = 0;
   private speed = 0;
   private time = 0;
+  private palette: EchoPaletteName;
+  private readonly xrayColor: THREE.Color;
   private readonly owned: { dispose(): void }[] = [];
 
   constructor(
     lib: MaterialLibrary,
     actor: ActorView,
-    opts: { trail: boolean; lod?: CharacterLod },
+    opts: { trail: boolean; lod?: CharacterLod; palette?: EchoPaletteName },
   ) {
     this.isPlayer = actor.kind === 'player';
-    const tint = this.isPlayer ? PALETTE.gold : echoTint(actor.echoIndex);
+    this.palette = opts.palette ?? 'default';
+    const tint = this.isPlayer ? playerTint(this.palette) : echoTint(actor.echoIndex, this.palette);
     this.character = new Character(lib, this.isPlayer ? 'player' : 'echo', tint, seedOf(actor.id), opts.lod ?? 0);
     this.character.root.scale.setScalar(CHARACTER_SCALE);
     this.root.add(this.character.root);
@@ -82,8 +85,9 @@ export class ActorVisual {
     });
     // X-ray silhouette: drawn after the environment but before the body, only where something occludes it
     // (GreaterDepth), so actors stay readable behind walls, doors and pillars.
+    this.xrayColor = new THREE.Color(tint).multiplyScalar(this.isPlayer ? 1.1 : 0.8);
     const xrayMat = new THREE.ShaderMaterial({
-      uniforms: { uColor: { value: new THREE.Color(tint).multiplyScalar(this.isPlayer ? 1.1 : 0.8) } },
+      uniforms: { uColor: { value: this.xrayColor } },
       vertexShader:
         'varying vec3 vN; varying vec3 vV; void main(){ vec4 wp = modelMatrix*vec4(position,1.0); vN = normalize(mat3(modelMatrix)*normal); vV = normalize(cameraPosition - wp.xyz); gl_Position = projectionMatrix*viewMatrix*wp; }',
       fragmentShader:
@@ -140,11 +144,34 @@ export class ActorVisual {
     return this.trail;
   }
 
+  /**
+   * Echo colour palette (Settings → Echo colours). Re-tints the hologram, halo, x-ray silhouette, trail and number
+   * badge so they match the timeline track of the same echo.
+   */
+  setPalette(palette: EchoPaletteName): void {
+    if (palette === this.palette) return;
+    this.palette = palette;
+    if (this.isPlayer) {
+      const tint = playerTint(palette);
+      this.haloMat.color.set(tint).multiplyScalar(1.4);
+      this.xrayColor.set(tint).multiplyScalar(1.1);
+      return;
+    }
+    const index = this.labelIndex;
+    this.labelIndex = -1;
+    this.setEchoIndex(index);
+  }
+
+  getPalette(): EchoPaletteName {
+    return this.palette;
+  }
+
   setEchoIndex(index: number): void {
     if (this.isPlayer || index === this.labelIndex) return;
     this.labelIndex = index;
-    const tint = echoTint(index);
+    const tint = echoTint(index, this.palette);
     this.character.setTint(tint);
+    this.xrayColor.set(tint).multiplyScalar(0.8);
     this.haloMat.color.set(tint).multiplyScalar(1.8);
     (this.trail?.material as THREE.ShaderMaterial | undefined)?.uniforms['uColor']?.value.set(tint);
     this.labelTex?.dispose();

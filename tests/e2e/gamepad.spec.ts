@@ -10,12 +10,16 @@ import { bootToMenu, frames, hook, player, trackErrors } from './helpers';
  * left stick moves (recorded input stays -1/0/1) → A interacts (latched press recorded) → Y creates an echo →
  * View opens the timeline, D-pad scrubs, View closes it → Menu pauses, B resumes → hold X restarts → unplugging
  * during play auto-pauses.
+ *
+ * Round 4: in the pause menu, revealed hints show controller glyphs (Y for New echo, never "Press R"), the HUD hint
+ * card follows the device (key cap after a key press, glyph again after a button), and in Settings → Controls a pad A
+ * press while a KEYBOARD rebind waits cancels it instead of starting another one.
  */
 
 test.describe.configure({ timeout: 360_000 });
 
 const XBOX_ID = 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)';
-const B = { A: 0, B: 1, X: 2, Y: 3, VIEW: 8, MENU: 9, UP: 12, DOWN: 13, RIGHT: 15 } as const;
+const B = { A: 0, B: 1, X: 2, Y: 3, LB: 4, VIEW: 8, MENU: 9, UP: 12, DOWN: 13, RIGHT: 15 } as const;
 
 async function installMockPad(page: Page): Promise<void> {
   await page.addInitScript((id) => {
@@ -63,6 +67,9 @@ async function press(page: Page, i: number): Promise<void> {
 }
 
 const focusedTestId = (page: Page): Promise<string | null> => page.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? null);
+/** Programmatic click (no pointer event, so the last-used device stays the controller). */
+const clickNoPointer = (page: Page, selector: string): Promise<void> => page.evaluate((sel) => (document.querySelector(sel) as HTMLElement).click(), selector);
+const focusEl = (page: Page, selector: string): Promise<void> => page.evaluate((sel) => (document.querySelector(sel) as HTMLElement).focus(), selector);
 
 test('gamepad: navigate the menu, start chamber 1, move, interact, create an echo, use the timeline, pause', async ({ page }) => {
   const errors = trackErrors(page);
@@ -128,8 +135,42 @@ test('gamepad: navigate the menu, start chamber 1, move, interact, create an ech
   await press(page, B.MENU);
   await expect.poll(() => hook(page, (h) => h.screen)).toBe('pause');
   await expect(page.getByTestId('pause')).toBeVisible();
+
+  // Device-aware hints: reveal two (the second used to read "Press R to rewind") — the controller's Y glyph shows.
+  await clickNoPointer(page, '[data-testid="pause-reveal-hint"]');
+  await clickNoPointer(page, '[data-testid="pause-reveal-hint"]');
+  const list = page.locator('.rx-hintlist');
+  await expect(list.locator('.rx-padkey')).toHaveText('Y');
+  await expect(list).not.toContainText('Press R');
+
+  // Keyboard rebind oddity: while a keyboard rebind waits, pad A on another row cancels it (no second rebind).
+  await clickNoPointer(page, '[data-testid="pause"] .list .rx-btn:nth-child(3)'); // Settings
+  await expect.poll(() => hook(page, (h) => h.screen)).toBe('settings');
+  await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('.rx-tab')).find((b) => b.textContent === 'Controls')!.click());
+  await focusEl(page, '.rx-bind[data-action="interact"][data-slot="0"]');
+  await press(page, B.A);
+  await expect(page.locator('.rx-bind.capturing')).toHaveCount(1);
+  await focusEl(page, '.rx-bind[data-action="rewind"][data-slot="0"]');
+  await press(page, B.A);
+  await expect(page.locator('.rx-bind.capturing')).toHaveCount(0);
+  await expect(page.getByTestId('settings')).toContainText('Rebinding cancelled');
+  await expect(page.locator('.rx-bind[data-action="interact"][data-slot="0"]')).toHaveText('E');
+  await press(page, B.B); // back to the pause menu
+  await expect.poll(() => hook(page, (h) => h.screen)).toBe('pause');
+
   await press(page, B.B);
   await expect.poll(() => hook(page, (h) => h.screen)).toBeNull();
+
+  // The HUD hint card follows the device: Y glyph now, the R key cap after a key press, the glyph again after a button.
+  const hintCard = page.getByTestId('hint');
+  await expect(hintCard).toBeVisible();
+  await expect(hintCard.locator('p .rx-padkey')).toHaveText('Y');
+  await page.keyboard.press('Shift');
+  await expect(page.getByTestId('ui-root')).toHaveAttribute('data-input', 'keyboard');
+  await expect(hintCard.locator('p .rx-key')).toHaveText('R');
+  await press(page, B.LB);
+  await expect(page.getByTestId('ui-root')).toHaveAttribute('data-input', 'xbox');
+  await expect(hintCard.locator('p .rx-padkey')).toHaveText('Y');
 
   // Hold X (~0.6 s) restarts the chamber: the echo is gone.
   await setButton(page, B.X, true);

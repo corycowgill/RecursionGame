@@ -225,8 +225,12 @@ Events are read-only notifications for audio, VFX and UI. They are never fed bac
 not hashed, and are suppressed during snapshot re-simulation. Every event has a `tick`.
 * Actors: `footstep`, `pickup`, `drop`, `interact`, `interactFailed`, `divergence`, `echoFinished`
 * Components: `plateDown/Up`, `doorOpen/Close/Blocked`, `switchOn/Off/Tick`, `cellInserted/Removed`,
-  `elevatorStart/Arrive`, `laserOn/Off`, `receiverLit/Unlit`, `gateOpen/Close`,
+  `elevatorStart/Arrive/Held`, `laserOn/Off`, `receiverLit/Unlit`, `gateOpen/Close/Blocked`,
   `platformDepart/Arrive`, `portalActivated/Deactivated`, and `entity` (a generic escape hatch)
+* Round 4 (additive, feedback only): `gateBlocked` fires once when an occupant starts holding a closing temporal gate
+  open (QA-2; mirrors `doorBlocked`); `elevatorHeld` fires once when a lift starts waiting in place (`state.held`
+  false → true). The gate's edge detection uses the optional `TemporalGateState.held`, which
+  `temporalGate.serialize` strips from the hash, so hashes and golden replays are unchanged.
 * Chamber/temporal (emitted by TemporalGame): `levelLoaded`, `recordStart`, `rewind`, `echoSpawned`,
   `echoLimitReached`, `loopDeleted`, `chamberRestart`, `loopTimeUp`, `levelComplete`
 
@@ -247,6 +251,10 @@ solution: InputScript[], camera?, decor?[], seed?, recursion? (nested loops, §8
 * `ScriptStep` ops: `moveTo{col,row,timeoutTicks?}`, `move{dx,dz,ticks}`, `face{dir}`, `wait{ticks}`,
   `waitUntil{tick}`, `interact`, `action`, `hold{ticks}`.
 * `decor` is purely visual and is never read by the simulation.
+* Player-facing text (`name`, `subtitle`, `story`, `hints[].text`) never names a key. Controls are written as
+  action tokens (`{interact}`, `{action}`, `{echo}`, `{restart}`, `{timeline}`, `{preview}`, `{pause}`, `{move}`)
+  that the UI renders for the active device (`src/ui/actionText.ts`). `src/ui/actionText.test.ts` fails on a raw key
+  reference or an unknown token. (Round 4, additive.)
 
 ## 12. Game API (`TemporalGame`, `src/engine/temporal/TemporalGame.ts`)
 

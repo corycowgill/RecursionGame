@@ -138,6 +138,8 @@ describe('event → cue mapping', () => {
       { type: 'doorOpen', tick: 1, entityId: e },
       { type: 'doorClose', tick: 1, entityId: e },
       { type: 'doorBlocked', tick: 1, entityId: e },
+      { type: 'gateBlocked', tick: 1, entityId: e },
+      { type: 'elevatorHeld', tick: 1, entityId: e, y: 0 },
       { type: 'switchOn', tick: 1, entityId: e, actorId: 'player' },
       { type: 'switchOff', tick: 1, entityId: e },
       { type: 'switchTick', tick: 1, entityId: e, remainingTicks: 120 },
@@ -168,7 +170,7 @@ describe('event → cue mapping', () => {
     const names = new Set(cues.map((c) => c.sound));
     for (const expected of [
       'footstep', 'pickup', 'drop', 'interactUse', 'interactFailed', 'divergence', 'echoFinished', 'plateDown',
-      'plateUp', 'doorOpen', 'doorClose', 'doorBlocked', 'switchOn', 'switchOff', 'switchTick', 'cellInserted',
+      'plateUp', 'doorOpen', 'doorClose', 'doorBlocked', 'gateBlocked', 'elevatorHeld', 'switchOn', 'switchOff', 'switchTick', 'cellInserted',
       'cellRemoved', 'elevatorStart', 'elevatorArrive', 'laserOn', 'laserOff', 'receiverLit', 'receiverUnlit',
       'gateOpen', 'gateClose', 'platformDepart', 'platformArrive', 'portalOn', 'portalOff', 'entityGeneric',
       'arrival', 'echoLimit', 'loopDeleted', 'restart', 'timeUp', 'fanfare',
@@ -178,6 +180,21 @@ describe('event → cue mapping', () => {
     // Cell pickups/drops use the crystalline variant.
     expect(cues.find((c) => c.sound === 'drop')?.params['cell']).toBe(1);
     expect(cues.find((c) => c.sound === 'pickup')?.params['cell']).toBe(0);
+  });
+
+  it('round 4: gateBlocked and elevatorHeld get their own spatialised, de-duplicated cues', () => {
+    const cues = mapEvents(
+      [
+        { type: 'gateBlocked', tick: 1, entityId: 'g' },
+        { type: 'elevatorHeld', tick: 1, entityId: 'l', y: 1000 },
+      ],
+      PLAYER_AT_ORIGIN,
+    );
+    expect(cues.map((c) => c.sound)).toEqual(['gateBlocked', 'elevatorHeld']);
+    expect(cues.map((c) => c.key)).toEqual(['gateBlocked:g', 'elevatorHeld:l']);
+    for (const c of cues) expect(c.category).toBe('mechanical');
+    // distinct from the door cue (same meaning, different voice)
+    expect(RECIPES['gateBlocked']).not.toBe(RECIPES['doorBlocked']);
   });
 
   it('interact events for pickup/insert do not double up with their dedicated events', () => {

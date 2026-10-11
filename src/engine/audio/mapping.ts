@@ -191,6 +191,8 @@ export function mapEvents(events: readonly SimEvent[], state: SimView, mc: MapCo
       case 'plateDown':
       case 'plateUp':
       case 'doorBlocked':
+      case 'gateBlocked':
+      case 'elevatorHeld':
       case 'switchOff':
       case 'cellRemoved':
       case 'elevatorStart':

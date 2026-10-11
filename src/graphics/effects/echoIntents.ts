@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { unitsToWorld, type SimView, type Timeline } from '../../engine/contracts';
-import { echoTint } from '../materials/palette';
+import { echoTint, type EchoPaletteName } from '../materials/palette';
 import { labelTexture } from '../materials/textures';
 import type { WalkOn } from './forecast';
 
@@ -65,6 +65,7 @@ export class EchoIntentLayer {
   private walkOns: readonly WalkOn[] | null = null;
   private enabled = true;
   private motion = 1;
+  private palette: EchoPaletteName = 'default';
 
   constructor(private readonly makeLabel: (text: string, color: string) => THREE.Texture = labelTexture) {
     this.group.name = 'echo-intents';
@@ -98,6 +99,21 @@ export class EchoIntentLayer {
   /** Forecast walk-on plan (pressure plates, ride-lifts) or null. */
   setWalkOns(w: readonly WalkOn[] | null): void {
     this.walkOns = w;
+  }
+
+  /** Echo colour palette (same colours as the timeline tracks); badges re-tint on the next update. */
+  setPalette(palette: EchoPaletteName): void {
+    if (palette === this.palette) return;
+    this.palette = palette;
+    for (const t of this.labels.values()) t.dispose();
+    this.labels.clear();
+    for (const b of this.badges) b.index = -1; // forces setIndex to re-tint ring + label
+  }
+
+  /** Current tint of a visible badge ring for echo `index` (tests / debug), or null. */
+  badgeColor(index: number): number | null {
+    const b = this.badges.find((x) => x.group.visible && x.index === index);
+    return b ? (b.ring.material.uniforms['uColor']!.value as THREE.Color).getHex() : null;
   }
 
   /** Reduced motion: no bobbing / pulsing (the countdown ring still fills). */
@@ -197,7 +213,7 @@ export class EchoIntentLayer {
   private setIndex(b: Badge, index: number): void {
     if (b.index === index) return;
     b.index = index;
-    const tint = new THREE.Color(echoTint(index));
+    const tint = new THREE.Color(echoTint(index, this.palette));
     (b.ring.material.uniforms['uColor']!.value as THREE.Color).copy(tint);
     let tex = this.labels.get(index);
     if (!tex) {

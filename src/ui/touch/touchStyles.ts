@@ -30,7 +30,7 @@ html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select:
 /* ---------- touch glyphs (tutorial cards, prompts) ---------- */
 .rx-key.rx-touchkey { gap: .4em; height: 2.1em; padding: 0 .75em 0 .45em; border-radius: 1.05em; border-width: 1px; color: var(--rx-cyan-hi); border-color: var(--rx-cyan-dim); background: radial-gradient(circle at 30% 40%, rgba(63,217,255,.18), rgba(0,0,0,.3)); letter-spacing: .14em; text-transform: uppercase; font-size: .62em; }
 .rx-key.rx-touchkey svg { width: 1.4em; height: 1.4em; }
-.rx-key.rx-touchkey.t-interact, .rx-key.rx-touchkey.t-action { color: var(--rx-gold-hi); border-color: var(--rx-gold-dim); background: radial-gradient(circle at 30% 40%, rgba(255,181,74,.2), rgba(0,0,0,.3)); }
+.rx-key.rx-touchkey.t-interact { color: var(--rx-gold-hi); border-color: var(--rx-gold-dim); background: radial-gradient(circle at 30% 40%, rgba(255,181,74,.2), rgba(0,0,0,.3)); }
 .rx-key.rx-touchkey.t-rewind { color: #ffb3aa; border-color: rgba(255,107,94,.5); }
 .rx-key.rx-touchkey .stick { width: 1.15em; height: 1.15em; border-radius: 50%; border: 1px solid currentColor; box-shadow: inset 0 0 0 .22em rgba(4,10,20,.7), inset 0 0 0 1em rgba(255,216,148,.45); }
 .rx-onboard .keys .rx-key.rx-touchkey { min-width: 0; height: 2.4em; font-size: .7em; }
@@ -71,11 +71,20 @@ html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select:
 @keyframes rx-tready { 0%,100% { box-shadow: 0 6px 20px rgba(0,0,0,.4), 0 0 18px rgba(255,181,74,.3), 0 0 0 0 rgba(255,181,74,.0); } 50% { box-shadow: 0 6px 20px rgba(0,0,0,.4), 0 0 30px rgba(255,181,74,.6), 0 0 0 7px rgba(255,181,74,.14); } }
 .rx-tprompt { position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%); padding: .3em .7em; border-radius: 1em; white-space: nowrap; pointer-events: none;
   font-family: var(--rx-display); font-size: 9px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #1b1203; background: linear-gradient(90deg, var(--rx-gold), var(--rx-gold-hi)); box-shadow: 0 0 14px rgba(255,181,74,.55); }
+/* Right-anchored so long labels ("Activate switch") never run off the right edge of the screen. */
+.rx-tbtns .rx-tprompt { left: auto; right: 0; transform: none; }
+/* Director round 4: during touch play the HUD's centre prompt already names the verb (and the blocked state), and the
+   tag above Interact covered the Timeline button and its label. Keep the Interact glow / blocked colour, drop the tag. */
+.rx-root.rx-tplay .rx-tbtns .rx-tprompt { display: none; }
 .rx-tbtn.b-interact.blocked .rx-tprompt { color: #fff; background: rgba(255,107,94,.85); box-shadow: 0 0 14px rgba(255,107,94,.5); }
 .rx-tbtn.b-echo { right: 104px; bottom: 0; width: 64px; height: 64px; color: #ffc3bb; border-color: rgba(255,107,94,.6); background: radial-gradient(circle at 50% 32%, rgba(255,107,94,.24), rgba(24,8,8,.6) 68%); }
 .rx-tbtn.b-echo.down { background: radial-gradient(circle at 50% 32%, rgba(255,107,94,.5), rgba(24,8,8,.7) 70%); box-shadow: 0 0 26px rgba(255,107,94,.5); }
 .rx-tbtn.b-timeline { right: 96px; bottom: 86px; width: 56px; height: 56px; }
 .rx-tbtn.b-preview { right: 18px; bottom: 112px; width: 58px; height: 58px; color: #d9c8ff; border-color: rgba(167,123,255,.6); background: radial-gradient(circle at 50% 32%, rgba(167,123,255,.24), rgba(12,8,26,.6) 68%); }
+.rx-tbtn.b-action { right: 168px; bottom: 70px; width: 52px; height: 52px; color: #b6f5d8; border-color: rgba(92,226,170,.6); background: radial-gradient(circle at 50% 32%, rgba(92,226,170,.24), rgba(6,22,16,.6) 68%); }
+.rx-tbtn.b-action:not(.avail) { display: none; }
+.rx-tbtn.b-action.down { background: radial-gradient(circle at 50% 32%, rgba(92,226,170,.5), rgba(6,22,16,.7) 70%); box-shadow: 0 0 26px rgba(92,226,170,.5); }
+.rx-key.rx-touchkey.t-action { color: #b6f5d8; border-color: rgba(92,226,170,.5); background: radial-gradient(circle at 30% 40%, rgba(92,226,170,.18), rgba(0,0,0,.3)); }
 .rx-tbtn.b-preview.down { background: radial-gradient(circle at 50% 32%, rgba(167,123,255,.5), rgba(12,8,26,.7) 70%); box-shadow: 0 0 26px rgba(167,123,255,.55); }
 .rx-tpause { position: absolute; top: max(10px, calc(var(--sa-t) + 4px)); right: max(12px, calc(var(--sa-r) + 4px)); width: 48px; height: 48px; display: grid; place-items: center; padding: 0; cursor: pointer; pointer-events: auto; touch-action: manipulation;
   color: var(--rx-text); border: 1px solid var(--rx-line-strong); border-radius: 3px; background: linear-gradient(180deg, var(--rx-panel-a), var(--rx-panel-b)); box-shadow: 0 8px 20px rgba(0,0,0,.35); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
@@ -258,6 +267,20 @@ html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select:
   .rx-objective .conds { display: none; }
   .rx-hint { top: calc(var(--gy-t) + 8.6em); }
 }
+/*
+ * Short phone screens (<= 360 CSS px tall, e.g. small phones in landscape with browser bars) while the touch controls
+ * are up: the hint never sits in the joystick zone. It arrives as a small chip right under the level card (its bottom
+ * edge is measured by the HUD) and expands on tap OVER the level card, i.e. still in the top band, never lower than
+ * the joystick's rest position; a finger on the joystick folds it back (createUI).
+ */
+@media (max-height: 360px) {
+  .rx-root.rx-tplay .rx-hint { left: var(--gx-l); top: var(--gy-t); z-index: 3; width: calc(16em / .82); box-sizing: border-box; max-height: calc(100% - var(--gy-t) - ${R * 2 + 64}px); overflow-y: auto; font-size: .82em; scrollbar-width: none; }
+  .rx-root.rx-tplay .rx-hint.collapsed { top: calc(var(--rx-lvl-b, 9em) + 6px); width: auto; max-height: none; overflow: visible; padding: .45em .8em; border-radius: 1.4em; font-size: .78em; }
+  .rx-root.rx-tplay .rx-hint.collapsed .hd .rx-eyebrow { white-space: nowrap; }
+  .rx-root.rx-tplay .rx-hint.collapsed .hd::after { content: 'Tap'; margin-left: .2em; font-family: var(--rx-display); font-size: .62em; letter-spacing: .22em; text-transform: uppercase; color: var(--rx-cyan-hi); opacity: .8; }
+  .rx-root.rx-tplay .rx-hint.fresh { animation: rx-hintpulse 1.2s ease-in-out 3; }
+}
+@keyframes rx-hintpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,181,74,0); } 50% { box-shadow: 0 0 18px rgba(255,181,74,.55), 0 0 0 4px rgba(255,181,74,.18); } }
 @media (max-width: 760px) and (orientation: portrait) {
   .rx-logo-block { grid-template-columns: 1fr; }
   .rx-menu-list { grid-column: 1; grid-row: auto; margin-top: 1.4em; }

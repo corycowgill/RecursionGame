@@ -69,7 +69,7 @@ export const level01FirstEcho: LevelDefinition = {
   parEchoes: 1,
   hints: [
     { text: 'Step on the plate: the door opens. Step off: it seals again.' },
-    { text: 'Press R to rewind. Your echo will repeat everything you just did.', afterSeconds: 15 },
+    { text: 'Press {echo} to rewind. Your echo will repeat everything you just did.', afterSeconds: 15 },
     { text: 'Let your echo hold the plate while you walk through the door.', afterSeconds: 40 },
   ],
   solution: [

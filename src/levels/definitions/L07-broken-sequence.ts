@@ -104,7 +104,7 @@ export const level07BrokenSequence: LevelDefinition = {
     { text: 'The Archive Switch is too far from the exit to press yourself. An echo has to keep it lit.' },
     { text: 'Echoes repeat your inputs, not your results. If a door is shut when you record, an echo pushing into it walks on once it opens.', afterSeconds: 45 },
     {
-      text: 'Echo 1: hold the Hall Plate briefly, then push into the Archive Door pressing E every second. Echo 2: hold the Reading Plate.',
+      text: 'Echo 1: hold the Hall Plate briefly, then push into the Archive Door pressing {interact} every second. Echo 2: hold the Reading Plate.',
       afterSeconds: 100,
     },
   ],

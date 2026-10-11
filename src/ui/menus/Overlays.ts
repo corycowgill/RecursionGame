@@ -34,7 +34,12 @@ export interface PauseActions {
   sound: Sound;
 }
 
-export function createPause(data: PauseData, hints: { revealed: readonly LevelHint[]; total: number }, act: PauseActions): Screen {
+export function createPause(
+  data: PauseData,
+  hints: { revealed: readonly LevelHint[]; total: number; /** Authored text → HTML (device glyphs for action tokens). */ html?: (text: string) => string },
+  act: PauseActions,
+): Screen {
+  const hintHTML = hints.html ?? esc;
   // Touch: restarting throws away every echo, so a finger must hold the button (mouse / keys / pad click instantly).
   let gate: HoldGate | null = null;
   const restart = menuButton('Restart chamber', 'restart', () => (gate?.consume() ? undefined : act.onRestart()), act.sound, false, 'pause-restart');
@@ -61,9 +66,9 @@ export function createPause(data: PauseData, hints: { revealed: readonly LevelHi
     h('div', { class: 'rx-muted', style: 'letter-spacing:.06em' }, 'Time is suspended. Your echoes wait.'),
     list,
   );
-  const hintItems = hints.revealed.map((x, i) => `<li><b>${pad2(i + 1)}</b><span>${esc(x.text)}</span></li>`);
+  const hintItems = hints.revealed.map((x, i) => `<li><b>${pad2(i + 1)}</b><span>${hintHTML(x.text)}</span></li>`);
   for (let i = hints.revealed.length; i < hints.total; i++) hintItems.push(`<li class="locked"><b>${pad2(i + 1)}</b><span>Locked — unlocks with time or attempts</span></li>`);
-  const reveal = h('button', { class: 'rx-btn small', type: 'button', html: `${icon('hint')}<span>Reveal next hint</span>` });
+  const reveal = h('button', { class: 'rx-btn small', type: 'button', 'data-testid': 'pause-reveal-hint', html: `${icon('hint')}<span>Reveal next hint</span>` });
   reveal.disabled = hints.revealed.length >= hints.total;
   reveal.addEventListener('click', () => act.onRevealHint());
   const right = h(
@@ -125,8 +130,8 @@ export function createCredits(act: { onBack(): void; sound: Sound }): Screen {
 
 // ---------------------------------------------------------------------------------------------------------------
 
-export function createLevelIntro(level: LevelDefinition, act: { onBegin(): void; sound: Sound }): Screen {
-  const story = (level.story ?? []).map((line, i) => `<li style="animation-delay:${0.45 + i * 0.32}s">${esc(line)}</li>`).join('');
+export function createLevelIntro(level: LevelDefinition, act: { onBegin(): void; sound: Sound }, text: (t: string) => string = esc): Screen {
+  const story = (level.story ?? []).map((line, i) => `<li style="animation-delay:${0.45 + i * 0.32}s">${text(line)}</li>`).join('');
   const begin = menuButton('Begin', 'play', act.onBegin, act.sound, true, 'intro-begin');
   const facts =
     `<span class="rx-fact">${icon('echo')}Echo limit <b>${level.maxEchoes}</b></span>` +
@@ -137,7 +142,7 @@ export function createLevelIntro(level: LevelDefinition, act: { onBegin(): void;
     html:
       `<div class="chamber"><span class="rx-eyebrow">${level.order > 0 ? `Chamber ${pad2(level.order)}` : 'Test chamber'}</span></div>` +
       `<h1>${esc(level.name)}</h1>` +
-      (level.subtitle ? `<div class="subtitle">${esc(level.subtitle)}</div>` : '') +
+      (level.subtitle ? `<div class="subtitle">${text(level.subtitle)}</div>` : '') +
       (story ? `<ul class="story">${story}</ul>` : '') +
       `<div class="facts">${facts}</div>`,
   });

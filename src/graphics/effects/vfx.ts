@@ -186,6 +186,22 @@ export class VfxSystem implements VfxSink {
             for (let i = 0; i < 4; i++) this.sparks(p.clone().setY(p.y + 0.4 + i * 0.6), PALETTE.goldHot, 4, { speed: 1.2, up: 0.6, size: 0.06, life: 0.6 });
           }
           break;
+        // Round 4: "can't close / can't move, someone is in the way" — a short burst at the status lamp, matching the
+        // pulsing lamp/edge the entity visuals show for as long as the hold lasts.
+        case 'doorBlocked':
+        case 'gateBlocked':
+          if (this.entityPos(state, ev.entityId, p)) {
+            p.y += ev.type === 'doorBlocked' ? 2.45 : 2.55;
+            this.sparks(p, PALETTE.gold, 10, { speed: 1.1, up: 0.8, size: 0.06, life: 0.45 });
+          }
+          break;
+        case 'elevatorHeld':
+          if (this.entityPos(state, ev.entityId, p)) {
+            p.y = unitsToWorld(ev.y) + 0.05;
+            this.ring(p, PALETTE.coral, 1.25, { life: 0.6, width: 0.06 });
+            this.sparks(p, PALETTE.coral, 12, { speed: 1.4, up: 0.9, size: 0.06, life: 0.5, spread: 0.9 });
+          }
+          break;
         case 'plateDown':
           if (this.entityPos(state, ev.entityId, p)) this.sparks(p.clone().setY(p.y + 0.2), PALETTE.teal, 10, { speed: 1.6, up: 1.4, size: 0.06, life: 0.5 });
           break;

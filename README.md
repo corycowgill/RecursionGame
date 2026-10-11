@@ -27,6 +27,9 @@ Current status: [`docs/agent-progress/release-notes.md`](docs/agent-progress/rel
 Every device feeds the same input abstraction (`src/engine/input`): movement is quantized to -1/0/1 before it
 reaches the simulation, and only `PlayerInput` is ever recorded. You can switch devices at any time; the on-screen
 prompts (HUD hints, tutorial cards, timeline legend) swap to the device you touched last.
+Authored level hints use action tokens (`{interact}`, `{echo}`, …; `src/ui/actionText.ts`) instead of key names,
+so they render as your own key bindings, the controller's glyphs (Xbox / PlayStation / Switch) or the touch button
+names.
 
 ### Keyboard
 
@@ -77,6 +80,7 @@ them; the next touch brings them back).
 |---|---|
 | Drag anywhere on the left half | Floating joystick: move |
 | **Interact** button | Interact |
+| **Action** button (only when relevant) | Context action (Space) |
 | **New echo** button | End the recording (same as R) |
 | **Timeline** button, or tap the timeline strip | Open the timeline sheet; drag the lanes to scrub |
 | **Preview** button (hold) | Temporal preview |
@@ -85,8 +89,11 @@ them; the next touch brings them back).
 | Quick two-finger tap | Toggle the puzzle overview camera |
 | Pause → **Restart chamber** | Hold 0.75 s (prevents accidental restarts) |
 
-The joystick and a button work at the same time. There is no touch button for the Space context action (no level
-needs it yet). Audio starts on the first tap.
+The joystick and a button work at the same time. An **Action** button (the Space context action) appears only while
+it is relevant: when the faced object answers it (timed switches) or the chamber's solution uses it. Level hints name
+the control of the device you are using (key cap, controller glyph or touch button). On short phone screens
+(≤ 360 px tall) hints arrive as a small chip under the chamber card; tap it to read the hint. Audio starts on the
+first tap.
 
 Key bindings, gamepad buttons, volumes, quality, camera sensitivity, interface scale and accessibility options
 (reduced motion, which also removes camera shake and shortens the intro fly-in; a colour-blind-safe echo palette for
@@ -104,6 +111,10 @@ The main menu shows a dismissible "Add to Home Screen" hint in Safari. Progress 
 `localStorage`; iOS keeps the home-screen app's storage separate from Safari's, so progress does not carry over
 between the two. On iPhone, iPad and Android the renderer picks the lighter **Mobile** quality preset automatically
 (Settings → Quality → Auto).
+
+After the first launch from HTTPS the game also starts and plays **offline**: a service worker caches the built app
+(see [Service worker](#service-worker-offline-play)). Offline play was verified in desktop Chromium only, not yet on
+a real iPhone.
 
 **HTTPS is required.** iOS only installs home-screen web apps from secure origins, and browsers expose the Gamepad
 API only on secure contexts (HTTPS or `localhost`). The Render deployment (`render.yaml`) serves over HTTPS, so it
@@ -124,7 +135,9 @@ npm run dev        # http://localhost:5173 — hot-reloading dev server
 
 URL options: `?quality=auto|mobile|low|medium|high|ultra` forces a renderer preset for the session (handy on weak GPUs and in
 tests); Settings then shows it and locks the quality selector. An unknown value is ignored.
-`graphics-preview.html` is a standalone renderer test bed (`?scene=level&id=3`, `?scene=showcase`).
+`graphics-preview.html` is a standalone renderer test bed (`?scene=level&id=3`, `?scene=showcase`, `?scene=showcase&held=1`
+for the held-lift / blocked-gate feedback, `?palette=highContrast`); `?turntable=1` shows the character from the front
+three-quarter angle (`&actor=echo`, `&angle=35`, `&spin=1`).
 
 ## Building and deploying
 
@@ -138,6 +151,30 @@ host or sub-folder (GitHub Pages, Netlify, S3/CloudFront, itch.io HTML5 upload, 
 server configuration. There is no backend: progress and settings are stored in the browser's `localStorage`.
 `public/manifest.webmanifest`, the Apple meta tags in `index.html` and the icons in `public/icons/` make it
 installable as a full-screen home-screen web app. `render.yaml` deploys it to Render as an HTTPS static site.
+`graphics-preview.html` is built as a separate entry: `index.html` never loads its chunks and the service worker
+does not precache them (`ui-preview.html` exists only on the dev server).
+
+### Service worker (offline play)
+
+`public/sw.js` lets the home-screen app start and play without a network. `src/main.ts` registers it only in
+production builds, only on HTTPS or `localhost`, and never under automation (`navigator.webdriver`, so Playwright
+always hits the network). At build time a small Vite plugin (`src/build/precacheManifest.ts`) prepends the precache
+manifest to `dist/sw.js`: every hashed file the game can load (including lazy chunks and the forecast worker), the
+fonts (`.woff2` only), `index.html` and the `public/` files, plus a `version` hashed from their contents. Preview
+pages and source maps are left out. The worker uses cache-first for `assets/*`, network-first for `index.html`
+(so online players get a new deploy right away), and on activation deletes every older `recursion-*` cache. Paths
+are relative to the worker's scope, so it works from any sub-folder.
+
+- **Bumping:** nothing to do for normal releases. Any change to a shipped file changes the manifest `version`, so
+  `sw.js` gets new bytes and browsers install the new worker in the background (the app also checks on every
+  launch). The new worker takes over once every page running the old one has closed. To force every client to drop
+  its caches and download everything again, increment `CACHE_REVISION` in `public/sw.js`.
+- **Clearing:** open the game with `?nosw` (it unregisters the worker, deletes its caches and reloads), or use the
+  browser's site-data settings (DevTools → Application → Storage → Clear site data). On iPhone, deleting the
+  home-screen app removes its storage, including saved progress.
+- **Hosting:** serve `sw.js` with `Cache-Control: no-cache` (`render.yaml` does this, along with `/` and
+  `index.html`), so browsers always see a new manifest. `npm run preview` keeps the ETags from when it started, so
+  restart it after a rebuild if you are testing a worker update locally.
 
 ## Testing
 

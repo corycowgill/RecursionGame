@@ -217,8 +217,15 @@ export class ElevatorVisual implements EntityVisual {
   private readonly platform = new THREE.Group();
   private readonly piston: THREE.Mesh;
   private readonly stripMat: THREE.MeshStandardMaterial;
+  private readonly chevronMat: THREE.MeshStandardMaterial;
+  private readonly heldFrame = new THREE.Group();
+  private readonly heldMat: THREE.MeshStandardMaterial;
   private readonly baseY: number;
   private y = Number.NaN;
+  /** 0..1 eased "held" amount (round 4: a lift waiting for someone to clear its edge). */
+  private heldK = 0;
+  private readonly teal = new THREE.Color(PALETTE.teal);
+  private readonly coral = new THREE.Color(PALETTE.coral);
 
   constructor(ctx: EntityVisualContext) {
     const { lib, def } = ctx;
@@ -244,8 +251,9 @@ export class ElevatorVisual implements EntityVisual {
     p.mesh(p.rbox(1.9, 0.3, 1.9, 0.05), lib.gunmetal, this.platform, 0, -0.15, 0);
     const top = p.rbox(1.6, 0.04, 1.6, 0.015);
     p.mesh(top, lib.floorEmblem, this.platform, 0, 0.01, 0);
+    this.chevronMat = p.mat(lib.emissiveUnique(PALETTE.teal, 2.4));
     for (const [x, z] of [[0.62, 0], [-0.62, 0], [0, 0.62], [0, -0.62]] as const) {
-      const ch = p.mesh(p.box(0.22, 0.02, 0.05), lib.emissive(PALETTE.teal, 2.4), this.platform, x, 0.04, z, false);
+      const ch = p.mesh(p.box(0.22, 0.02, 0.05), this.chevronMat, this.platform, x, 0.04, z, false);
       ch.rotation.y = x === 0 ? 0 : Math.PI / 2;
     }
     this.stripMat = p.mat(lib.emissiveUnique(PALETTE.teal, 2));
@@ -259,6 +267,17 @@ export class ElevatorVisual implements EntityVisual {
       lip.castShadow = false;
     }
     p.mesh(p.cyl(0.5, 0.36, 0.3, 24), lib.gunmetalDark, this.platform, 0, -0.45, 0);
+    // held warning: a raised coral frame along the deck edge ("clear the edge"), shown only while held
+    this.heldMat = p.mat(lib.emissiveUnique(PALETTE.coral, 3));
+    const bar = p.box(1.98, 0.05, 0.07);
+    for (let d = 0; d < 4; d++) {
+      const pivot = new THREE.Group();
+      pivot.rotation.y = (d * Math.PI) / 2;
+      p.mesh(bar, this.heldMat, pivot, 0, 0.05, 0.955, false);
+      this.heldFrame.add(pivot);
+    }
+    this.heldFrame.visible = false;
+    this.platform.add(p.dyn(this.heldFrame));
   }
 
   update(f: EntityFrame): void {
@@ -267,11 +286,29 @@ export class ElevatorVisual implements EntityVisual {
     const target = unitsToWorld(lerp(prev.state.y, e.state.y, f.alpha));
     this.y = Number.isNaN(this.y) ? target : damp(this.y, target, 40, f.dt);
     this.root.position.set(f.pos.x, 0, f.pos.z);
-    this.platform.position.y = this.y;
-    const len = Math.max(0.1, this.y - 0.6 - this.baseY);
+    // Held (state.held): the lift wants to move but someone straddles its edge. The edge strips and deck chevrons
+    // pulse coral (hazard: "clear the edge") and the machinery visibly stalls — the piston and deck shudder in place
+    // instead of travelling. Eased so a one-tick hold does not flash.
+    const held = e.state.held === true;
+    this.heldK = damp(this.heldK, held ? 1 : 0, held ? 18 : 8, f.dt);
+    const k = this.heldK;
+    const shudder = k > 0.02 ? (Math.sin(f.time * 71) * 0.6 + Math.sin(f.time * 43) * 0.4) * 0.012 * k : 0;
+    this.platform.position.y = this.y + shudder;
+    const len = Math.max(0.1, this.y - 0.6 - this.baseY + shudder);
     this.piston.scale.y = len;
     this.piston.position.y = this.baseY + len / 2;
-    this.stripMat.emissiveIntensity = e.state.moving ? 3.5 + Math.sin(f.time * 14) * 0.8 : 1.6;
+    const pulse = 0.5 + 0.5 * Math.sin(f.time * 9);
+    this.stripMat.emissive.copy(this.teal).lerp(this.coral, k);
+    this.stripMat.emissiveIntensity = lerp(e.state.moving ? 3.5 + Math.sin(f.time * 14) * 0.8 : 1.6, 1.8 + pulse * 3.2, k);
+    this.chevronMat.emissive.copy(this.teal).lerp(this.coral, k);
+    this.chevronMat.emissiveIntensity = lerp(2.4, 1.2 + pulse * 2.6, k);
+    this.heldFrame.visible = k > 0.02;
+    this.heldMat.emissiveIntensity = (1.5 + pulse * 3.5) * k;
+  }
+
+  /** Eased held amount 0..1 (tests / debug). */
+  get heldAmount(): number {
+    return this.heldK;
   }
 
   dispose(): void {

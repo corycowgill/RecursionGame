@@ -75,7 +75,7 @@ build if forbidden APIs appear in simulation code.
 
 `footstep, pickup, drop, interact, interactFailed, divergence, echoFinished, plateDown, plateUp, doorOpen,
 doorClose, doorBlocked, switchOn, switchOff, switchTick, cellInserted, cellRemoved, elevatorStart,
-elevatorArrive, laserOn, laserOff, receiverLit, receiverUnlit, gateOpen, gateClose, platformDepart,
+elevatorArrive, elevatorHeld, laserOn, laserOff, receiverLit, receiverUnlit, gateOpen, gateClose, gateBlocked, platformDepart,
 platformArrive, portalActivated, portalDeactivated, entity, levelLoaded, recordStart, rewind, echoSpawned,
 echoLimitReached, loopDeleted, chamberRestart, loopTimeUp, levelComplete`
 
@@ -94,6 +94,9 @@ echoLimitReached, loopDeleted, chamberRestart, loopTimeUp, levelComplete`
 
 `window.__RECURSION__ = { game, loadLevel, dispose }` is set by `bootstrap()` for Playwright and devtools.
 Treat it as read-only except for `loadLevel`.
+`runSolution()` uses the lazily loaded solution compiler (`src/app/solutions.ts`, fetched after the menu paints): it
+returns synchronously once `solutionsReady()`, otherwise a Promise (`page.evaluate` awaits it); `loadSolutions()`
+preloads it. The app never imports `src/testing/harness` statically (round 4, load path).
 
 ## Tooling notes
 

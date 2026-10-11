@@ -184,6 +184,12 @@ export interface TemporalGateState {
   open: boolean;
   /** Ticks since last state change (renderer pulse). */
   phaseTicks: number;
+  /**
+   * Round 4 (additive, feedback only): true while the gate is held open by an occupant although its signal says
+   * close (QA-2). Drives the one-shot `gateBlocked` event and the renderer's blocked lamp. NOT hashed
+   * (temporalGate.serialize strips it) and never read by any gameplay decision.
+   */
+  held?: boolean;
 }
 
 export interface MovingPlatformConfig {

@@ -3,7 +3,7 @@ import { PAD, faceRole, padButtonLabel, padButtonName, type PadStyle } from '../
 import { movementLabel, primaryLabel, type BindableAction, type KeyBindings } from '../persistence/keybinds';
 import { esc } from './dom';
 import { icon } from './icons';
-import { INTERACT_ICON } from './touch/icons';
+import { ACTION_ICON, INTERACT_ICON } from './touch/icons';
 
 /**
  * BUTTON-PROMPT GLYPHS — every control hint (HUD, tutorial prompts, interaction prompt, timeline) is drawn for the
@@ -32,7 +32,7 @@ export function sameDevice(a: InputDevice, b: InputDevice): boolean {
 /** On-screen button names and icons, for touch prompts. */
 const TOUCH_GLYPHS: Partial<Record<PromptAction, { label: string; svg: () => string }>> = {
   interact: { label: 'Interact', svg: () => INTERACT_ICON },
-  action: { label: 'Interact', svg: () => INTERACT_ICON },
+  action: { label: 'Action', svg: () => ACTION_ICON },
   rewind: { label: 'New echo', svg: () => icon('record') },
   restart: { label: 'Hold restart', svg: () => icon('restart') },
   timeline: { label: 'Timeline', svg: () => icon('clock') },
@@ -154,4 +154,8 @@ export const GLYPH_CSS = `
 .rx-root:not([data-input="xbox"]) .rx-gl-xbox, .rx-root:not([data-input="playstation"]) .rx-gl-playstation, .rx-root:not([data-input="nintendo"]) .rx-gl-nintendo { display: none; }
 .rx-pad-only { align-items: center; gap: .35em; }
 .rx-menu-foot .rx-key.rx-padkey + .rx-key.rx-padkey { margin-left: .2em; }
+/* action tokens inside authored text (hints, story, tutorial cards): the glyph sits on the text line */
+.rx-key.rx-inline { margin: 0 .14em; vertical-align: .08em; line-height: 1; }
+.rx-key.rx-padkey.face.rx-inline { vertical-align: -.05em; }
+.rx-key.rx-touchkey.rx-inline { height: 1.9em; padding: 0 .6em 0 .35em; vertical-align: .02em; }
 `;

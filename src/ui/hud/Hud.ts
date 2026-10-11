@@ -1,6 +1,7 @@
 import type { LevelDefinition } from '../../engine/contracts';
-import { type KeyBindings } from '../../persistence/keybinds';
+import { defaultKeybinds, type KeyBindings } from '../../persistence/keybinds';
 import type { EchoPaletteId } from '../../persistence/settings';
+import { actionTextHTML, actionTextPlain } from '../actionText';
 import { esc, h } from '../dom';
 import { capHTML, defaultGlyphs, type GlyphContext } from '../glyphs';
 import { icon, shapeBadge, shapeGlyph } from '../icons';
@@ -53,6 +54,14 @@ export class Hud {
   private promptSig = '';
   /** Prompt glyph context (last-used device + bindings), set by createUI. Keyboard defaults until then. */
   glyphs: GlyphContext | null = null;
+  /** Current hint (authored text with action tokens), re-rendered when the device or the bindings change. */
+  private hintState: { text: string; index: number; total: number } | null = null;
+  /**
+   * Short phone screens with the touch controls up (round 4): a new hint arrives as a small chip that expands on tap,
+   * so the card never sits in the joystick zone. Set by createUI.
+   */
+  autoCollapseHint: () => boolean = () => false;
+  private levelObserver: ResizeObserver | null = null;
 
   constructor(private readonly onSkipTutorial: () => void) {
     this.chamber = h('div', { class: 'rx-eyebrow' });
@@ -86,10 +95,18 @@ export class Hud {
     this.promptLbl = h('span', { class: 'lbl' });
     this.prompt = h('div', { class: 'rx-panel rx-prompt off', role: 'status', 'aria-live': 'polite', 'data-testid': 'prompt' }, this.promptKey, this.promptLbl);
     this.controls = h('div', { class: 'rx-controls', 'aria-label': 'Controls' });
-    this.hint = h('aside', { class: 'rx-panel rx-hint', hidden: true, 'aria-live': 'polite' });
+    this.hint = h('aside', { class: 'rx-panel rx-hint', hidden: true, 'aria-live': 'polite', 'data-testid': 'hint' });
     this.onboard = h('aside', { class: 'rx-panel rx-onboard', hidden: true, 'aria-live': 'polite', 'data-testid': 'onboarding' });
 
     this.el = h('div', { class: 'rx-hud', 'data-testid': 'hud' }, levelPanel, timePanel, this.prompt, this.controls, this.hint, this.onboard);
+    // The level card's bottom edge, for the short-screen hint chip that sits right under it (round 4).
+    if (typeof ResizeObserver === 'function') {
+      this.levelObserver = new ResizeObserver(() => {
+        const b = levelPanel.offsetTop + levelPanel.offsetHeight;
+        if (b > 0) this.el.style.setProperty('--rx-lvl-b', `${b}px`);
+      });
+      this.levelObserver.observe(levelPanel);
+    }
   }
 
   setLevel(level: LevelDefinition): void {
@@ -212,30 +229,65 @@ export class Hud {
     return g.keybinds === binds ? g : { ...g, keybinds: binds };
   }
 
+  dispose(): void {
+    this.levelObserver?.disconnect();
+    this.levelObserver = null;
+  }
+
   // ------------------------------------------------------------------ hints
 
   showHint(text: string, index: number, total: number): void {
+    this.hintState = { text, index, total };
+    this.renderHint(this.autoCollapseHint(), true);
+  }
+
+  /** Redraws the visible hint with the current device's glyphs (keeps its collapsed / expanded state). */
+  refreshHint(): void {
+    if (!this.hintState || this.hint.hidden) return;
+    this.renderHint(this.hint.classList.contains('collapsed'), false);
+  }
+
+  private renderHint(collapsed: boolean, fresh: boolean): void {
+    const st = this.hintState;
+    if (!st) return;
+    const g = this.glyphs ?? defaultGlyphs(defaultKeybinds());
     this.hint.hidden = false;
-    this.hint.classList.remove('collapsed');
     this.hint.innerHTML = '';
     const close = h('button', { class: 'rx-iconbtn', type: 'button', 'aria-label': 'Collapse hint', html: icon('close') });
     close.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.hint.classList.add('collapsed');
+      this.collapseHint();
     });
+    const label = `Hint ${st.index + 1} / ${st.total}`;
     this.hint.append(
-      h('div', { class: 'hd' }, h('span', { html: icon('hint') }), h('span', { class: 'rx-eyebrow' }, `Hint ${index + 1} / ${total}`), close),
-      h('p', {}, text),
+      h('div', { class: 'hd' }, h('span', { html: icon('hint') }), h('span', { class: 'rx-eyebrow' }, label), close),
+      h('p', { html: actionTextHTML(st.text, g), 'aria-label': actionTextPlain(st.text, g) }),
     );
-    this.hint.onclick = () => this.hint.classList.remove('collapsed');
+    this.setHintCollapsed(collapsed);
+    this.hint.classList.toggle('fresh', fresh && collapsed);
+    this.hint.onclick = () => this.setHintCollapsed(false);
+  }
+
+  private setHintCollapsed(on: boolean): void {
+    this.hint.classList.toggle('collapsed', on);
+    if (!on) this.hint.classList.remove('fresh');
+    this.hint.setAttribute('aria-expanded', String(!on));
+    if (on) this.hint.setAttribute('title', 'Tap to show the hint');
+    else this.hint.removeAttribute('title');
   }
 
   collapseHint(): void {
-    this.hint.classList.add('collapsed');
+    if (!this.hint.hidden) this.setHintCollapsed(true);
+  }
+
+  /** The hint card is showing expanded (not hidden, not collapsed to a chip). */
+  get hintExpanded(): boolean {
+    return !this.hint.hidden && !this.hint.classList.contains('collapsed');
   }
 
   hideHint(): void {
     this.hint.hidden = true;
+    this.hintState = null;
   }
 
   // ------------------------------------------------------------------ onboarding
@@ -246,7 +298,7 @@ export class Hud {
       return;
     }
     const g = this.ctx(binds);
-    const text = esc(step.text).replace(/\{key:(\w+)\}/g, (_, a: string) => capHTML(g, a as never));
+    const text = actionTextHTML(step.text, g);
     const keys =
       step.keys === 'move'
         ? g.device.kind !== 'keyboard'

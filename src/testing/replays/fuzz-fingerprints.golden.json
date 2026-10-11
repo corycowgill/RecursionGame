@@ -22,7 +22,7 @@
   },
   {
    "levelId": "L01-first-echo",
-   "levelFingerprint": 648074862,
+   "levelFingerprint": 1521042099,
    "seed": 7,
    "ticks": 2000,
    "digest": 2495853436,
@@ -40,7 +40,7 @@
   },
   {
    "levelId": "L03-the-relay",
-   "levelFingerprint": 573264764,
+   "levelFingerprint": 297463902,
    "seed": 7,
    "ticks": 2000,
    "digest": 1944177462,
@@ -76,7 +76,7 @@
   },
   {
    "levelId": "L07-broken-sequence",
-   "levelFingerprint": 3265105683,
+   "levelFingerprint": 971967676,
    "seed": 7,
    "ticks": 2000,
    "digest": 3780284316,
@@ -103,7 +103,7 @@
   },
   {
    "levelId": "L10-the-core",
-   "levelFingerprint": 421535938,
+   "levelFingerprint": 4182725353,
    "seed": 7,
    "ticks": 2000,
    "digest": 4245844384,

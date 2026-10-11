@@ -4,7 +4,7 @@ import type { UIHandle } from '../ui';
 
 /**
  * Touch wiring (round 3, iPhone / Android / iPad). Kept out of bootstrap so the app only adds a few lines:
- *   - the on-screen joystick and Interact button feed the SAME InputSampler as the keyboard and the gamepad
+ *   - the on-screen joystick, Interact and Action buttons feed the SAME InputSampler as the keyboard and the gamepad
  *     (quantized -1/0/1 screen direction, rotated by the camera yaw in the sampler; latched interact presses),
  *   - New echo / Timeline / Preview / Pause go through the same GameCommand handler as the keys,
  *   - pinch zoom is sent as wheel deltas to the element the camera already listens on (camera sensitivity applies),
@@ -35,6 +35,10 @@ export function wireTouch(d: TouchWiringDeps): TouchWiring {
   t.setSink({
     move: (x, y) => d.sampler.setTouchMove(x, y),
     interact: (down) => d.sampler.setInteract(down && d.gameplayActive(), 'touch'),
+    // Round 4: the on-screen Action button latches the Space context action like the key / pad button.
+    action: () => {
+      if (d.gameplayActive()) d.sampler.pressAction();
+    },
     command: (cmd) => {
       d.onCommand(cmd);
       // Releasing the temporal preview returns the camera to follow; keep the overview if the player had it on.

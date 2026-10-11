@@ -53,12 +53,16 @@ export type SimEvent =
   | (EventBase & { type: 'cellRemoved'; entityId: EntityId; cellId: EntityId; actorId: ActorId | null })
   | (EventBase & { type: 'elevatorStart'; entityId: EntityId; fromY: number; toY: number })
   | (EventBase & { type: 'elevatorArrive'; entityId: EntityId; y: number })
+  /** A lift starts waiting in place (state.held) because an actor straddles its shaft edge (departure or mid-travel). */
+  | (EventBase & { type: 'elevatorHeld'; entityId: EntityId; y: number })
   | (EventBase & { type: 'laserOn'; entityId: EntityId })
   | (EventBase & { type: 'laserOff'; entityId: EntityId })
   | (EventBase & { type: 'receiverLit'; entityId: EntityId })
   | (EventBase & { type: 'receiverUnlit'; entityId: EntityId })
   | (EventBase & { type: 'gateOpen'; entityId: EntityId })
   | (EventBase & { type: 'gateClose'; entityId: EntityId })
+  /** Wants to close (signal dropped) but an actor overlaps the gate cell, so it stays open (QA-2). Like doorBlocked. */
+  | (EventBase & { type: 'gateBlocked'; entityId: EntityId })
   | (EventBase & { type: 'platformDepart'; entityId: EntityId })
   | (EventBase & { type: 'platformArrive'; entityId: EntityId })
   | (EventBase & { type: 'portalActivated'; entityId: EntityId })

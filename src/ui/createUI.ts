@@ -3,6 +3,7 @@ import { defaultPadBindings, type PadBindings } from '../engine/input/gamepadBin
 import type { PadEvent } from '../engine/input/GamepadInput';
 import { defaultKeybinds, type KeyBindings } from '../persistence/keybinds';
 import { defaultSettings, type QualityPreset, type Settings } from '../persistence/settings';
+import { actionTextHTML } from './actionText';
 import { focusFirst, h } from './dom';
 import { KEYBOARD, TOUCH, sameDevice, type GlyphContext, type InputDevice } from './glyphs';
 import { activate, injectPadStyles, navigate } from './padNav';
@@ -20,6 +21,7 @@ import { dismissHomeScreenHint, homeScreenHintDismissed, shouldSuggestHomeScreen
 import { homeScreenHint, TouchControls, type TouchSink } from './touch/TouchControls';
 import { injectTouchStyles } from './touch/touchStyles';
 import type { TouchVisibility } from './touch/visibility';
+import { actionButtonVisible } from './touch/actionButton';
 import type { LevelCompleteStats, LevelEntry, MainMenuData, PauseData, UICallbacks, UIFrame } from './types';
 
 export type ScreenName = 'menu' | 'levels' | 'settings' | 'credits' | 'pause' | 'intro' | 'complete';
@@ -175,6 +177,13 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
     opts.touchEnv,
   );
   el.insertBefore(touch.el, hudLayer);
+  // Short phone screens (<= 360 CSS px tall) in touch mode: hints arrive as a chip (expand on tap), and an
+  // expanded card folds back to the chip as soon as a finger takes the joystick.
+  const shortScreen = (): boolean => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-height: 360px)').matches;
+  hud.autoCollapseHint = () => touch.visibility.touchMode && shortScreen();
+  touch.onStickStart = () => {
+    if (hud.hintExpanded && shortScreen()) hud.collapseHint();
+  };
   el.append(touch.rotateEl);
   if (touch.touchFirst) device = TOUCH;
   el.classList.toggle('rx-touchdev', touch.touchCapable);
@@ -257,10 +266,13 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
     applyGlyphs();
   }
 
+  const glyphs = (): GlyphContext => ({ device, keybinds, padbinds });
+
   /** Pushes the last-used device + bindings to every prompt renderer. */
   function applyGlyphs(): void {
-    const g: GlyphContext = { device, keybinds, padbinds };
+    const g = glyphs();
     hud.glyphs = g;
+    hud.refreshHint();
     timeline.glyphs = g;
     el.classList.toggle('rx-pad', device.kind === 'gamepad');
     el.dataset['input'] = device.kind === 'gamepad' ? device.style : device.kind;
@@ -419,6 +431,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       const tp = frame.prompt;
       const promptOn = !!tp && tp.action !== 'none' && frame.state.status === 'playing' && frame.previewTick == null;
       touch.setPrompt(promptOn && tp ? tp.label : null, tp?.action === 'blocked');
+      touch.setActionAvailable(actionButtonVisible({ level: frame.level, promptActive: promptOn && tp?.action !== 'blocked', entityKind: tp?.entityKind ?? null }));
       const dt = frame.dt ?? 0;
       const live = !paused && frame.state.status === 'playing' && ui.screen === null;
       if (live && hints) {
@@ -484,7 +497,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       pauseData = data;
       setBase(
         'pause',
-        createPause(data, { revealed: hints?.revealedHints ?? [], total: level?.hints.length ?? 0 }, {
+        createPause(data, { revealed: hints?.revealedHints ?? [], total: level?.hints.length ?? 0, html: (t) => actionTextHTML(t, glyphs()) }, {
           onResume: () => cb.onResume?.(),
           onRestart: () => cb.onRestart?.(),
           onSettings: () => ui.showSettings(),
@@ -508,7 +521,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
 
     showLevelIntro(lvl) {
       hudLayer.classList.add('rx-under-intro');
-      setBase('intro', createLevelIntro(lvl, { onBegin: () => cb.onIntroDone?.(), sound }));
+      setBase('intro', createLevelIntro(lvl, { onBegin: () => cb.onIntroDone?.(), sound }, (t) => actionTextHTML(t, glyphs())));
       announce(`Chamber ${lvl.order}: ${lvl.name}. ${lvl.subtitle ?? ''}`);
     },
 
@@ -654,6 +667,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       clearScreens();
       toasts.clear();
       touch.dispose();
+      hud.dispose();
       el.remove();
     },
   };

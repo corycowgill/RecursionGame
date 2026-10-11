@@ -129,7 +129,7 @@ export const level10TheCore: LevelDefinition = {
   parTimeSeconds: 24,
   parEchoes: 3,
   hints: [
-    { text: 'Only echoes can cross the Reliquary Gate. Carry the cell into the shimmer and press E — your echo will finish the job.' },
+    { text: 'Only echoes can cross the Reliquary Gate. Carry the cell into the shimmer and press {interact} — your echo will finish the job.' },
     { text: 'The cell wakes the Core Lift and the Ferry together. Whoever needs to ride either must already be aboard.', afterSeconds: 60 },
     { text: 'The Crown Door needs the crate on the Crown Plate and both timers lit at once: two hands, sixteen tiles apart.', afterSeconds: 120 },
     {

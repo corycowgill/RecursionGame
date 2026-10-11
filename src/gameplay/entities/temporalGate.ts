@@ -15,7 +15,10 @@ import { entityCell } from './common';
  * cell (within one height level), it stays OPEN — like a door held by an occupant — and closes on the first tick
  * the cell is clear. (While open it only admits the actors `allows` lets through, so an occupant is always one it
  * admitted.) A held gate keeps reporting open on its output.
- * Lasers pass through the field. Output: open. Events: gateOpen / gateClose.
+ * Lasers pass through the field. Output: open. Events: gateOpen / gateClose, and gateBlocked (once, when an occupant
+ * starts holding a gate open that wants to close — mirrors doorBlocked). `state.held` records that hold for the
+ * event edge and the renderer; it is feedback only and is excluded from the hash (serialize), so recordings,
+ * golden replays and hashes are unaffected.
  */
 function isOpenFor(e: SimEntity<'temporalGate'>, def: EntityDefinitionOf<'temporalGate'>, actor: ActorState): boolean {
   if (!e.state.open) return false;
@@ -36,6 +39,8 @@ export const temporalGateBehaviour: PuzzleEntityBehaviour<'temporalGate'> = {
     phaseTicks: 0,
   }),
   initialOutput: (_def, s) => s.open,
+  // Hash exactly the pre-round-4 shape: `held` is render/audio feedback only (never read by gameplay).
+  serialize: (s) => ({ open: s.open, phaseTicks: s.phaseTicks }),
   isSolid: () => true,
   isSolidFor: (e, def, actor) => !isOpenFor(e, def, actor),
   blocksLaser: () => false,
@@ -44,10 +49,16 @@ export const temporalGateBehaviour: PuzzleEntityBehaviour<'temporalGate'> = {
     const s = e.state;
     const powered = ctx.inputsPowered(e.id);
     let open = powered === null || ctx.config.requiresSignal === false ? true : powered;
+    let held = false;
     if (!open && s.open) {
       const { col, row } = entityCell(e);
-      if (ctx.actorsOverlappingCell(col, row, e.y).length > 0) open = true; // held open by an occupant
+      if (ctx.actorsOverlappingCell(col, row, e.y).length > 0) {
+        open = true; // held open by an occupant
+        held = true;
+      }
     }
+    if (held && s.held !== true) ctx.emit({ type: 'gateBlocked', tick: ctx.tick, entityId: e.id });
+    if (held || s.held !== undefined) s.held = held;
     if (open !== s.open) {
       ctx.emit({ type: open ? 'gateOpen' : 'gateClose', tick: ctx.tick, entityId: e.id });
       s.open = open;

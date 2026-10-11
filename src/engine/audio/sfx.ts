@@ -627,6 +627,49 @@ function buildGate(e: VoiceEnv): number {
   return 1.2;
 }
 
+/**
+ * Gate held open by an occupant (round 4): the doorBlocked "uh-uh" (two falling detuned squares) re-voiced in the
+ * gate's violet temporal timbre — a wavering FM pair over a stuttering band of field noise — so it reads as the
+ * same warning ("something is in the way, I can't close") but clearly belongs to the field, not a door.
+ */
+function buildGateBlocked(e: VoiceEnv): number {
+  const t = e.t;
+  const lp = filter(e.ctx, 'lowpass', 1800, 0.9);
+  lp.connect(e.out);
+  const vib = osc(e, 'sine', 9, t, t + 0.5);
+  const vg = gain(e.ctx, 18);
+  vib.connect(vg);
+  const a = tone(e, t, 'square', midiToHz(64), 0.04, 0.004, 0.08, 0.05, lp);
+  const b = tone(e, t + 0.15, 'square', midiToHz(63), 0.04, 0.004, 0.1, 0.07, lp);
+  vg.connect(a.detune);
+  vg.connect(b.detune);
+  bell(e, t, midiToHz(76), 0.35, 0.018, 1.41, 1.6, e.wet);
+  // stutter: three short bursts of field noise
+  for (let k = 0; k < 3; k++) burst(e, t + k * 0.07, 'bandpass', 2600 - k * 400, 4, 0.03, 0.05, 'pink');
+  return 0.5;
+}
+
+/**
+ * Lift held mid-move (round 4): brake clamp + a strained, stalled motor (a low saw that sags instead of ramping
+ * up) + a coral two-beep warning, matching the pulsing coral edge the renderer shows.
+ */
+function buildElevatorHeld(e: VoiceEnv): number {
+  const t = e.t;
+  burst(e, t, 'bandpass', 520, 1.4, 0.05, 0.22); // brake clamp
+  thump(e, t, 95, 45, 0.08, 0.25);
+  const m = osc(e, 'sawtooth', 70, t, t + 0.6);
+  m.frequency.exponentialRampToValueAtTime(48, t + 0.5); // motor sags: stalled
+  const lp = filter(e.ctx, 'lowpass', 420, 3);
+  const g = gain(e.ctx, 0);
+  ahr(g.gain, t, 0.12, 0.03, 0.3, 0.2);
+  chain(m, lp, g, e.out);
+  const warn = filter(e.ctx, 'lowpass', 2200, 0.7);
+  warn.connect(e.out);
+  tone(e, t + 0.12, 'square', 880, 0.035, 0.003, 0.06, 0.03, warn);
+  tone(e, t + 0.27, 'square', 880, 0.035, 0.003, 0.06, 0.05, warn);
+  return 0.65;
+}
+
 function buildPortalOn(e: VoiceEnv): number {
   const t = e.t;
   // Rising swell into a D-major-add9 chord with a sub foundation.
@@ -821,6 +864,8 @@ export const RECIPES: Record<string, Recipe> = {
   receiverUnlit: { category: 'mechanical', wet: 0.2, build: buildReceiverUnlit },
   gateOpen: { category: 'temporal', wet: 0.4, build: (e) => buildGate({ ...e, p: { ...e.p, open: 1 } }) },
   gateClose: { category: 'temporal', wet: 0.35, build: (e) => buildGate({ ...e, p: { ...e.p, open: 0 } }) },
+  gateBlocked: { category: 'mechanical', wet: 0.2, build: buildGateBlocked },
+  elevatorHeld: { category: 'mechanical', wet: 0.15, build: buildElevatorHeld },
   portalOn: { category: 'stinger', wet: 0.45, build: buildPortalOn },
   portalOff: { category: 'mechanical', wet: 0.3, build: buildPortalOff },
   entityGeneric: { category: 'mechanical', wet: 0.15, build: buildEntityGeneric },

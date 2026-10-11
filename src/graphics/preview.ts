@@ -27,6 +27,10 @@ import { ScriptRunner } from '../testing/harness/script';
  *  ?t=<tick>        deterministic screenshot mode: fast-forward to <tick>, render settle frames at a fixed
  *                   1/60 s step, then set window.__PREVIEW__.ready = true (Playwright waits on it).
  *  ?quality=low|mobile|medium|high   ?dynres=0|1   ?camera=follow|overview   ?intro=1 (play fly-in in live mode)
+ *  ?palette=highContrast  colour-blind-safe echo palette in 3D (round 4, same as Settings → Echo colours)
+ *  ?held=1          showcase only: the lift is held (pulsing coral edge, stalled machinery) and the temporal gate is
+ *                   held open by an occupant (pulsing gold lamp) — the round-4 blocking feedback
+ *  ?turntable=1     character turntable instead of a scene (front three-quarter studio view, see turntable.ts)
  */
 
 const params = new URLSearchParams(location.search);
@@ -44,6 +48,8 @@ const renderer = createGameRenderer(root, {
   // ?dynres=1 forces the dynamic-resolution guard on (it is off under automation by default), ?dynres=0 off
   ...(params.has('dynres') ? { dynamicResolution: params.get('dynres') !== '0' } : {}),
 });
+if (params.get('palette') === 'highContrast') renderer.setEchoPalette('highContrast');
+const forceHeld = params.get('held') === '1';
 const preview = { ready: false, stats: () => renderer.stats(), renderer };
 (window as unknown as { __PREVIEW__: typeof preview }).__PREVIEW__ = preview;
 
@@ -254,10 +260,10 @@ function showcaseState(tick: number): SimState {
     'e-cell': ent('e-cell', 'energyCell', 7, 3, { socketId: null }),
     'f-socket': ent('f-socket', 'energySocket', 9, 3, { cellId: 'f-cell2', powered: true }),
     'f-cell2': ent('f-cell2', 'energyCell', 9, 3, { socketId: 'f-socket' }),
-    'g-elev': ent('g-elev', 'elevator', 4, 4, { y: elevY, targetIndex: 1, moving: true, dy: 0 }, elevY),
+    'g-elev': ent('g-elev', 'elevator', 4, 4, { y: elevY, targetIndex: 1, moving: true, dy: 0, ...(forceHeld ? { held: true, moving: false } : {}) }, elevY),
     'h-laser': ent('h-laser', 'laserEmitter', 1, 8, { on: true, beamLength: 7000, hitEntityId: 'i-recv', hitActorId: null }),
     'i-recv': ent('i-recv', 'laserReceiver', 8, 8, { lit: true, litBy: 'h-laser', litTicks: 100 }),
-    'j-gate': ent('j-gate', 'temporalGate', 7, 5, { open: true, phaseTicks: tick }),
+    'j-gate': ent('j-gate', 'temporalGate', 7, 5, { open: true, phaseTicks: tick, ...(forceHeld ? { held: true } : {}) }),
     'k-plat': { ...ent('k-plat', 'movingPlatform', 5, 4, { targetIndex: 1, direction: 1, waitTicks: 0, dx: 0, dz: platDz }), z: platZ },
     'l-exit': ent('l-exit', 'exitPortal', 11, 6, { active: true, activeTicks: tick }, 1000),
     'm-crate2': { ...ent('m-crate2', 'crate', 10, 4, { restTicks: 0 }, 500, 'echo:2'), x: Math.round(e2x), z: c(7) + 200 },

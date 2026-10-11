@@ -95,7 +95,7 @@ export const level03TheRelay: LevelDefinition = {
   parEchoes: 2,
   hints: [
     { text: 'The Chrono Door needs both plates held AND the balcony switch pressed — all at the same moment.' },
-    { text: 'Press E facing the crate to lift it, and E again to set it down on the cell in front of you.', afterSeconds: 20 },
+    { text: 'Press {interact} facing the crate to lift it, and {interact} again to set it down on the cell in front of you.', afterSeconds: 20 },
     { text: 'The switch is too far: whoever presses it cannot get back in time. Let an echo press it for you.', afterSeconds: 45 },
     { text: 'Loop 1: crate onto one plate, then stand on the other. Loop 2: press the switch. Then go.', afterSeconds: 90 },
   ],

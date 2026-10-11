@@ -165,6 +165,12 @@ export function createSettings(
             capturing ? 'Press a key…' : b ? bindingLabel(b) : 'Unbound',
           );
           btn.addEventListener('click', () => {
+            // A keyboard rebind is already waiting: a click (mouse, touch, or pad A on any row) cancels it instead
+            // of starting another one.
+            if (capture) {
+              cancelCapture(a, slot);
+              return;
+            }
             capture = { action: a, slot };
             notice = '';
             act.sound('confirm');
@@ -269,6 +275,23 @@ export function createSettings(
     render();
   }
 
+  const root = (): Document => body.ownerDocument;
+  /** Cancels a pending keyboard rebind and leaves focus on `focusAction`/`focusSlot` (default: the pending row). */
+  function cancelCapture(focusAction?: BindableAction, focusSlot?: number): void {
+    const c = capture;
+    if (!c) return;
+    // Keep the player's place: the clicked row, else the row focused now (pad D-pad may have moved), else the pending one.
+    const cur = root().activeElement as HTMLElement | null;
+    const focused = cur?.classList.contains('rx-bind') ? { a: cur.dataset['action'], s: cur.dataset['slot'] } : null;
+    capture = null;
+    notice = 'Rebinding cancelled';
+    act.sound('back');
+    render();
+    const fa = focusAction ?? focused?.a ?? c.action;
+    const fs = focusSlot ?? focused?.s ?? c.slot;
+    (body.querySelector(`.rx-bind[data-action="${fa}"][data-slot="${fs}"]`) as HTMLElement | null)?.focus();
+  }
+
   // Key capture runs in the capture phase on window so gameplay/global handlers never see the key.
   const onKey = (e: KeyboardEvent): void => {
     if (!capture) return;
@@ -276,10 +299,7 @@ export function createSettings(
     e.stopImmediatePropagation();
     const c = capture;
     if (e.code === 'Escape') {
-      capture = null;
-      notice = 'Rebinding cancelled';
-      render();
-      (body.querySelector(`.rx-bind[data-action="${c.action}"][data-slot="${c.slot}"]`) as HTMLElement | null)?.focus();
+      cancelCapture();
       return;
     }
     const b = bindingFromEvent(e.code, e.shiftKey);
@@ -335,7 +355,16 @@ export function createSettings(
   return {
     el,
     setTab,
-    padButton: (index: number) => padRemap?.padButton(index) ?? false,
+    // Any controller button while a KEYBOARD rebind waits cancels it (pad buttons cannot be keyboard bindings); the
+    // press is consumed so A does not also activate the focused row and start a new rebind.
+    padButton: (index: number) => {
+      if (padRemap?.capturing) return padRemap.padButton(index);
+      if (capture) {
+        cancelCapture();
+        return true;
+      }
+      return padRemap?.padButton(index) ?? false;
+    },
     get padCapturing() {
       return padRemap?.capturing ?? false;
     },

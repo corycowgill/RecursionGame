@@ -158,7 +158,13 @@ export class TemporalGateVisual implements EntityVisual {
   private readonly portalMat: THREE.ShaderMaterial;
   private readonly glowMat: THREE.MeshStandardMaterial;
   private readonly rings = new THREE.Group();
+  private readonly lampMat: THREE.MeshStandardMaterial;
+  private readonly baseGlow: THREE.Color;
+  private readonly gold = new THREE.Color(PALETTE.gold);
   private power = 0;
+  private blockedK = 0;
+  /** Rotation the arcs lost while strained (so an un-held gate spins exactly as before round 4). */
+  private lag = 0;
 
   constructor(ctx: EntityVisualContext) {
     const { lib, def } = ctx;
@@ -178,8 +184,14 @@ export class TemporalGateVisual implements EntityVisual {
     p.mesh(p.torus(1.0, 0.13, 64, 12), lib.gunmetal, i, 0, cy, 0);
     p.mesh(p.torus(0.86, 0.04, 64), lib.brassPolished, i, 0, cy, 0);
     this.glowMat = p.mat(lib.emissiveUnique(a, 2.5));
+    this.baseGlow = new THREE.Color(a);
     p.mesh(p.torus(1.0, 0.03, 64), this.glowMat, i, 0, cy, 0.13, false);
     p.mesh(p.torus(1.0, 0.03, 64), this.glowMat, i, 0, cy, -0.13, false);
+    // status lamps on the crown of the ring (same language as the door lintel lamps: teal open, coral closed,
+    // pulsing gold while an occupant holds it open — round 4)
+    this.lampMat = p.mat(lib.emissiveUnique(PALETTE.teal, 2.4));
+    for (const z of [0.155, -0.155]) p.mesh(p.rbox(0.34, 0.08, 0.04, 0.02), this.lampMat, i, 0, cy + 1.31, z, false);
+    p.mesh(p.rbox(0.42, 0.12, 0.27, 0.03), lib.gunmetal, i, 0, cy + 1.31, 0);
     // clock ticks
     const tick = p.box(0.05, 0.16, 0.3);
     for (let k = 0; k < 12; k++) {
@@ -203,8 +215,17 @@ export class TemporalGateVisual implements EntityVisual {
     this.power = damp(this.power, e.state.open ? 1 : 0.22, 6, f.dt);
     this.portalMat.uniforms['uTime']!.value = f.time;
     this.portalMat.uniforms['uPower']!.value = this.power;
-    this.glowMat.emissiveIntensity = 1 + this.power * 2.5;
-    this.rings.rotation.z = f.time * 0.6;
+    // Held open by an occupant (state.held, QA-2): like the door's blocked lamp — pulsing gold — and the field's glow
+    // band warms toward gold with the same pulse, while the arcs slow to a strained crawl.
+    const blocked = e.state.held === true;
+    this.blockedK = damp(this.blockedK, blocked ? 1 : 0, blocked ? 18 : 8, f.dt);
+    const pulse = Math.sin(f.time * 12);
+    this.lampMat.emissive.set(blocked ? PALETTE.gold : e.state.open ? PALETTE.teal : PALETTE.coral);
+    this.lampMat.emissiveIntensity = 2.4 + (blocked ? pulse * 1.2 : 0);
+    this.glowMat.emissive.copy(this.baseGlow).lerp(this.gold, this.blockedK * (0.55 + 0.25 * pulse));
+    this.glowMat.emissiveIntensity = 1 + this.power * 2.5 + this.blockedK * pulse * 0.8;
+    this.lag += f.dt * 0.6 * 0.8 * this.blockedK;
+    this.rings.rotation.z = f.time * 0.6 - this.lag;
     this.root.position.copy(f.pos);
   }
 

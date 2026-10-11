@@ -5,7 +5,7 @@ import { icon } from '../icons';
 import { ringsSVG } from '../rings';
 import { readTouchEnv, isTouchDevice, touchFirst, type TouchEnv } from './env';
 import { GestureTracker, type GestureEvent } from './gestures';
-import { INTERACT_ICON } from './icons';
+import { ACTION_ICON, INTERACT_ICON } from './icons';
 import { JOYSTICK_RADIUS } from './joystick';
 import { touchVisibility, type TouchVisibility, type TouchVisibilityInput } from './visibility';
 
@@ -18,6 +18,8 @@ export interface TouchSink {
   /** Joystick direction in SCREEN axes (y < 0 = up), quantized; [0,0] when released. */
   move(x: Quantized, y: Quantized): void;
   interact(down: boolean): void;
+  /** The Space context action (round 4): one latched press per tap. */
+  action?(): void;
   command(cmd: GameCommand): void;
   /** Pinch zoom, in mouse-wheel deltaY units (positive = zoom out). */
   zoom(deltaY: number): void;
@@ -34,7 +36,7 @@ export interface TouchStateSource {
   timelineExpanded(): boolean;
 }
 
-type BtnId = 'interact' | 'echo' | 'timeline' | 'preview';
+type BtnId = 'interact' | 'action' | 'echo' | 'timeline' | 'preview';
 
 /** Short haptic tick where supported (Android Chrome). iOS Safari has no Vibration API: a silent no-op. */
 export function haptic(ms = 12): void {
@@ -47,7 +49,7 @@ export function haptic(ms = 12): void {
 
 /**
  * ON-SCREEN TOUCH CONTROLS (phones / tablets): floating joystick on the left, Interact / New echo / Timeline /
- * Preview (hold) on the right, pause in the top corner, pinch zoom, two-finger tap overview, plus the portrait
+ * Preview (hold) on the right, plus an Action button (Space) only while the context action is relevant, pause in the top corner, pinch zoom, two-finger tap overview, plus the portrait
  * "rotate your device" overlay. Pointer Events with multi-touch: each finger is tracked by pointerId, so the
  * joystick and a button work at the same time, and buttons act on pointerdown (presses are latched by the
  * sampler, never dropped).
@@ -76,6 +78,9 @@ export class TouchControls {
   /** The overview was on when the controls hid: restore the follow camera when they come back. */
   private overviewReset = false;
   private lastDir: [Quantized, Quantized] = [0, 0];
+  private actionOn = false;
+  /** A finger took the joystick (createUI folds an expanded hint card back to its chip on short screens). */
+  onStickStart: (() => void) | null = null;
   private readonly cleanup: (() => void)[] = [];
 
   constructor(
@@ -95,13 +100,15 @@ export class TouchControls {
       h('button', { class: `rx-tbtn b-${id}`, type: 'button', 'aria-label': aria, 'data-testid': `touch-${id}` }, h('span', { class: 'ic', html: ic }), h('span', { class: 'tx' }, label));
     this.btns = {
       interact: mk('interact', INTERACT_ICON, 'Interact', 'Interact'),
+      action: mk('action', ACTION_ICON, 'Action', 'Context action'),
       echo: mk('echo', icon('record'), 'New echo', 'End the loop and create an echo'),
       timeline: mk('timeline', icon('clock'), 'Timeline', 'Open the timeline'),
       preview: mk('preview', icon('eye'), 'Preview', 'Hold to preview your echoes'),
     };
     this.promptTag = h('span', { class: 'rx-tprompt', hidden: true });
     this.btns.interact.append(this.promptTag);
-    const cluster = h('div', { class: 'rx-tbtns' }, this.btns.preview, this.btns.timeline, this.btns.echo, this.btns.interact);
+    this.btns.action.setAttribute('aria-hidden', 'true');
+    const cluster = h('div', { class: 'rx-tbtns' }, this.btns.preview, this.btns.timeline, this.btns.action, this.btns.echo, this.btns.interact);
     this.pauseBtn = h('button', { class: 'rx-tpause', type: 'button', 'aria-label': 'Pause', 'data-testid': 'touch-pause', html: icon('pause') });
     this.overviewChip = h('div', { class: 'rx-tchip', hidden: true, html: `${icon('zoom')}<span>Overview · two-finger tap to return</span>` });
     this.el = h('div', { class: 'rx-touch', 'data-testid': 'touch-controls', hidden: true }, this.zone, this.ghost, this.joy, cluster, this.pauseBtn, this.overviewChip);
@@ -185,6 +192,30 @@ export class TouchControls {
     this.promptTag.hidden = !on;
   }
 
+  /**
+   * The Space context action matters right now (the faced entity answers it, or the level uses it): the Action
+   * button shows; otherwise it is hidden so the cluster stays uncluttered.
+   */
+  setActionAvailable(on: boolean): void {
+    if (on === this.actionOn) return;
+    this.actionOn = on;
+    const b = this.btns.action;
+    b.classList.toggle('avail', on);
+    b.setAttribute('aria-hidden', String(!on));
+    b.tabIndex = on ? 0 : -1;
+    if (!on) {
+      for (const [pid, id] of this.btnPointers) {
+        if (id !== 'action') continue;
+        this.btnPointers.delete(pid);
+        this.releaseButton('action');
+      }
+    }
+  }
+
+  get actionAvailable(): boolean {
+    return this.actionOn;
+  }
+
   /** Puzzle overview state (two-finger tap), shown as a chip so the player knows how to get back. */
   setOverviewChip(on: boolean): void {
     this.overviewOn = on;
@@ -219,6 +250,7 @@ export class TouchControls {
     for (const e of events) {
       switch (e.type) {
         case 'stickStart':
+          this.onStickStart?.();
           this.ghost.hidden = true;
           this.joy.hidden = false;
           this.joy.style.transform = `translate(${e.stick.ox}px, ${e.stick.oy}px)`;
@@ -287,10 +319,13 @@ export class TouchControls {
   private pressButton(id: BtnId): void {
     const s = this.sink;
     this.btns[id].classList.add('down');
-    haptic(id === 'interact' ? 10 : 14);
+    haptic(id === 'interact' || id === 'action' ? 10 : 14);
     switch (id) {
       case 'interact':
         s?.interact(true);
+        break;
+      case 'action':
+        s?.action?.();
         break;
       case 'echo':
         s?.command({ type: 'rewind' });
@@ -319,6 +354,7 @@ export class TouchControls {
         e.preventDefault();
         e.stopPropagation();
         if (this.btnPointers.has(e.pointerId)) return;
+        if (id === 'action' && !this.actionOn) return;
         // One finger per button: a second finger on a held button is ignored.
         if ([...this.btnPointers.values()].includes(id)) return;
         try {
@@ -342,6 +378,7 @@ export class TouchControls {
       // Keyboard / screen-reader activation (no pointer): a tap-equivalent.
       b.addEventListener('click', (e) => {
         if (e.detail !== 0) return; // pointer-generated click: already handled on pointerdown
+        if (id === 'action' && !this.actionOn) return;
         this.pressButton(id);
         this.releaseButton(id);
       });

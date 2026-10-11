@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { unitsToWorld, type ActorView, type EntityView, type LevelDefinition, type SimEvent, type SimView, type Timeline } from '../contracts';
 import { ActorVisual } from '../../graphics/animation/actorVisual';
+import { selectLookTarget } from '../../graphics/animation/lookTarget';
 import { ContactShadows } from '../../graphics/effects/contactShadows';
 import { EchoIntentLayer } from '../../graphics/effects/echoIntents';
 import type { GhostPath, WalkOn } from '../../graphics/effects/forecast';
@@ -12,7 +13,7 @@ import { buildKit, type BuiltKit } from '../../graphics/environment/kit';
 import { WireNetwork } from '../../graphics/environment/wires';
 import { CARRIABLE_VISUAL_KINDS, createEntityVisual, MovingPlatformVisual, type EntityVisual } from '../../graphics/entities';
 import { MaterialLibrary } from '../../graphics/materials/library';
-import { PALETTE } from '../../graphics/materials/palette';
+import { PALETTE, type EchoPaletteName } from '../../graphics/materials/palette';
 import { CameraRig, type CameraMode } from './CameraRig';
 import { comfortParams, type ComfortParams, type ComfortSettings } from './comfort';
 import { deviceProfile, targetFpsFor } from './device';
@@ -58,6 +59,11 @@ export interface GameRenderer {
   setWalkOns(walkOns: readonly WalkOn[] | null): void;
   /** Temporal-preview ghost paths (`extractGhostPaths`): dashed trails of each echo's upcoming movement. null clears. */
   setGhostPaths(paths: readonly GhostPath[] | null): void;
+  /**
+   * Echo colour palette (Settings → Echo colours, round 4): echo holograms, halos, trails, number badges, intent
+   * badges and ghost paths use the same colours as the UI timeline tracks. 'highContrast' = colour-blind-safe set.
+   */
+  setEchoPalette(palette: EchoPaletteName): void;
   /**
    * Player comfort settings: camera sensitivity (wheel zoom rate, follow/pan speed) and reduced motion (no camera
    * shake, short intro without orbit swing, damped screen distortion and flashes, fewer particles, no ambient bob).
@@ -128,6 +134,10 @@ class GameRendererImpl implements GameRenderer {
   private readonly intents = new EchoIntentLayer();
   private readonly ghosts = new GhostPathLayer();
   private comfort: ComfortParams = comfortParams();
+  private echoPalette: EchoPaletteName = 'default';
+  private timeline: Timeline | null = null;
+  private readonly lookTmp = new THREE.Vector3();
+  private readonly defById = new Map<string, LevelDefinition['entities'][number]>();
   private levelId = '';
   private readonly key: THREE.DirectionalLight;
   private readonly rim: THREE.DirectionalLight;
@@ -278,6 +288,8 @@ class GameRendererImpl implements GameRenderer {
     this.clearLevel();
     this.level = level;
     this.levelId = level.id;
+    this.defById.clear();
+    for (const d of level.entities) this.defById.set(d.id, d);
     const kit = buildKit(level, this.lib);
     this.kit = kit;
     this.levelRoot.add(kit.group);
@@ -485,7 +497,7 @@ class GameRendererImpl implements GameRenderer {
       seen.add(actor.id);
       let v = this.actorVisuals.get(actor.id);
       if (!v) {
-        v = new ActorVisual(this.lib, actor, { trail: this.q.trails, lod: this.q.characterLod });
+        v = new ActorVisual(this.lib, actor, { trail: this.q.trails, lod: this.q.characterLod, palette: this.echoPalette });
         this.actorVisuals.set(actor.id, v);
         this.actorRoot.add(v.root);
         if (v.trailMesh) this.fxRoot.add(v.trailMesh);
@@ -493,6 +505,9 @@ class GameRendererImpl implements GameRenderer {
       v.setEchoIndex(actor.echoIndex);
       const pa = prev.actors.find((x) => x.id === actor.id);
       const pos = this.actorPos(actor, pa, a, this.tmpB);
+      // head look: the interactable actually targeted, else (idle) the next echo-intent target nearby
+      const look = selectLookTarget(state, actor, this.timeline?.levelId === this.levelId ? this.timeline : null, (id) => this.defById.get(id));
+      v.setLookTarget(look ? this.lookTmp.set(look.x, look.y, look.z) : null);
       v.update(dt, actor, pos, actor.carrying !== null);
     }
     for (const [id, v] of this.actorVisuals) {
@@ -649,6 +664,7 @@ class GameRendererImpl implements GameRenderer {
   }
 
   setTimeline(timeline: Timeline | null): void {
+    this.timeline = timeline;
     this.intents.setTimeline(timeline);
   }
 
@@ -658,6 +674,15 @@ class GameRendererImpl implements GameRenderer {
 
   setGhostPaths(paths: readonly GhostPath[] | null): void {
     this.ghosts.setPaths(paths && paths.length ? paths : null);
+  }
+
+  setEchoPalette(palette: EchoPaletteName): void {
+    const p: EchoPaletteName = palette === 'highContrast' ? 'highContrast' : 'default';
+    if (p === this.echoPalette) return;
+    this.echoPalette = p;
+    for (const v of this.actorVisuals.values()) v.setPalette(p);
+    this.intents.setPalette(p);
+    this.ghosts.setPalette(p);
   }
 
   setComfort(c: Partial<ComfortSettings>): void {

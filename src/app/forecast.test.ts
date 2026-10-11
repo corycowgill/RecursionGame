@@ -6,7 +6,7 @@ import { FORECAST_STEP, sampleOf, walkOnTriggers } from '../graphics/effects/for
 import { CAMPAIGN_LEVELS } from '../levels/definitions';
 import { EchoForecastController, InlineForecastBackend, type ForecastBackend } from './forecast';
 import { ForecastEngine } from './forecastEngine';
-import { solutionFor } from './flow';
+import { solutionFor } from './solutions';
 
 const L1 = CAMPAIGN_LEVELS[0] as LevelDefinition; // Echo 1 walks to the balcony plate and stays on it
 
