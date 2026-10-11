@@ -260,7 +260,7 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
         if ((c + r) % 2 === 0) b.cube(lib.brass, { x: cx, y: base + WALL_H + 0.3, z: cz }, T + 0.06, 0.05, 0.3, { cast: false, rotY: capRot });
         else {
           // alternate caps carry a pale inspection plate with a status pip (rhythm along the dark wall tops)
-          b.cube(lib.ivory, { x: cx, y: base + WALL_H + 0.29, z: cz }, T - 0.5, 0.03, 0.8, { cast: false, rotY: capRot, color: new THREE.Color(0.6, 0.62, 0.66) });
+          b.cube(lib.ivory, { x: cx, y: base + WALL_H + 0.29, z: cz }, T - 0.5, 0.03, 0.8, { cast: false, rotY: capRot, color: new THREE.Color(0.36, 0.38, 0.42) });
           b.cube(lib.glow, { x: cx, y: base + WALL_H + 0.31, z: cz }, 0.12, 0.02, 0.12, { cast: false, receive: false, color: (c + r) % 4 === 1 ? cyanStrip : amber });
         }
         for (const d of open) {
@@ -316,7 +316,7 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
         b.cube(lib.glow, f.at(0.42, 2.95, 0.02), 0.06, 0.06, 0.03, { rotY, cast: false, receive: false, color: amber });
         break;
       case 'conduit':
-        b.add(conduitHousingGeo, lib.gunmetalDark, f.at(0, WALL_H * 0.5, 0.03), { rotY });
+        b.add(conduitHousingGeo, lib.gunmetalDark, f.at(0, WALL_H * 0.5, 0.03), { rotY, cast: false });
         b.cube(lib.glow, f.at(0, WALL_H * 0.5, 0.075), 0.07, WALL_H * 0.62, 0.05, { rotY, cast: false, receive: false, color: cyanStrip });
         for (const y of [WALL_H * 0.16, WALL_H * 0.84]) b.cube(lib.brass, f.at(0, y, 0.05), 0.32, 0.1, 0.12, { rotY, cast: false });
         break;
@@ -325,7 +325,7 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
         const y0 = 1.3;
         b.add(winPane, lib.gunmetalDark, f.at(0, y0 - 0.06, 0.004), { rotY, cast: false, scale: new THREE.Vector3(1.22, 1.08, 1) });
         b.add(winPane, paneMat, f.at(0, y0, 0.01), { rotY, cast: false, receive: false, color: new THREE.Color(1, 1, 1) });
-        b.add(winFrame, lib.brass, f.at(0, y0 - 0.12, 0.012), { rotY });
+        b.add(winFrame, lib.brass, f.at(0, y0 - 0.12, 0.012), { rotY, cast: false });
         b.cube(lib.brass, f.at(0, y0 - 0.1, 0.1), 1.45, 0.08, 0.2, { rotY, cast: false });
         break;
       }
@@ -366,14 +366,14 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
       case 'niche': {
         // arch niche: brass arch frame, dark recess, warm glow at its head
         const archRot = f.d === 2 ? 0 : f.d === 0 ? Math.PI : f.d === 1 ? Math.PI / 2 : -Math.PI / 2;
-        b.add(nicheFrame, lib.brass, f.at(0, 0.35, 0.01), { rotY: archRot });
+        b.add(nicheFrame, lib.brass, f.at(0, 0.35, 0.01), { rotY: archRot, cast: false });
         b.add(nicheBack, lib.gunmetalDark, f.at(0, 0.35, 0.012), { rotY: archRot, cast: false });
         b.cube(lib.glow, f.at(0, 2.35, 0.05), 0.22, 0.15, 0.05, { rotY, cast: false, receive: false, color: glow(PALETTE.warmLamp, 2.6) });
         lights.push({ position: new THREE.Vector3(...f.arr(0, 2.2, 0.6)), color: PALETTE.warmLamp, intensity: 4, distance: 6, priority: 1 });
         break;
       }
       case 'sconce': {
-        b.add(sconceGeo, lib.brass, f.at(0, 2.6, 0.08), { rotY });
+        b.add(sconceGeo, lib.brass, f.at(0, 2.6, 0.08), { rotY, cast: false });
         b.cube(lib.glow, f.at(0, 2.6, 0.15), 0.14, 0.3, 0.05, { rotY, cast: false, receive: false, color: glow(PALETTE.warmLamp, 3.2) });
         if (lampCounter++ % 2 === 0 || k === 'back')
           lights.push({ position: new THREE.Vector3(...f.arr(0, 2.7, 0.58)), color: PALETTE.warmLamp, intensity: 6, distance: 7, priority: 1 });
@@ -488,8 +488,8 @@ function addPillar(b: Batcher, lib: MaterialLibrary, x: number, y: number, z: nu
 
 function addRailing(b: Batcher, lib: MaterialLibrary, x: number, y: number, z: number, arms: number[]): void {
   const postGeo = b.rbox(0.14, 1.0, 0.14, 0.03, 1);
-  b.add(postGeo, lib.brass, { x, y: y + 0.5, z });
-  b.add(b.rbox(0.3, 0.14, 0.3, 0.03, 1), lib.gunmetalDark, { x, y: y + 0.07, z });
+  b.add(postGeo, lib.brass, { x, y: y + 0.5, z }, { cast: false });
+  b.add(b.rbox(0.3, 0.14, 0.3, 0.03, 1), lib.gunmetalDark, { x, y: y + 0.07, z }, { cast: false });
   const gold = lib.glowColor(PALETTE.gold, 2.4);
   for (const d of arms) {
     const len = T / 2;

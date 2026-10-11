@@ -72,8 +72,26 @@ export class AnimatedParts {
       }
       im.castShadow = false;
       im.receiveShadow = false;
-      // instances move every frame: never cull on a stale bounding sphere
-      im.frustumCulled = false;
+      // Instances move every frame, so cull on a sphere that contains every pose: the base origins grown by
+      // each part's reach (local offset + geometry radius, times scale, plus slide amplitude).
+      if (!e.geo.boundingSphere) e.geo.computeBoundingSphere();
+      const gr = e.geo.boundingSphere?.radius ?? 1;
+      const box = new THREE.Box3();
+      const o = new THREE.Vector3();
+      const lp = new THREE.Vector3();
+      const ls = new THREE.Vector3();
+      const q = new THREE.Quaternion();
+      const bs = new THREE.Vector3();
+      for (const it of e.items) {
+        it.base.decompose(o, q, bs);
+        it.local.decompose(lp, q, ls);
+        const scale = Math.max(bs.x, bs.y, bs.z);
+        const reach = (lp.length() + gr * Math.max(ls.x, ls.y, ls.z)) * scale + (it.motion.slide?.amp ?? 0);
+        box.expandByPoint(o.clone().addScalar(reach));
+        box.expandByPoint(o.clone().addScalar(-reach));
+      }
+      im.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+      im.frustumCulled = true;
       e.mesh = im;
       this.group.add(im);
     }

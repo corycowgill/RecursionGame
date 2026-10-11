@@ -6,7 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
  * through window.__RECURSION__ instead of relying on wall-clock timing.
  */
 
-const SHOTS = 'docs/art-direction/screenshots';
+// Review screenshots go to the git-ignored test-results/ (writing them into docs/ bloated the repo on every run).
+const SHOTS = 'test-results/smoke-shots';
 
 type Hook = {
   mode: string;

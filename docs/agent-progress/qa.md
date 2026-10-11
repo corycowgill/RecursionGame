@@ -28,9 +28,9 @@ agents, headless Chromium 1194 with SwiftShader WebGL). Results are real; nothin
 | QA-0b | Medium (physics: illegal ledge drop) | same | **Fixed** by QA (minimal) |
 | QA-4 | High (crash/DoS on load) | `src/persistence/save.ts` (UI) | **Fixed** by QA (minimal) |
 | QA-5 | Medium (UX: wrong lock state, next chamber unselectable) | `src/ui/createUI.ts` + `src/app/bootstrap.ts` | **Fixed** by QA (minimal, additive callback) |
-| QA-1 | Medium (visual + walking on air; reproduced in **L05 Perfect Timing**) | gameplay `movingPlatform` + engine surfaces | **Open** — repro `it.fails`, tallied by the fuzzer |
-| QA-2 | Medium (actor left inside a solid) | gameplay `temporalGate` | **Open** — repro `it.fails` |
-| QA-3 | Low (few-tick body clip) | gameplay `elevator` | **Open** — repro `it.fails` |
+| QA-1 | Medium (visual + walking on air; reproduced in **L05 Perfect Timing**) | gameplay `movingPlatform` + engine surfaces | **Fixed (round 2)** — repro is a normal passing test; fuzzer no longer excuses it |
+| QA-2 | Medium (actor left inside a solid) | gameplay `temporalGate` | **Fixed (round 2)** — repro is a normal passing test |
+| QA-3 | Low (few-tick body clip) | gameplay `elevator` | **Fixed (round 2)** — repro is a normal passing test |
 
 Details:
 

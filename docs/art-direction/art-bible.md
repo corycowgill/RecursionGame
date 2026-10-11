@@ -1,7 +1,9 @@
 # RECURSION Art Bible (v1, Graphics / Technical Art)
 
-Visual target: `concept-sheet.png`. Screenshots of the live renderer are in `screenshots/`. `v1-*` is the
-first pass, `v6-*` and `v7-*` are current. Capture more with `src/graphics/tools/capture-screenshots.mjs`.
+Visual target: `concept-sheet.png`. Current screenshots of the live game are `screenshots/final-*.png`
+(per-chamber mid-solve shots, `final-character.png` close-up, `final-L05-preview.png` Q ghost paths, menus).
+Older `v*-*`, `ui-*`, `levels-*` and `integration-*` files are historical iteration shots. Capture renderer
+shots with `src/graphics/tools/capture-screenshots.mjs` (write iteration shots outside `docs/`).
 
 ## 1. Pillars of the look
 1. **Monumental, warm interior; vast, cool exterior.** The chamber is lit warm (brass, amber lamps,

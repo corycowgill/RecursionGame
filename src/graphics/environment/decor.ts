@@ -279,7 +279,7 @@ export class DecorBuilder {
       const s = new THREE.Vector3(scale, scale, 1);
       b.add(paneGeo, lib.gunmetalDark, f.at(0, 0.38, 0.004), { rotY: f.rotY, cast: false, scale: new THREE.Vector3(scale * 1.12, scale * 1.05, 1) });
       b.add(paneGeo, this.obsPane, f.at(0, 0.45, 0.012), { rotY: f.rotY, cast: false, receive: false, scale: s, color: new THREE.Color(1.1, 1.1, 1.1) });
-      b.add(frameGeo, lib.brass, f.at(0, 0.3, 0.02), { rotY: f.rotY, scale: s });
+      b.add(frameGeo, lib.brass, f.at(0, 0.3, 0.02), { rotY: f.rotY, scale: s, cast: false });
       // mullion cross
       b.cube(lib.brass, f.at(0, 0.45 + WH * 0.45 * scale, 0.04), 0.05, WH * 0.9 * scale, 0.05, { rotY: f.rotY, cast: false });
       b.cube(lib.brass, f.at(0, 0.45 + WH * 0.55 * scale, 0.04), 1.36 * scale, 0.05, 0.05, { rotY: f.rotY, cast: false });
@@ -317,7 +317,7 @@ export class DecorBuilder {
     const cz = (d.row + 0.5) * T;
     const base = this.base(d);
     b.tube(lib.gunmetalDark, { x: cx, y: base + 0.1, z: cz }, 0.16, 0.2, { seg: 10 });
-    b.add(b.cyl(0.05, 0.08, 2.4, 8), lib.brass, { x: cx, y: base + 1.2, z: cz });
+    b.add(b.cyl(0.05, 0.08, 2.4, 8), lib.brass, { x: cx, y: base + 1.2, z: cz }, { cast: false });
     b.tube(lib.brass, { x: cx, y: base + 2.33, z: cz }, 0.2, 0.05, { seg: 12, cast: false });
     b.add(b.cyl(0.18, 0.12, 0.3, 12), lib.glow, { x: cx, y: base + 2.5, z: cz }, { cast: false, receive: false, color: lib.glowColor(PALETTE.warmLamp, 3) });
     b.tube(lib.brass, { x: cx, y: base + 2.67, z: cz }, 0.21, 0.05, { seg: 12, cast: false });
@@ -408,8 +408,8 @@ export class DecorBuilder {
     switch (variant) {
       case 'gears': {
         plate(1.7, 2.3, 1.75);
-        this.gear(f, -0.28, 2.05, 0.2, 0.55, 16, 0.5);
-        this.gear(f, 0.42, 1.38, 0.2, 0.36, 11, -0.5 * (0.55 / 0.36), 0.2);
+        this.gear(f, -0.28, 2.05, 0.2, 0.55, 12, 0.5);
+        this.gear(f, 0.42, 1.38, 0.2, 0.36, 12, -0.5 * (0.55 / 0.36), 0.2);
         this.gear(f, 0.38, 2.62, 0.26, 0.24, 8, -0.5 * (0.55 / 0.24), 0.4, lib.gunmetal);
         this.gear(f, -0.45, 1.1, 0.26, 0.2, 8, 0.9, 0.1, lib.gunmetal);
         b.cube(lib.glow, f.at(0, 0.75, 0.085), 1.2, 0.04, 0.02, { rotY, cast: false, receive: false, color: amber });
@@ -430,7 +430,7 @@ export class DecorBuilder {
         hand(0.4, 0.06, -0.08, lib.gunmetalDark);
         hand(0.6, 0.035, -0.9, lib.brass);
         b.cube(lib.glow, f.at(0, 2.0, 0.19), 0.08, 0.08, 0.02, { rotY, cast: false, receive: false, color: cyan });
-        this.gear(f, -0.55, 0.95, 0.16, 0.3, 10, 0.7);
+        this.gear(f, -0.55, 0.95, 0.16, 0.3, 12, 0.7);
         this.gear(f, 0.5, 1.0, 0.16, 0.24, 8, -0.87, 0.3);
         break;
       }
@@ -457,7 +457,7 @@ export class DecorBuilder {
         for (let i = 0; i < 6; i++)
           parts.add(b.box(1, 1, 1), lib.gunmetalDark, drum, new THREE.Matrix4().makeRotationZ((i / 6) * Math.PI * 2).multiply(new THREE.Matrix4().makeTranslation(0, 0.37, 0)).multiply(new THREE.Matrix4().makeScale(0.05, 0.03, 1.07)), { spin: 0.8 });
         b.cube(lib.gunmetalDark, f.at(0.2, 0.62, 0.62), 0.03, 1.6, 0.03, { rotY, cast: false });
-        this.gear(f, 0.62, 2.35, 0.2, 0.3, 10, -1.2);
+        this.gear(f, 0.62, 2.35, 0.2, 0.3, 12, -1.2);
         break;
       }
       case 'archive': {
@@ -569,8 +569,8 @@ export class DecorBuilder {
       // meshing gears lying flat
       const g = (x: number, z: number, r: number, teeth: number, spin: number, mat: THREE.Material) => parts.add(clock.gear(teeth), mat, flat(cx + x, base - 0.5, cz + z), new THREE.Matrix4().makeScale(r, r, r), { spin });
       const along = f0 % 2 === 0 ? 1 : 0;
-      g(-0.32 * along, -0.32 * (1 - along), 0.5, 16, 0.5, lib.brass);
-      g(0.4 * along, 0.4 * (1 - along), 0.34, 11, -0.5 * (0.5 / 0.34), lib.brass);
+      g(-0.32 * along, -0.32 * (1 - along), 0.5, 12, 0.5, lib.brass);
+      g(0.4 * along, 0.4 * (1 - along), 0.34, 12, -0.5 * (0.5 / 0.34), lib.brass);
       g(0.38 * (1 - along) + 0.1 * along, 0.38 * along, 0.22, 8, 0.9, lib.gunmetal);
     }
   }
@@ -585,24 +585,25 @@ export class DecorBuilder {
     b.tube(lib.gunmetalDark, { x: cx, y: base + 0.015, z: cz }, 0.46, 0.03, { seg: 24, cast: false });
     b.add(clock.torus, lib.brass, { x: cx, y: base + 0.03, z: cz }, { rotX: Math.PI / 2, scale: new THREE.Vector3(0.44, 0.44, 0.6), cast: false });
     b.tube(lib.glow, { x: cx, y: base + 0.035, z: cz }, 0.2, 0.012, { seg: 20, cast: false, receive: false, color: lib.glowColor(color, 1.3) });
-    // text panel facing the camera side (south), tilted back toward the iso camera
+    // Text projected as a low, nearly flat panel hovering over the disc: readable from the iso camera, and never
+    // standing between the camera and an actor (an upright panel would sit over whoever walks behind it).
     const text = typeof d.params?.['text'] === 'string' ? d.params['text'] : '';
     const tex = hologramTexture(text);
     const mat = hologramMaterial(tex, color);
-    const geo = new THREE.PlaneGeometry(3.4, 0.85);
+    const geo = new THREE.PlaneGeometry(3.2, 0.8);
     owned.push(geo);
     ownedMats.push(mat);
     ownedTex.push(tex);
     const panel = new THREE.Mesh(geo, mat);
-    panel.position.set(cx, base + 2.45, cz);
-    panel.rotation.x = -0.45;
+    panel.position.set(cx, base + 0.42, cz);
+    panel.rotation.x = -1.2;
     panel.renderOrder = 7;
     extra.add(panel);
     this.uniforms.push(mat.uniforms['uTime']!);
-    // projection cone from the disc (narrow end) up to the panel (wide end)
+    // short emitter glow column from the disc up to the panel
     this.cones.push({
-      m: new THREE.Matrix4().compose(new THREE.Vector3(cx, base + 0.05, cz), new THREE.Quaternion(), new THREE.Vector3(1.55, 2.0, 0.45)),
-      color: new THREE.Color(color).multiplyScalar(0.8),
+      m: new THREE.Matrix4().compose(new THREE.Vector3(cx, base + 0.04, cz), new THREE.Quaternion(), new THREE.Vector3(1.35, 0.36, 0.4)),
+      color: new THREE.Color(color).multiplyScalar(0.7),
     });
   }
 
@@ -626,7 +627,7 @@ export class DecorBuilder {
     const cx = (d.col + 0.5) * T - DX[facing]! * (T / 2 - 0.3);
     const cz = (d.row + 0.5) * T - DZ[facing]! * (T / 2 - 0.3);
     const f = this.frame(cx, base, cz, facing);
-    b.add(geo, lib.banner, f.at(0, 2.2, 0), { rotY: f.rotY, cast: true });
+    b.add(geo, lib.banner, f.at(0, 2.2, 0), { rotY: f.rotY, cast: false });
     for (const s of [-1, 1]) {
       b.tube(lib.brass, f.at(s * 0.62, 1.65, 0), 0.04, 3.3, { seg: 8 });
       b.cube(lib.gunmetalDark, f.at(s * 0.62, 0.08, 0), 0.24, 0.16, 0.34);

@@ -68,7 +68,17 @@ export class Batcher {
     sz: number,
     o: { rotY?: number; rotX?: number; rotZ?: number; cast?: boolean; receive?: boolean; color?: THREE.Color } = {},
   ): void {
-    this.add(this.box(1, 1, 1), mat, pos, { ...o, scale: this.scaleTmp.set(sx, sy, sz) });
+    this.add(this.box(1, 1, 1), mat, pos, { ...o, ...Batcher.partFlags(mat), scale: this.scaleTmp.set(sx, sy, sz) });
+  }
+
+  /**
+   * Shadow flags for unit parts are decided per material, not per call, so each material's parts stay in ONE
+   * InstancedMesh (mixed flags would split it into two draw calls, plus a shadow pass each): unlit glow and
+   * transparent glass neither cast nor receive; everything else casts and receives.
+   */
+  private static partFlags(mat: THREE.Material): { cast: boolean; receive: boolean } {
+    const lit = !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial && !mat.transparent;
+    return { cast: lit, receive: lit };
   }
 
   /** Unit-cylinder part (radius r, height h, along local y) scaled per instance; shares one mesh per material. */
@@ -79,7 +89,9 @@ export class Batcher {
     h: number,
     o: { rotY?: number; rotX?: number; rotZ?: number; cast?: boolean; receive?: boolean; color?: THREE.Color; seg?: number } = {},
   ): void {
-    this.add(this.cyl(1, 1, 1, o.seg ?? 12), mat, pos, { ...o, scale: this.scaleTmp.set(r, h, r) });
+    // two segment tiers only (thin fittings / large drums), so tubes share as few meshes as possible
+    const seg = (o.seg ?? 12) > 14 ? 20 : 10;
+    this.add(this.cyl(1, 1, 1, seg), mat, pos, { ...o, ...Batcher.partFlags(mat), scale: this.scaleTmp.set(r, h, r) });
   }
 
   add(

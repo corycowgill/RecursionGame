@@ -277,7 +277,7 @@ export function buildBackdrop(lib: MaterialLibrary, centre: THREE.Vector3, span:
     { m: at(centre.x + 40, centre.y - 10, centre.z - span * 1.6 - 190, 0, -0.15), r: 52, speed: -0.012, teeth: 0.5, glow: 1.0, color: PALETTE.gold },
     // horizontal halos encircling the chamber below the floor
     { m: at(centre.x, -9, centre.z, -Math.PI / 2, 0), r: span * 0.62 + 4, speed: 0.02, teeth: 0.3, glow: 0.9 },
-    { m: at(centre.x, -20, centre.z, -Math.PI / 2, 0), r: span * 0.85 + 8, speed: -0.012, teeth: 0.3, glow: 0.8, color: PALETTE.gold },
+    { m: at(centre.x, -30, centre.z, -Math.PI / 2, 0), r: span * 0.72 + 6, speed: -0.012, teeth: 0.3, glow: 0.8, color: PALETTE.gold },
   ];
   for (const sp of ringSpecs) addClockworkRing(parts, clock, lib, sp.m, sp.r, { teeth: sp.teeth, speed: sp.speed, glow: sp.glow, ...(sp.color !== undefined ? { color: sp.color } : {}) });
   group.add(parts.build('backdrop-rings'));

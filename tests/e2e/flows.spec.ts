@@ -141,7 +141,8 @@ test('pause menu: Resume continues, Restart clears echoes, Main menu returns to 
 
 test('settings persist across a reload (volume, reduced motion, quality preset)', async ({ page }) => {
   const errors = trackErrors(page);
-  await bootToMenu(page);
+  // No ?quality= override here: a URL override locks the Settings quality selector (checked at the end).
+  await bootToMenu(page, '');
   await page.getByTestId('menu-settings').click();
   const settings = page.getByTestId('settings');
   await expect(settings).toBeVisible();
@@ -174,6 +175,15 @@ test('settings persist across a reload (volume, reduced motion, quality preset)'
   await expect(settings.getByRole('switch', { name: 'Reduced motion' })).toHaveAttribute('aria-checked', String(!wasReduced));
   await settings.getByRole('tab', { name: 'Display' }).click();
   await expect(settings.getByRole('group', { name: 'Quality preset' }).getByRole('button', { name: 'Medium' })).toHaveAttribute('aria-pressed', 'true');
+
+  // A ?quality= URL override is shown as the active preset and locks the selector; the saved preset is untouched.
+  await bootToMenu(page, '?quality=low');
+  await page.getByTestId('menu-settings').click();
+  await settings.getByRole('tab', { name: 'Display' }).click();
+  const group = settings.getByRole('group', { name: 'Quality preset' });
+  await expect(group.getByRole('button', { name: 'Low' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(group.getByRole('button', { name: 'Medium' })).toBeDisabled();
+  expect(((await readSave(page))?.['settings'] as Record<string, unknown>)['quality']).toBe('medium');
   expect(errors).toEqual([]);
 });
 
