@@ -1,4 +1,5 @@
 import { arrowNav, esc, h } from '../dom';
+import { deviceHintHTML, padHintHTML } from '../glyphs';
 import { icon } from '../icons';
 import { ringsSVG } from '../rings';
 import type { MainMenuData } from '../types';
@@ -66,7 +67,10 @@ export function createMainMenu(data: MainMenuData, act: MainMenuActions): Screen
     class: 'rx-menu-foot',
     html:
       `<span>${esc(data.version ?? 'v0.1')} · Ascendant Facility</span>` +
-      `<span><span class="rx-key cyan">↑</span> <span class="rx-key cyan">↓</span> Navigate &nbsp; <span class="rx-key cyan">Enter</span> Select</span>`,
+      `<span>${deviceHintHTML(
+        '<span class="rx-key cyan">↑</span> <span class="rx-key cyan">↓</span> Navigate &nbsp; <span class="rx-key cyan">Enter</span> Select',
+        `${padHintHTML(12)}${padHintHTML(13)} Navigate &nbsp; ${padHintHTML(0)} Select &nbsp; ${padHintHTML(1)} Back`,
+      )}</span>`,
   });
   const el = h('div', { class: 'rx-screen rx-backdrop rx-menu', role: 'dialog', 'aria-label': 'Recursion main menu', 'data-testid': 'main-menu' }, rings, logo, aside, foot);
   const off = arrowNav(list);

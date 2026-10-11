@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PALETTE } from '../materials/palette';
 import type { MaterialLibrary } from '../materials/library';
 import { createHologramMaterial, type HologramUniforms } from '../shaders/hologram';
-import { characterGeometries, createSuitMaterial, RIG, type BoneName } from './characterModel';
+import { characterGeometries, createSuitMaterial, RIG, type BoneName, type CharacterLod } from './characterModel';
 
 /**
  * Stylized protagonist (heroic proportions, ~7 heads): segmented white / ivory armour over a dark undersuit,
@@ -113,13 +113,20 @@ export class Character {
   private readonly tmp2 = new THREE.Vector3();
   private readonly inv = new THREE.Matrix4();
 
-  constructor(_lib: MaterialLibrary, readonly variant: CharacterVariant, tint: number = PALETTE.cyan, seed: number = tint) {
+  constructor(
+    _lib: MaterialLibrary,
+    readonly variant: CharacterVariant,
+    tint: number = PALETTE.cyan,
+    seed: number = tint,
+    /** Mesh level of detail (quality preset): 1 = reduced tessellation, no clearcoat. */
+    readonly lod: CharacterLod = 0,
+  ) {
     this.rand = mulberry32(seed * 2654435761);
     this.time = this.rand() * 10;
     this.nextShift = 2 + this.rand() * 4;
     this.nextGlance = 1.5 + this.rand() * 3;
     if (variant === 'player') {
-      this.material = createSuitMaterial();
+      this.material = createSuitMaterial(lod);
     } else {
       const h = createHologramMaterial(tint, { fill: 0.13, rim: 1.45, seed: this.rand() * 10 });
       this.holograms.push(h);
@@ -130,7 +137,7 @@ export class Character {
   }
 
   private build(): number {
-    const geos = characterGeometries();
+    const geos = characterGeometries(this.lod);
     const b = this.bones;
     const names = Object.keys(geos) as BoneName[];
     for (const n of names) b[n] = new THREE.Group();

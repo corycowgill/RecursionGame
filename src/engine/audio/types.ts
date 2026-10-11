@@ -76,6 +76,11 @@ export interface AudioSystem {
   setVolumes(v: Partial<AudioVolumes>): void;
   /** Game paused: machinery loops duck, music is filtered. */
   setPaused(paused: boolean): void;
+  /**
+   * Page hidden (tab switched, app backgrounded, phone locked): suspends the AudioContext so nothing plays or is
+   * scheduled; `false` resumes it (if the browser refuses outside a gesture, the next `unlock()` retries).
+   */
+  setBackgrounded?(hidden: boolean): void;
   playUi(kind: UiSoundKind): void;
   /** Manual scheduler pump (music/ambience lookahead). Called internally by an interval; tests call it. */
   update(): void;

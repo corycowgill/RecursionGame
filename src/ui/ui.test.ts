@@ -49,6 +49,7 @@ beforeEach(() => {
     onTimelineToggle: vi.fn(),
     onSettingsChange: vi.fn(),
     onKeybindsChange: vi.fn(),
+    onPadBindsChange: vi.fn(),
     onIntroDone: vi.fn(),
     onNextLevel: vi.fn(),
     onReplayLevel: vi.fn(),
@@ -252,7 +253,8 @@ describe('createUI', () => {
     ui.showSettings();
     const seg1 = root.querySelector('.rx-seg[aria-label="Quality preset"]') as HTMLElement;
     expect(seg1.classList.contains('locked')).toBe(false);
-    expect(seg1.querySelector('button[aria-pressed="true"]')!.textContent).toBe('High');
+    // default preset is 'auto' (renderer picks mobile/high by device) since the round-3 mobile work
+    expect(seg1.querySelector('button[aria-pressed="true"]')!.textContent).toBe('Auto');
   });
 
   it('level intro and completion screens', () => {

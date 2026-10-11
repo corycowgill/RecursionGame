@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { unitsToWorld, type ActorView, type EntityView, type LevelDefinition, type SimEvent, type SimView, type Timeline } from '../contracts';
 import { ActorVisual } from '../../graphics/animation/actorVisual';
+import { ContactShadows } from '../../graphics/effects/contactShadows';
 import { EchoIntentLayer } from '../../graphics/effects/echoIntents';
 import type { GhostPath, WalkOn } from '../../graphics/effects/forecast';
 import { GhostPathLayer } from '../../graphics/effects/ghostPaths';
@@ -14,9 +15,12 @@ import { MaterialLibrary } from '../../graphics/materials/library';
 import { PALETTE } from '../../graphics/materials/palette';
 import { CameraRig, type CameraMode } from './CameraRig';
 import { comfortParams, type ComfortParams, type ComfortSettings } from './comfort';
+import { deviceProfile, targetFpsFor } from './device';
 import { createEnvironmentTexture } from './environmentMap';
 import { PostFX } from './PostFX';
+import { estimateTextureMemory, type TextureMemory } from './memory';
 import { QUALITY_PRESETS, type QualityLevel, type QualitySettings } from './quality';
+import { ResolutionController } from './resolution';
 
 /**
  * GameRenderer — the public rendering facade the app wires in.
@@ -63,20 +67,46 @@ export interface GameRenderer {
   playIntro(): void;
   /** Camera yaw in 45° steps for `InputSampler.yawStep` (W = screen-up). */
   getCameraYawStep(): number;
-  /** Per-frame renderer statistics (draw calls, triangles, active particles). */
-  stats(): { drawCalls: number; triangles: number; particles: number; geometries: number; textures: number };
+  /** Per-frame renderer statistics (draw calls, triangles, active particles, render scale). */
+  stats(): RendererStats;
+  /** Estimated GPU memory held by textures and render targets (bytes; debug / perf reports). */
+  textureMemory(): TextureMemory;
+  /**
+   * Dynamic resolution guard on/off (default on, except under automation: `navigator.webdriver`). Turning it off
+   * restores the preset's full pixel ratio.
+   */
+  setDynamicResolution(enabled: boolean): void;
+  /** True between `webglcontextlost` and `webglcontextrestored` (iOS drops contexts of backgrounded pages). */
+  isContextLost(): boolean;
   dispose(): void;
+}
+
+export interface RendererStats {
+  drawCalls: number;
+  triangles: number;
+  particles: number;
+  geometries: number;
+  textures: number;
+  /** Dynamic-resolution scale (fraction of the preset's pixel-ratio cap). */
+  renderScale: number;
+  /** Effective canvas pixel ratio. */
+  pixelRatio: number;
+  contextLost: boolean;
 }
 
 export interface GameRendererOptions {
   quality?: QualityLevel;
+  /** Dynamic resolution guard (default: on, off under `navigator.webdriver` so test screenshots stay stable). */
+  dynamicResolution?: boolean;
+  /** Frame rate the guard holds (default: 30 on phones/tablets, 60 on desktop). */
+  targetFps?: number;
   /** Play the intro fly-in on setLevel (default true). */
   introOnLevelLoad?: boolean;
   /** Keep the drawing buffer (screenshots / tests). default false */
   preserveDrawingBuffer?: boolean;
 }
 
-export type { CameraMode, QualityLevel };
+export type { CameraMode, QualityLevel, TextureMemory };
 
 export function createGameRenderer(container: HTMLElement, opts: GameRendererOptions = {}): GameRenderer {
   return new GameRendererImpl(container, opts);
@@ -89,7 +119,6 @@ class GameRendererImpl implements GameRenderer {
   private readonly rig: CameraRig;
   private readonly post: PostFX;
   private readonly lib: MaterialLibrary;
-  private readonly envTex: THREE.Texture;
   private quality: QualityLevel;
   private q: QualitySettings;
 
@@ -124,6 +153,19 @@ class GameRendererImpl implements GameRenderer {
   private readonly introOnLoad: boolean;
   private onResize = () => this.resize();
   private disposed = false;
+  private contactShadows: ContactShadows | null = null;
+  private dynres: ResolutionController;
+  private dynresEnabled: boolean;
+  private readonly targetFps: number;
+  private renderScale = 1;
+  private lastFrameAt = 0;
+  private contextLost = false;
+  private envTexture: THREE.Texture;
+  private readonly onContextLost = (e: Event): void => {
+    e.preventDefault(); // allow the browser to restore it
+    this.contextLost = true;
+  };
+  private readonly onContextRestored = (): void => this.restoreContext();
 
   constructor(
     private readonly container: HTMLElement,
@@ -132,6 +174,10 @@ class GameRendererImpl implements GameRenderer {
     this.quality = opts.quality ?? 'high';
     this.q = QUALITY_PRESETS[this.quality];
     this.introOnLoad = opts.introOnLevelLoad ?? true;
+    if (!this.q) {
+      this.quality = 'high';
+      this.q = QUALITY_PRESETS.high;
+    }
     this.renderer = new THREE.WebGLRenderer({
       antialias: false,
       powerPreference: 'high-performance',
@@ -150,9 +196,9 @@ class GameRendererImpl implements GameRenderer {
     this.domElement.style.height = '100%';
     container.appendChild(this.domElement);
 
-    this.lib = new MaterialLibrary();
-    this.envTex = createEnvironmentTexture(this.renderer);
-    this.scene.environment = this.envTex;
+    this.lib = new MaterialLibrary({ textureScale: this.q.textureScale });
+    this.envTexture = createEnvironmentTexture(this.renderer, this.q.envMapSize);
+    this.scene.environment = this.envTexture;
     this.scene.environmentIntensity = 0.6;
     this.scene.background = new THREE.Color(PALETTE.sky);
 
@@ -174,9 +220,43 @@ class GameRendererImpl implements GameRenderer {
     this.wireVfx();
     this.fxRoot.add(this.vfx.group);
 
+    const webdriver = typeof navigator !== 'undefined' && navigator.webdriver === true;
+    this.dynresEnabled = opts.dynamicResolution ?? !webdriver;
+    this.targetFps = opts.targetFps ?? targetFpsFor(deviceProfile());
+    this.dynres = this.makeResolutionController();
+    // three.js registers its own handlers first (it re-initialises GL state on restore); ours rebuild what lived
+    // only on the GPU (the PMREM environment) and pause rendering in between.
+    this.domElement.addEventListener('webglcontextlost', this.onContextLost);
+    this.domElement.addEventListener('webglcontextrestored', this.onContextRestored);
+
     this.applyQuality();
     this.resize();
     window.addEventListener('resize', this.onResize);
+  }
+
+  private makeResolutionController(): ResolutionController {
+    return new ResolutionController({ targetFps: this.targetFps, minScale: this.q.minRenderScale, maxScale: 1 });
+  }
+
+  /** Re-create GPU-only resources after a context restore (textures/geometry re-upload lazily by themselves). */
+  private restoreContext(): void {
+    if (this.disposed) return;
+    this.contextLost = false;
+    // the PMREM environment was rendered on the GPU: its pixels are gone, regenerate it
+    const old = this.envTexture;
+    this.envTexture = createEnvironmentTexture(this.renderer, this.q.envMapSize);
+    this.scene.environment = this.envTexture;
+    old.dispose();
+    this.key.shadow.map?.dispose();
+    this.key.shadow.map = null;
+    this.scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(m)) m.forEach((x) => (x.needsUpdate = true));
+      else if (m) m.needsUpdate = true;
+    });
+    this.lastFrameAt = 0;
+    this.dynres.resetWindow();
+    this.resize();
   }
 
   get camera(): THREE.PerspectiveCamera {
@@ -206,8 +286,7 @@ class GameRendererImpl implements GameRenderer {
     this.span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
     const radius = Math.hypot(b.maxX - b.minX, b.maxZ - b.minZ) / 2;
 
-    this.backdrop = buildBackdrop(this.lib, this.centre, this.span, { shafts: this.q.shafts, seed: hashString(level.id) });
-    this.levelRoot.add(this.backdrop.group);
+    this.buildBackdropLayer();
     this.wires = new WireNetwork(level, kit.grid);
     this.levelRoot.add(this.wires.group);
     this.buildMotes();
@@ -234,6 +313,15 @@ class GameRendererImpl implements GameRenderer {
     else this.rig.mode = 'follow';
     this.hasFocus = false;
     if (initialState) this.syncActors(initialState, initialState, 1, 0);
+  }
+
+  private buildBackdropLayer(): void {
+    if (this.backdrop) {
+      this.backdrop.group.removeFromParent();
+      this.backdrop.dispose();
+    }
+    this.backdrop = buildBackdrop(this.lib, this.centre, this.span, { shafts: this.q.shafts, seed: hashString(this.levelId), detail: this.q.backdrop });
+    this.levelRoot.add(this.backdrop.group);
   }
 
   private clearLevel(): void {
@@ -334,6 +422,13 @@ class GameRendererImpl implements GameRenderer {
   render(state: SimView, prevState: SimView, alpha: number, events: readonly SimEvent[] = [], dtSeconds?: number): void {
     if (this.disposed) return;
     const now = performance.now();
+    if (this.contextLost) {
+      // nothing can be drawn until the browser restores the context; keep the clocks from jumping afterwards
+      this.lastNow = now;
+      this.lastFrameAt = 0;
+      return;
+    }
+    this.guardResolution(now, dtSeconds);
     let dt = dtSeconds ?? (this.lastNow ? (now - this.lastNow) / 1000 : 1 / 60);
     this.lastNow = now;
     dt = Math.min(Math.max(dt, 0), 0.1);
@@ -343,6 +438,7 @@ class GameRendererImpl implements GameRenderer {
     if (events.length) this.vfx.handle(events, state);
     this.syncActors(state, prevState, a, dt);
     this.syncEntities(state, prevState, a, dt);
+    this.updateContactShadows(state);
     this.wires?.update(state, dt, this.time);
     this.kit?.animated.forEach((x) => x.update(this.time));
     this.backdrop?.update(this.time);
@@ -389,7 +485,7 @@ class GameRendererImpl implements GameRenderer {
       seen.add(actor.id);
       let v = this.actorVisuals.get(actor.id);
       if (!v) {
-        v = new ActorVisual(this.lib, actor, { trail: this.q.trails });
+        v = new ActorVisual(this.lib, actor, { trail: this.q.trails, lod: this.q.characterLod });
         this.actorVisuals.set(actor.id, v);
         this.actorRoot.add(v.root);
         if (v.trailMesh) this.fxRoot.add(v.trailMesh);
@@ -434,10 +530,38 @@ class GameRendererImpl implements GameRenderer {
 
   // ------------------------------------------------------------------ settings
 
+  /** Dynamic resolution: one sample per rendered frame; re-applies the pixel ratio when the scale steps. */
+  private guardResolution(now: number, appDt?: number): void {
+    const prevAt = this.lastFrameAt;
+    this.lastFrameAt = now;
+    if (!this.dynresEnabled || prevAt === 0) return;
+    const interval = now - prevAt;
+    // The app skipped renders on purpose (e.g. menu sub-screen redrawing every 500 ms): its own frame dt is much
+    // shorter than the gap between our render calls, so this gap says nothing about GPU cost.
+    if (appDt !== undefined && interval > appDt * 1000 * 8 + 20) return;
+    if (this.dynres.update(interval)) {
+      this.renderScale = this.dynres.scale;
+      this.resize();
+    }
+  }
+
+  private updateContactShadows(state: SimView): void {
+    const cs = this.contactShadows;
+    if (!cs) return;
+    cs.begin();
+    for (const v of this.actorVisuals.values()) if (v.root.visible) cs.add(v.root.position, 0.5);
+    for (const [id, v] of this.entityVisuals) {
+      const e = state.entities[id] as EntityView | undefined;
+      if (!e || e.carriedBy || !v.root.visible || !CARRIABLE_VISUAL_KINDS.has(e.kind)) continue;
+      cs.add(v.root.position, e.kind === 'crate' ? 0.9 : 0.4);
+    }
+    cs.end();
+  }
+
   resize(width?: number, height?: number): void {
     const w = width ?? (this.container.clientWidth || window.innerWidth);
     const h = height ?? (this.container.clientHeight || window.innerHeight);
-    const pr = Math.min(window.devicePixelRatio || 1, this.q.pixelRatio);
+    const pr = Math.max(0.5, Math.min(window.devicePixelRatio || 1, this.q.pixelRatio) * this.renderScale);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);
     this.rig.camera.aspect = w / Math.max(1, h);
@@ -450,6 +574,13 @@ class GameRendererImpl implements GameRenderer {
 
   private applyQuality(): void {
     const q = this.q;
+    if (q.contactShadows && !this.contactShadows) {
+      this.contactShadows = new ContactShadows();
+      this.fxRoot.add(this.contactShadows.mesh);
+    } else if (!q.contactShadows && this.contactShadows) {
+      this.contactShadows.dispose();
+      this.contactShadows = null;
+    }
     this.renderer.shadowMap.enabled = q.shadows;
     this.renderer.shadowMap.type = q.shadowType;
     this.key.castShadow = q.shadows;
@@ -460,10 +591,29 @@ class GameRendererImpl implements GameRenderer {
   }
 
   setQuality(level: QualityLevel): void {
-    if (level === this.quality) return;
+    if (level === this.quality || !QUALITY_PRESETS[level]) return;
+    const before = this.q;
     this.quality = level;
     this.q = QUALITY_PRESETS[level];
     this.applyQuality();
+    // a new preset starts at full scale with its own floor
+    this.dynres = this.makeResolutionController();
+    this.renderScale = 1;
+    if (before.envMapSize !== this.q.envMapSize) {
+      const old = this.envTexture;
+      this.envTexture = createEnvironmentTexture(this.renderer, this.q.envMapSize);
+      this.scene.environment = this.envTexture;
+      old.dispose();
+    }
+    if (this.level && (before.backdrop !== this.q.backdrop || before.shafts !== this.q.shafts)) this.buildBackdropLayer();
+    if (before.characterLod !== this.q.characterLod || before.trails !== this.q.trails) {
+      // actors are rebuilt with the new mesh LOD / trail setting on the next frame
+      for (const v of this.actorVisuals.values()) {
+        v.root.removeFromParent();
+        v.dispose();
+      }
+      this.actorVisuals.clear();
+    }
     // particle budget + motes + lights depend on the preset
     this.vfx.group.removeFromParent();
     this.vfx.dispose();
@@ -548,7 +698,7 @@ class GameRendererImpl implements GameRenderer {
     return this.rig.yawStep;
   }
 
-  stats() {
+  stats(): RendererStats {
     const info = this.renderer.info;
     return {
       drawCalls: info.render.calls,
@@ -556,20 +706,49 @@ class GameRendererImpl implements GameRenderer {
       particles: this.vfx.particles.activeCount,
       geometries: info.memory.geometries,
       textures: info.memory.textures,
+      renderScale: this.renderScale,
+      pixelRatio: this.renderer.getPixelRatio(),
+      contextLost: this.contextLost,
     };
+  }
+
+  textureMemory(): TextureMemory {
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    return estimateTextureMemory(this.scene, {
+      shadowMaps: this.q.shadows ? [this.key.shadow.mapSize.x] : [],
+      composer: this.post.renderTargetBytes(size.x, size.y),
+    });
+  }
+
+  setDynamicResolution(enabled: boolean): void {
+    this.dynresEnabled = enabled;
+    this.lastFrameAt = 0;
+    if (!enabled && this.renderScale !== 1) {
+      this.dynres.reset();
+      this.renderScale = 1;
+      this.resize();
+    }
+  }
+
+  isContextLost(): boolean {
+    return this.contextLost;
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     window.removeEventListener('resize', this.onResize);
+    this.domElement.removeEventListener('webglcontextlost', this.onContextLost);
+    this.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);
     this.clearLevel();
+    this.contactShadows?.dispose();
+    this.contactShadows = null;
     this.vfx.dispose();
     this.intents.dispose();
     this.ghosts.dispose();
     this.post.dispose();
     this.lib.dispose();
-    this.envTex.dispose();
+    this.envTexture.dispose();
     this.rig.dispose();
     this.renderer.dispose();
     this.domElement.remove();

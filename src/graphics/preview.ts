@@ -26,7 +26,7 @@ import { ScriptRunner } from '../testing/harness/script';
  *  ?scene=showcase  render-only fixture of all 12 entity kinds + characters (fake SimView, never a game).
  *  ?t=<tick>        deterministic screenshot mode: fast-forward to <tick>, render settle frames at a fixed
  *                   1/60 s step, then set window.__PREVIEW__.ready = true (Playwright waits on it).
- *  ?quality=low|medium|high   ?camera=follow|overview   ?intro=1 (play fly-in in live mode)
+ *  ?quality=low|mobile|medium|high   ?dynres=0|1   ?camera=follow|overview   ?intro=1 (play fly-in in live mode)
  */
 
 const params = new URLSearchParams(location.search);
@@ -37,7 +37,13 @@ const targetTick = params.has('t') ? Number(params.get('t')) : null;
 const settleFrames = Number(params.get('settle') ?? 45);
 
 const root = document.getElementById('app')!;
-const renderer = createGameRenderer(root, { quality, introOnLevelLoad: targetTick === null ? params.get('intro') !== '0' : params.get('intro') === '1', preserveDrawingBuffer: true });
+const renderer = createGameRenderer(root, {
+  quality,
+  introOnLevelLoad: targetTick === null ? params.get('intro') !== '0' : params.get('intro') === '1',
+  preserveDrawingBuffer: true,
+  // ?dynres=1 forces the dynamic-resolution guard on (it is off under automation by default), ?dynres=0 off
+  ...(params.has('dynres') ? { dynamicResolution: params.get('dynres') !== '0' } : {}),
+});
 const preview = { ready: false, stats: () => renderer.stats(), renderer };
 (window as unknown as { __PREVIEW__: typeof preview }).__PREVIEW__ = preview;
 

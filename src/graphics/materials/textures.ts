@@ -193,10 +193,14 @@ class Painter {
     this.height.g.putImageData(h, 0, 0);
   }
 
-  build(normalStrength: number, repeat = 1): PBRSet {
+  /**
+   * `nominal` = the resolution the normal strength was tuned at: a smaller (mobile) texture compresses each bevel
+   * into fewer pixels, so the per-pixel slope is scaled back to keep the same relief.
+   */
+  build(normalStrength: number, repeat = 1, nominal = 512): PBRSet {
     const map = new THREE.CanvasTexture(this.albedo.c);
     map.colorSpace = THREE.SRGBColorSpace;
-    const normalMap = heightToNormal(this.height.c, normalStrength);
+    const normalMap = heightToNormal(this.height.c, normalStrength * (this.size / nominal));
     const ormMap = new THREE.CanvasTexture(this.orm.c);
     const set: PBRSet = { map, normalMap, ormMap };
     if (this.emissive) {
@@ -528,7 +532,7 @@ export function brushedMetalTextures(size = 256): PBRSet {
   p.rect(0, 0, size, size, { color: '#d08f3c', height: 128, rough: 0.36, metal: 1 });
   p.brushed(5, true, 0.12);
   p.grime(41, 0.04, 0.06);
-  return p.build(0.6, 1);
+  return p.build(0.6, 1, 256);
 }
 
 /** Dark gunmetal with micro panel lines, for machinery and structural blocks (tileable). */
@@ -548,7 +552,7 @@ export function gunmetalTextures(size = 256): PBRSet {
   ] as const)
     p.bolt(u * x, u * y, u * 0.6, '#454b54');
   p.grime(57, 0.18, 0.25);
-  return p.build(2.0, 1);
+  return p.build(2.0, 1, 256);
 }
 
 /** Concrete / cast stone for the monumental backdrop and plinths (tileable). */
@@ -557,7 +561,7 @@ export function concreteTextures(size = 256): PBRSet {
   p.rect(0, 0, size, size, { color: '#5f5c57', height: 128, rough: 0.85, metal: 0 });
   p.line(0, size / 2, size, size / 2, 2, { color: '#3c3a36', height: 70, rough: 0.95, metal: 0 });
   p.grime(77, 0.25, 0.15);
-  return p.build(1.4, 1);
+  return p.build(1.4, 1, 256);
 }
 
 /** Radial soft sprite (particles, glows, flares). */

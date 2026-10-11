@@ -300,6 +300,18 @@ export function createAudioSystem(opts: AudioSystemOptions = {}): AudioSystem {
       f.setTargetAtTime(p ? 700 : 18000, t, 0.25);
     },
 
+    setBackgrounded(hidden: boolean) {
+      const e = engine;
+      if (!e) return;
+      const ac = e.ctx as Partial<AudioContext>;
+      try {
+        if (hidden && ac.state === 'running' && typeof ac.suspend === 'function') void ac.suspend().catch(() => undefined);
+        else if (!hidden && ac.state === 'suspended' && typeof ac.resume === 'function') void ac.resume().catch(() => undefined);
+      } catch {
+        /* a closed or exotic context: nothing to do */
+      }
+    },
+
     playUi(kind: UiSoundKind) {
       const name = `ui:${kind}`;
       if (!RECIPES[name]) return;

@@ -15,6 +15,8 @@ import { SaveStore } from '../persistence/save';
 import type { Settings } from '../persistence/settings';
 import { buildLevelEntries, createUI, type MainMenuData, type UIHandle } from '../ui';
 import { installDebugHook, type DebugHook } from './debugHook';
+import { wireGamepad, type GamepadWiring } from './gamepad';
+import { wireTouch } from './touch';
 import { EchoForecastController, type ForecastFrame } from './forecast';
 import { attractSuspended, comfortOf, qualityOverrideOf, rendererQuality, sampleRewind, solutionFor, withoutHiddenEchoes, type AppMode } from './flow';
 
@@ -174,6 +176,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
         save.setKeybinds(b);
         keyboard.releaseAll();
       },
+      onPadBindsChange: (b) => gamepad.setBindings(save.setPadBindings(b)),
       onIntroDone: () => beginPlay(),
       onNextLevel: () => {
         const next = CAMPAIGN.next(level.id);
@@ -190,7 +193,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       onUISound: (cue) => audio.playUi(cue),
       getLevelEntries: () => buildLevelEntries(LEVELS, save.data.progress),
     },
-    { settings: save.data.settings, keybinds: save.data.keybinds, seenTutorials: save.data.seenTutorials, qualityOverride },
+    { settings: save.data.settings, keybinds: save.data.keybinds, seenTutorials: save.data.seenTutorials, qualityOverride, padbinds: save.data.padbinds, padsConnected: () => gamepad.input.connectedCount },
   );
   renderer.setComfort(comfortOf(save.data.settings));
 
@@ -464,6 +467,30 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
   };
   const offCommand = keyboard.onCommand(onCommand);
   keyboard.attach(window);
+  // Gamepad (round 3): same sampler + command handler as the keyboard; see ./gamepad.ts.
+  const gamepad: GamepadWiring = wireGamepad({
+    sampler: keyboard.sampler,
+    ui,
+    zoomTarget: appRoot,
+    bindings: save.data.padbinds,
+    onCommand,
+    gameplayActive: () => keyboard.gameplayEnabled,
+    playing: () => mode === 'playing' && !pauseOpen && !ui.isBlocking(),
+    pause: () => setPaused(true),
+    echoCount: () => game.getLoops().length,
+  });
+  // Touch (round 3): on-screen controls feed the same sampler + command handler; see ./touch.ts.
+  const touch = wireTouch({
+    sampler: keyboard.sampler,
+    ui,
+    zoomTarget: appRoot,
+    onCommand,
+    gameplayActive: () => keyboard.gameplayEnabled,
+    playing: () => mode === 'playing' && !pauseOpen && !ui.isBlocking(),
+    pause: () => setPaused(true),
+    setOverview: (on) => renderer.setCameraMode(on ? 'overview' : 'follow'),
+    unlockAudio,
+  });
 
   /** Delete / Backspace removes the selected echo (DELETE LOOP on the timeline transport). */
   const onDeleteKey = (e: KeyboardEvent): void => {
@@ -493,6 +520,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
     const dt = dtMs / 1000;
 
     syncInputGate();
+    gamepad.poll(dtMs);
     stepper.paused = !simRunning();
     stepper.advance(dtMs);
 
@@ -584,6 +612,26 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
   enterMenu();
   raf = requestAnimationFrame(frame);
 
+  // Page hidden (tab switch, iOS app switch / screen lock): stop the frame loop, which halts the sim, the attract
+  // replay and rendering, and suspend audio. On return resume without a catch-up burst (mobile perf, round 3).
+  let backgrounded = false;
+  const onVisibility = (): void => {
+    const hidden = document.visibilityState === 'hidden';
+    if (hidden === backgrounded) return;
+    backgrounded = hidden;
+    audio.setBackgrounded?.(hidden);
+    if (hidden) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      keyboard.releaseAll();
+    } else if (raf === 0) {
+      last = performance.now();
+      stepper.reset();
+      raf = requestAnimationFrame(frame);
+    }
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+
   const handle: AppHandle = {
     game,
     get mode() {
@@ -592,9 +640,12 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
     loadLevel,
     dispose() {
       cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
       window.clearTimeout(completeTimer);
       offCommand();
       keyboard.detach();
+      gamepad.dispose();
+      touch.dispose();
       window.removeEventListener('keydown', onDeleteKey);
       window.removeEventListener('pointerdown', unlockAudio, { capture: true });
       window.removeEventListener('keydown', unlockAudio, { capture: true });

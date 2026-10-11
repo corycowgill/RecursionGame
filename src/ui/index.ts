@@ -16,3 +16,4 @@ export { HintScheduler } from './hud/hints';
 export { OnboardingTracker, ONBOARDING } from './hud/onboarding';
 export * from './timeline/model';
 export { injectStyles } from './styles';
+export * from './glyphs';

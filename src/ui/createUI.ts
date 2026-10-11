@@ -1,7 +1,11 @@
 import type { LevelDefinition, SimEvent } from '../engine/contracts';
+import { defaultPadBindings, type PadBindings } from '../engine/input/gamepadBindings';
+import type { PadEvent } from '../engine/input/GamepadInput';
 import { defaultKeybinds, type KeyBindings } from '../persistence/keybinds';
 import { defaultSettings, type QualityPreset, type Settings } from '../persistence/settings';
 import { focusFirst, h } from './dom';
+import { KEYBOARD, TOUCH, sameDevice, type GlyphContext, type InputDevice } from './glyphs';
+import { activate, injectPadStyles, navigate } from './padNav';
 import { HintScheduler } from './hud/hints';
 import { Hud } from './hud/Hud';
 import { ONBOARDING, OnboardingTracker } from './hud/onboarding';
@@ -12,6 +16,10 @@ import { createCredits, createLevelComplete, createLevelIntro, createPause } fro
 import { createSettings } from './menus/Settings';
 import { injectStyles } from './styles';
 import { TimelinePanel } from './timeline/TimelinePanel';
+import { dismissHomeScreenHint, homeScreenHintDismissed, shouldSuggestHomeScreen, type TouchEnv } from './touch/env';
+import { homeScreenHint, TouchControls, type TouchSink } from './touch/TouchControls';
+import { injectTouchStyles } from './touch/touchStyles';
+import type { TouchVisibility } from './touch/visibility';
 import type { LevelCompleteStats, LevelEntry, MainMenuData, PauseData, UICallbacks, UIFrame } from './types';
 
 export type ScreenName = 'menu' | 'levels' | 'settings' | 'credits' | 'pause' | 'intro' | 'complete';
@@ -23,6 +31,24 @@ export interface CreateUIOptions {
   seenTutorials?: readonly string[];
   /** Quality preset forced by the `?quality=` URL option (shown, and locked, in Settings). */
   qualityOverride?: QualityPreset | null;
+  /** Gamepad bindings (round 3). */
+  padbinds?: PadBindings;
+  /** Connected controller count, for the Settings → Controls status line. */
+  padsConnected?: () => number;
+  /** Touch environment override (tests); defaults to the live device. */
+  touchEnv?: TouchEnv;
+}
+
+/** On-screen touch controls (round 3, mobile): the app connects them to the input sampler / command handler. */
+export interface TouchUI {
+  readonly touchCapable: boolean;
+  readonly visibility: TouchVisibility;
+  readonly isPortrait: boolean;
+  setSink(sink: TouchSink | null): void;
+  /** Puzzle overview camera (two-finger tap) currently on. */
+  readonly overviewActive: boolean;
+  /** Toggles the puzzle overview (same as a two-finger tap). */
+  toggleOverview(): void;
 }
 
 export interface ShowHUDOptions {
@@ -62,6 +88,21 @@ export interface UIHandle {
   selectEcho(index: number | null): void;
   setSettings(s: Settings): void;
   setKeybinds(b: KeyBindings): void;
+  /** Gamepad bindings currently shown/used by the prompts. */
+  readonly padBindings: PadBindings;
+  /** Last-used input device: switches every button prompt (HUD, tutorial, interaction, timeline) and the focus ring. */
+  readonly inputDevice: InputDevice;
+  setInputDevice(d: InputDevice): void;
+  setPadBindings(b: PadBindings): void;
+  /**
+   * Gamepad input while a menu / the expanded timeline is active (navigation, confirm, back, remap capture). Returns
+   * true when consumed.
+   */
+  padInput(e: PadEvent): boolean;
+  /** Hold-to-restart fill (0..1, 0 hides the indicator). */
+  setRestartHold(progress: number): void;
+  /** On-screen touch controls + rotate overlay (phones / tablets). */
+  readonly touch: TouchUI;
   /** Fade to black, run `between` (e.g. load a level), fade back in. */
   transition(between: () => void | Promise<void>): Promise<void>;
   /**
@@ -82,10 +123,15 @@ const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
  */
 export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: CreateUIOptions = {}): UIHandle {
   injectStyles(root.ownerDocument);
+  injectPadStyles(root.ownerDocument);
+  injectTouchStyles(root.ownerDocument);
   const cb = callbacks;
   let settings: Settings = { ...(opts.settings ?? defaultSettings()) };
   let keybinds: KeyBindings = opts.keybinds ?? defaultKeybinds();
   const seen = new Set(opts.seenTutorials ?? []);
+  let padbinds: PadBindings = opts.padbinds ?? defaultPadBindings();
+  let device: InputDevice = KEYBOARD;
+  let lastPadStyle: 'xbox' | 'playstation' | 'nintendo' | null = null;
 
   const sound = (c: 'hover' | 'confirm' | 'back' | 'toggle' | 'error'): void => cb.onUISound?.(c);
 
@@ -107,10 +153,44 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
     onTimelineToggle: (x) => {
       if (x) tracker?.signal({ type: 'timelineExpanded' });
       cb.onTimelineToggle?.(x);
+      refreshTouch();
     },
   });
   const hud = new Hud(() => finishTutorial(true));
-  hudLayer.append(hud.el, timeline.el);
+  // Hold-to-restart indicator (gamepad: hold X / Square).
+  const holdCap = h('span', { class: 'cap' });
+  const hold = h('div', { class: 'rx-hold', 'aria-hidden': 'true', 'data-testid': 'restart-hold' }, h('div', { class: 'ring' }), holdCap, h('div', { class: 'lbl' }, 'Restarting chamber'));
+  hudLayer.append(hud.el, timeline.el, hold);
+
+  // On-screen touch controls sit under the HUD layer (so the timeline strip and hint card stay tappable) and the
+  // rotate overlay above everything.
+  const touch = new TouchControls(
+    {
+      device: () => device.kind,
+      hud: () => !hudLayer.hidden,
+      screen: () => sub?.name ?? base?.name ?? null,
+      timelineExpanded: () => timeline.expanded,
+    },
+    () => ui.setInputDevice(TOUCH),
+    opts.touchEnv,
+  );
+  el.insertBefore(touch.el, hudLayer);
+  el.append(touch.rotateEl);
+  if (touch.touchFirst) device = TOUCH;
+  el.classList.toggle('rx-touchdev', touch.touchCapable);
+  let touchSig = '';
+  /** Re-evaluates the touch layer and its root classes (cheap; on every UI state change and HUD frame). */
+  function refreshTouch(): void {
+    touch.refresh();
+    const v = touch.visibility;
+    const sig = `${v.touchMode}${v.controls}${v.pause}`;
+    if (sig === touchSig) return;
+    touchSig = sig;
+    el.classList.toggle('rx-touch-on', v.touchMode);
+    el.classList.toggle('rx-tplay', v.controls);
+    el.classList.toggle('rx-thaspause', v.pause);
+    timeline.touchMode = v.touchMode;
+  }
 
   let level: LevelDefinition | null = null;
   let hints: HintScheduler | null = null;
@@ -127,6 +207,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
   function mount(screen: Screen): void {
     screenLayer.append(screen.el);
     focusFirst(screen.el);
+    refreshTouch();
   }
   function closeSub(): void {
     if (!sub) return;
@@ -137,6 +218,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
     if (base) base.screen.el.hidden = false;
     if (rf && rf.isConnected) rf.focus({ preventScroll: true });
     else if (base) focusFirst(base.screen.el);
+    refreshTouch();
   }
   function setBase(name: ScreenName, screen: Screen): void {
     closeSub();
@@ -163,6 +245,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       base.screen.el.remove();
       base = null;
     }
+    refreshTouch();
   }
 
   function applySettings(): void {
@@ -171,6 +254,17 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
     el.classList.toggle('rx-hc', settings.echoPalette === 'highContrast');
     timeline.palette = settings.echoPalette;
     timeline.binds = keybinds;
+    applyGlyphs();
+  }
+
+  /** Pushes the last-used device + bindings to every prompt renderer. */
+  function applyGlyphs(): void {
+    const g: GlyphContext = { device, keybinds, padbinds };
+    hud.glyphs = g;
+    timeline.glyphs = g;
+    el.classList.toggle('rx-pad', device.kind === 'gamepad');
+    el.dataset['input'] = device.kind === 'gamepad' ? device.style : device.kind;
+    refreshTouch();
   }
   applySettings();
 
@@ -214,7 +308,20 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       onBack: () => closeSub(),
       ...(cb.onResetProgress ? { onResetProgress: () => cb.onResetProgress?.() } : {}),
       sound,
-    }, 'graphics', { qualityOverride: opts.qualityOverride ?? null });
+    }, 'graphics', {
+      qualityOverride: opts.qualityOverride ?? null,
+      pad: {
+        bindings: padbinds,
+        style: () => (device.kind === 'gamepad' ? device.style : lastPadStyle),
+        connected: () => opts.padsConnected?.() ?? 0,
+        onChange: (b) => {
+          padbinds = b;
+          applyGlyphs();
+          if (tracker) trackerShownIndex = -1;
+          cb.onPadBindsChange?.(b);
+        },
+      },
+    });
   }
 
   function announce(text: string): void {
@@ -252,6 +359,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
           sound,
         }),
       );
+      if (base && shouldSuggestHomeScreen(touch.env, homeScreenHintDismissed())) base.screen.el.append(homeScreenHint(dismissHomeScreenHint));
       announce('Main menu');
     },
 
@@ -289,12 +397,14 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       timeline.selected = null;
       timeline.hidden.clear();
       lastFrame = null;
+      refreshTouch();
       announce(`Chamber ${lvl.order}: ${lvl.name}`);
     },
 
     hideHUD() {
       hudLayer.hidden = true;
       hud.showOnboarding(null);
+      refreshTouch();
     },
 
     update(frame) {
@@ -305,6 +415,10 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       // Timeline inspect / temporal preview: tutorial + hint cards step aside so the whole chamber reads.
       hudLayer.classList.toggle('rx-inspecting', timeline.expanded || frame.previewTick != null);
       hud.update(frame, keybinds, settings.echoPalette, timeline.height);
+      refreshTouch();
+      const tp = frame.prompt;
+      const promptOn = !!tp && tp.action !== 'none' && frame.state.status === 'playing' && frame.previewTick == null;
+      touch.setPrompt(promptOn && tp ? tp.label : null, tp?.action === 'blocked');
       const dt = frame.dt ?? 0;
       const live = !paused && frame.state.status === 'playing' && ui.screen === null;
       if (live && hints) {
@@ -453,6 +567,60 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       trackerShownIndex = -1;
     },
 
+    touch,
+
+    get padBindings() {
+      return padbinds;
+    },
+
+    get inputDevice() {
+      return device;
+    },
+
+    setInputDevice(d) {
+      if (sameDevice(d, device)) return;
+      device = d;
+      if (d.kind === 'gamepad') lastPadStyle = d.style;
+      applyGlyphs();
+      trackerShownIndex = -1; // redraw the tutorial card with the new glyphs
+      refreshOnboarding();
+      if (lastFrame) hud.update(lastFrame, keybinds, settings.echoPalette, timeline.height);
+    },
+
+    setPadBindings(b) {
+      padbinds = b;
+      applyGlyphs();
+      trackerShownIndex = -1;
+    },
+
+    padInput(e) {
+      const top = sub?.screen ?? base?.screen ?? null;
+      if (top) {
+        const remap = top as Partial<{ padButton(i: number): boolean; padCapturing: boolean }>;
+        if (e.type === 'button' && remap.padButton?.(e.index)) return true;
+        if (remap.padCapturing) return true;
+        if (e.type === 'nav') {
+          if (navigate(top.el, e.dir)) sound('hover');
+          return true;
+        }
+        if (e.type === 'button' && e.button === 'a') return activate(top.el);
+        if (e.type === 'button' && e.button === 'b') return ui.back();
+        return false;
+      }
+      if (timeline.expanded) return timeline.padInput(e);
+      return false;
+    },
+
+    setRestartHold(p) {
+      const on = p > 0.02;
+      hold.classList.toggle('on', on);
+      hold.style.setProperty('--p', String(Math.min(1, Math.max(0, p))));
+      if (on) {
+        const html = device.kind === 'gamepad' ? hud.restartCap() : '';
+        if (holdCap.innerHTML !== html) holdCap.innerHTML = html;
+      }
+    },
+
     async transition(between) {
       const ms = settings.reducedMotion ? 60 : 430;
       fade.classList.add('on');
@@ -485,6 +653,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
     dispose() {
       clearScreens();
       toasts.clear();
+      touch.dispose();
       el.remove();
     },
   };

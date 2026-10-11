@@ -50,12 +50,18 @@ export class MaterialLibrary {
   private readonly owned: THREE.Material[] = [];
   private readonly extraTextures: THREE.Texture[] = [];
 
-  constructor() {
-    const floor = this.track(floorTileTextures(512));
-    const wall = this.track(wallPanelTextures(512));
-    const brushed = this.track(brushedMetalTextures(256));
-    const gun = this.track(gunmetalTextures(256));
-    const conc = this.track(concreteTextures(256));
+  /**
+   * `textureScale` (quality preset, e.g. 0.5 on mobile) scales every procedural texture's resolution: 512² sets
+   * become 256², which quarters their GPU memory (iOS Safari is strict about total texture memory).
+   */
+  constructor(opts: { textureScale?: number } = {}) {
+    const k = Math.min(1, Math.max(0.125, opts.textureScale ?? 1));
+    const px = (n: number) => Math.max(32, Math.round((n * k) / 32) * 32);
+    const floor = this.track(floorTileTextures(px(512)));
+    const wall = this.track(wallPanelTextures(px(512)));
+    const brushed = this.track(brushedMetalTextures(px(256)));
+    const gun = this.track(gunmetalTextures(px(256)));
+    const conc = this.track(concreteTextures(px(256)));
 
     this.floorTile = this.own(
       new THREE.MeshStandardMaterial({
@@ -71,8 +77,8 @@ export class MaterialLibrary {
         envMapIntensity: 0.75,
       }),
     );
-    const grate = this.track(floorGrateTextures(512));
-    const emblem = this.track(floorEmblemTextures(512));
+    const grate = this.track(floorGrateTextures(px(512)));
+    const emblem = this.track(floorEmblemTextures(px(512)));
     const floorVariant = (set: PBRSet, emissive: boolean) =>
       this.own(
         new THREE.MeshStandardMaterial({
@@ -92,7 +98,7 @@ export class MaterialLibrary {
       );
     this.floorGrate = floorVariant(grate, true);
     this.floorEmblem = floorVariant(emblem, false);
-    this.floorPlate = floorVariant(this.track(floorPlateTextures(512)), false);
+    this.floorPlate = floorVariant(this.track(floorPlateTextures(px(512))), false);
     this.floorPlain = this.own(
       new THREE.MeshStandardMaterial({ color: 0x4b525b, normalMap: gun.normalMap, roughnessMap: gun.ormMap, roughness: 1, metalness: 0.6 }),
     );

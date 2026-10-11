@@ -1,8 +1,10 @@
 import type { Timeline } from '../../engine/contracts';
+import type { PadEvent } from '../../engine/input/GamepadInput';
 import type { KeyBindings } from '../../persistence/keybinds';
 import { primaryLabel } from '../../persistence/keybinds';
 import type { EchoPaletteId } from '../../persistence/settings';
 import { esc, h } from '../dom';
+import { capHTML, capText, padCapHTML, type GlyphContext } from '../glyphs';
 import { DIVERGENCE_ICON, icon, markerIcon, shapeBadge } from '../icons';
 import type { UICallbacks } from '../types';
 import {
@@ -61,6 +63,14 @@ export class TimelinePanel {
   readonly hidden = new Set<number>();
   palette: EchoPaletteId = 'default';
   binds: KeyBindings | null = null;
+  /** Prompt glyphs for the last-used device (set by createUI); null = keyboard labels from `binds`. */
+  private glyphCtx: GlyphContext | null = null;
+  private readonly padLegend: HTMLElement;
+  /**
+   * Touch mode (round 3, mobile; set by createUI while touch is the last-used device): the collapsed strip is one big
+   * tap target that opens the timeline sheet, and scrubbing happens by dragging in the expanded sheet.
+   */
+  touchMode = false;
 
   private timeline: Timeline | null = null;
   private tracks: TrackModel[] = [];
@@ -94,6 +104,7 @@ export class TimelinePanel {
       this.previewEl,
       h('span', { class: 'spacer' }),
       h('span', { class: 'meta' }, this.zoomEl),
+      h('span', { class: 'rx-tl-touchhint rx-touch-only', html: '<span class="tap">Tap to open</span><span class="drag">Drag the tracks to scrub</span>' }),
       expandBtn,
     );
     this.labels = h('div', { class: 'rx-tl-labels' });
@@ -138,22 +149,33 @@ export class TimelinePanel {
       this.btn.zm,
       this.btn.sel,
     );
+    // Gamepad legend (shown only in the expanded timeline while a controller is the active device).
+    this.padLegend = h('div', { class: 'rx-tl-padlegend rx-pad-only', 'data-testid': 'timeline-pad-legend' });
     this.el = h(
       'section',
       { class: 'rx-panel cyan rx-tl compact', role: 'region', 'aria-label': 'Temporal timeline', 'data-testid': 'timeline' },
       h('div', { class: 'rx-hair' }),
+      h('div', { class: 'rx-tl-grab', 'aria-hidden': 'true', onclick: () => this.setExpanded(false) }),
       this.head,
       h('div', { class: 'rx-tl-body' }, this.labels, this.stage),
       this.controls,
+      this.padLegend,
     );
     this.bindScrub();
     this.updateZoomLabel();
+    // Touch: a tap anywhere on the collapsed strip opens the sheet (buttons keep their own action).
+    this.el.addEventListener('click', (e) => {
+      if (!this.touchMode || this.expanded) return;
+      if ((e.target as Element | null)?.closest?.('button')) return;
+      this.setExpanded(true);
+    });
   }
 
   // ------------------------------------------------------------------ public API
 
   setExpanded(expanded: boolean): void {
     if (this.expanded === expanded) return;
+    if (!expanded) this.endScrub();
     this.expanded = expanded;
     this.el.classList.toggle('compact', !expanded);
     this.el.classList.toggle('expanded', expanded);
@@ -264,7 +286,92 @@ export class TimelinePanel {
     const delTx = this.btn.del.querySelector('.tx') as HTMLElement;
     const delText = this.selected === null ? 'Delete loop' : `Delete echo ${this.selected + 1}`;
     if (delTx.textContent !== delText) delTx.textContent = delText;
-    if (this.binds) this.expandKey.textContent = this.key('timeline');
+    if (this.binds || this.glyphCtx) this.setExpandKey();
+  }
+
+  /** Last-used device glyphs: updates the header key cap, tooltips and the gamepad legend. */
+  set glyphs(g: GlyphContext | null) {
+    this.glyphCtx = g;
+    this.setExpandKey();
+    if (g && g.device.kind === 'gamepad') {
+      const st = g.device.style;
+      const item = (caps: string, text: string): string => `<span>${caps}<span>${esc(text)}</span></span>`;
+      this.padLegend.innerHTML = [
+        item(padCapHTML(14, st) + padCapHTML(15, st), 'Scrub (hold to speed up)'),
+        item(padCapHTML(12, st) + padCapHTML(13, st), 'Select track'),
+        item(padCapHTML(0, st), 'Hide / show echo · play / pause'),
+        item(padCapHTML(2, st), 'Delete echo'),
+        item(padCapHTML(5, st), 'Zoom'),
+        item(padCapHTML(1, st), 'Live / close'),
+      ].join('');
+    }
+  }
+
+  get glyphs(): GlyphContext | null {
+    return this.glyphCtx;
+  }
+
+  /**
+   * Gamepad control of the expanded timeline (routed by createUI while no menu is open): left/right scrub
+   * (accelerating while held), up/down select a track (player, echo 1, echo 2 …), A toggles the selected echo's visibility
+   * (or play/pause on the player track), X deletes the selected echo, RB cycles the zoom, B returns to live and
+   * then collapses the timeline. Returns true when consumed.
+   */
+  padInput(e: PadEvent): boolean {
+    if (!this.expanded || !this.timeline) return false;
+    const tl = this.timeline;
+    if (e.type === 'nav') {
+      if (e.dir === 'left' || e.dir === 'right') {
+        const step = e.heldMs > 2200 ? 90 : e.heldMs > 900 ? 30 : 15;
+        const cur = this.scrubTick ?? this.externalPreview ?? tl.currentTick;
+        this.scrubTo(Math.max(0, Math.min(tl.maxTicks, cur + (e.dir === 'right' ? step : -step))));
+        return true;
+      }
+      const n = this.echoCount();
+      if (n === 0) return true;
+      const cur = this.selected;
+      // Lanes run player (top), echo 1, echo 2, … — null selection = the player track.
+      const next = e.dir === 'down' ? (cur === null ? 0 : Math.min(n - 1, cur + 1)) : cur === null || cur === 0 ? null : cur - 1;
+      if (next !== cur) {
+        this.selected = next;
+        this.cb.onSelectEcho?.(next);
+        this.cb.onUISound?.('hover');
+        this.sig = '';
+        this.update(tl, { paused: this.paused, previewTick: this.externalPreview });
+      }
+      return true;
+    }
+    if (e.type !== 'button') return false;
+    switch (e.button) {
+      case 'a': {
+        const idx = this.selected;
+        const track = idx === null ? null : this.tracks.find((t) => t.kind === 'echo' && t.echoIndex === idx && !t.recursion);
+        if (track && track.loopId !== null) {
+          const visible = this.hidden.has(track.loopId);
+          this.setEchoVisible(track.loopId, visible);
+          this.cb.onToggleEchoVisibility?.(track.echoIndex, visible, track.loopId);
+          this.cb.onUISound?.('toggle');
+          this.update(tl, { paused: this.paused, previewTick: this.externalPreview });
+        } else this.cb.onTogglePause?.();
+        return true;
+      }
+      case 'x':
+        if (this.selected !== null) {
+          const idx = this.selected;
+          this.selected = null;
+          this.cb.onDeleteLoop?.(idx);
+        } else this.cb.onUISound?.('error');
+        return true;
+      case 'rb':
+        this.cycleZoom();
+        return true;
+      case 'b':
+        if (this.scrubbing) this.endScrub();
+        else this.setExpanded(false);
+        return true;
+      default:
+        return false;
+    }
   }
 
   flash(): void {
@@ -276,7 +383,35 @@ export class TimelinePanel {
   // ------------------------------------------------------------------ internals
 
   private key(a: 'rewind' | 'timeline'): string {
+    if (this.glyphCtx && this.glyphCtx.device.kind === 'gamepad') return capText(this.glyphCtx, a);
     return this.binds ? primaryLabel(this.binds, a) : a === 'rewind' ? 'R' : 'Tab';
+  }
+
+  private setExpandKey(): void {
+    const g = this.glyphCtx;
+    if (g && g.device.kind === 'gamepad') {
+      const cap = h('span', { html: capHTML(g, 'timeline') }).firstElementChild as HTMLElement | null;
+      this.expandKey.className = `${cap?.className ?? 'rx-key'} cyan`;
+      this.expandKey.textContent = cap?.textContent ?? '';
+    } else {
+      this.expandKey.className = 'rx-key cyan';
+      this.expandKey.textContent = this.key('timeline');
+    }
+  }
+
+  private scrubTo(tick: number): void {
+    this.scrubbing = true;
+    this.scrubTick = tick;
+    this.cb.onScrub?.(tick);
+    if (this.timeline) this.update(this.timeline, { paused: this.paused, previewTick: this.externalPreview });
+  }
+
+  private endScrub(): void {
+    if (!this.scrubbing) return;
+    this.scrubbing = false;
+    this.scrubTick = null;
+    this.cb.onScrubEnd?.();
+    if (this.timeline) this.update(this.timeline, { paused: this.paused, previewTick: null });
   }
 
   private echoCount(): number {
@@ -439,21 +574,11 @@ export class TimelinePanel {
       const w = r.width || 1;
       return tickAtViewFrac((clientX - r.left) / w, this.vp);
     };
-    const begin = (tick: number): void => {
-      this.scrubbing = true;
-      this.scrubTick = tick;
-      this.cb.onScrub?.(tick);
-      if (this.timeline) this.update(this.timeline, { paused: this.paused, previewTick: this.externalPreview });
-    };
-    const end = (): void => {
-      if (!this.scrubbing) return;
-      this.scrubbing = false;
-      this.scrubTick = null;
-      this.cb.onScrubEnd?.();
-      if (this.timeline) this.update(this.timeline, { paused: this.paused, previewTick: null });
-    };
+    const begin = (tick: number): void => this.scrubTo(tick);
+    const end = (): void => this.endScrub();
     this.stage.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
+      if (this.touchMode && !this.expanded) return; // the collapsed strip only opens the sheet on touch
       // markers keep their tooltips but scrubbing works anywhere on the stage
       try {
         this.stage.setPointerCapture(e.pointerId);

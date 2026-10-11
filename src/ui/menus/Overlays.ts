@@ -1,9 +1,11 @@
 import type { LevelDefinition, LevelHint } from '../../engine/contracts';
 import { arrowNav, esc, h } from '../dom';
+import { deviceHintHTML, padHintHTML } from '../glyphs';
 import { icon } from '../icons';
 import { ringsSVG } from '../rings';
 import { formatTicks } from '../timeline/model';
 import type { LevelCompleteStats, PauseData } from '../types';
+import { holdToConfirm, type HoldGate } from '../touch/holdButton';
 import type { Screen } from './MainMenu';
 
 type Sound = (c: 'hover' | 'confirm' | 'back') => void;
@@ -33,11 +35,19 @@ export interface PauseActions {
 }
 
 export function createPause(data: PauseData, hints: { revealed: readonly LevelHint[]; total: number }, act: PauseActions): Screen {
+  // Touch: restarting throws away every echo, so a finger must hold the button (mouse / keys / pad click instantly).
+  let gate: HoldGate | null = null;
+  const restart = menuButton('Restart chamber', 'restart', () => (gate?.consume() ? undefined : act.onRestart()), act.sound, false, 'pause-restart');
+  restart.querySelector('span')?.append(h('span', { class: 'rx-holdtag rx-touch-only' }, 'Hold'));
+  gate = holdToConfirm(restart, () => {
+    act.sound('confirm');
+    act.onRestart();
+  });
   const list = h(
     'nav',
     { class: 'list', 'aria-label': 'Pause menu' },
     menuButton('Resume', 'play', act.onResume, act.sound, true, 'pause-resume'),
-    menuButton('Restart chamber', 'restart', act.onRestart, act.sound, false, 'pause-restart'),
+    restart,
     menuButton('Settings', 'settings', act.onSettings, act.sound),
     menuButton('Level select', 'grid', act.onLevelSelect, act.sound),
     menuButton('Main menu', 'exit', act.onQuit, act.sound, false, 'pause-quit'),
@@ -72,7 +82,14 @@ export function createPause(data: PauseData, hints: { revealed: readonly LevelHi
     h('div', { style: 'margin-top:1em' }, reveal),
   );
   const el = h('div', { class: 'rx-screen rx-dim rx-pause', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Paused', 'data-testid': 'pause' }, left, right);
-  return { el, dispose: arrowNav(list) };
+  const offNav = arrowNav(list);
+  return {
+    el,
+    dispose: () => {
+      offNav();
+      gate?.dispose();
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -124,7 +141,7 @@ export function createLevelIntro(level: LevelDefinition, act: { onBegin(): void;
       (story ? `<ul class="story">${story}</ul>` : '') +
       `<div class="facts">${facts}</div>`,
   });
-  const go = h('div', { class: 'go' }, begin, h('span', { class: 'rx-muted rx-display', style: 'font-size:.6em;letter-spacing:.3em', html: '<span class="rx-key cyan">Enter</span>&nbsp; to begin' }));
+  const go = h('div', { class: 'go' }, begin, h('span', { class: 'rx-muted rx-display', style: 'font-size:.6em;letter-spacing:.3em', html: deviceHintHTML('<span class="rx-key cyan">Enter</span>&nbsp; to begin', `${padHintHTML(0)}&nbsp; to begin`) }));
   card.append(go);
   const el = h('div', { class: 'rx-screen rx-intro', role: 'dialog', 'aria-label': `Chamber ${level.order}: ${level.name}`, 'data-testid': 'level-intro' }, card);
   const onKey = (e: KeyboardEvent): void => {

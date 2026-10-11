@@ -3,7 +3,11 @@
  * Consumers: graphics (quality), audio (volumes), camera (sensitivity), UI (scale, motion, palette).
  */
 
-export const QUALITY_PRESETS = ['low', 'medium', 'high', 'ultra'] as const;
+/**
+ * 'auto' (the default) lets the renderer pick by device: the 'mobile' preset on phones/tablets (iPhone/iPad incl.
+ * iPadOS, coarse pointer + small screen), 'high' on desktop. Any other value is an explicit choice and is respected.
+ */
+export const QUALITY_PRESETS = ['auto', 'low', 'mobile', 'medium', 'high', 'ultra'] as const;
 export type QualityPreset = (typeof QUALITY_PRESETS)[number];
 
 export const ECHO_PALETTES = ['default', 'highContrast'] as const;
@@ -35,7 +39,7 @@ export const SETTINGS_LIMITS = {
 } as const;
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
-  quality: 'high',
+  quality: 'auto',
   masterVolume: 80,
   musicVolume: 60,
   sfxVolume: 80,

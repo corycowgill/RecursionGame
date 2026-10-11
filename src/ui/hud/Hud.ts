@@ -1,7 +1,8 @@
 import type { LevelDefinition } from '../../engine/contracts';
-import { movementLabel, primaryLabel, type KeyBindings } from '../../persistence/keybinds';
+import { type KeyBindings } from '../../persistence/keybinds';
 import type { EchoPaletteId } from '../../persistence/settings';
 import { esc, h } from '../dom';
+import { capHTML, defaultGlyphs, type GlyphContext } from '../glyphs';
 import { icon, shapeBadge, shapeGlyph } from '../icons';
 import { echoStyle } from '../palette';
 import { formatTicks } from '../timeline/model';
@@ -49,6 +50,9 @@ export class Hud {
   private readonly cache = new Map<HTMLElement, string>();
   private level: LevelDefinition | null = null;
   private controlsSig = '';
+  private promptSig = '';
+  /** Prompt glyph context (last-used device + bindings), set by createUI. Keyboard defaults until then. */
+  glyphs: GlyphContext | null = null;
 
   constructor(private readonly onSkipTutorial: () => void) {
     this.chamber = h('div', { class: 'rx-eyebrow' });
@@ -159,26 +163,53 @@ export class Hud {
     const p = frame.prompt;
     const showPrompt = !!p && p.action !== 'none' && state.status === 'playing' && preview === null;
     this.prompt.classList.toggle('off', !showPrompt);
+    const g = this.ctx(binds);
     if (p && showPrompt) {
       this.prompt.classList.toggle('blocked', p.action === 'blocked');
-      setText(this.promptKey, p.action === 'blocked' ? '!' : primaryLabel(binds, 'interact'));
+      // Interaction prompt glyph follows the last-used device (key cap or controller button).
+      const keySig = p.action === 'blocked' ? '!' : `${JSON.stringify(g.device)}|${capHTML(g, 'interact')}`;
+      if (keySig !== this.promptSig) {
+        this.promptSig = keySig;
+        if (p.action === 'blocked') {
+          this.promptKey.className = 'rx-key';
+          this.promptKey.textContent = '!';
+        } else {
+          const cap = h('span', { html: capHTML(g, 'interact') }).firstElementChild as HTMLElement | null;
+          this.promptKey.className = cap?.className ?? 'rx-key';
+          this.promptKey.textContent = cap?.textContent ?? '';
+        }
+      }
       setText(this.promptLbl, p.label);
     }
 
-    // Control hints
-    const sig = JSON.stringify(binds);
+    // Control hints (redrawn when the bindings or the last-used device change)
+    const sig = JSON.stringify([binds, g.device, g.padbinds]);
     if (sig !== this.controlsSig) {
       this.controlsSig = sig;
-      const k = (a: Parameters<typeof primaryLabel>[1]): string => `<span class="rx-key">${esc(primaryLabel(binds, a))}</span>`;
+      const k = (a: Parameters<typeof capHTML>[1]): string => capHTML(g, a);
+      const pad = g.device.kind === 'gamepad';
       this.controls.innerHTML = [
-        `<span><span class="rx-key">${esc(movementLabel(binds))}</span>Move</span>`,
+        `<span>${k('move')}Move</span>`,
         `<span>${k('interact')}Interact</span>`,
         `<span>${k('rewind')}New echo</span>`,
-        `<span>${k('restart')}Restart</span>`,
+        `<span>${k('restart')}${pad ? 'Hold · Restart' : 'Restart'}</span>`,
         `<span>${k('timeline')}Timeline</span>`,
+        ...(pad ? [`<span>${k('preview')}Preview</span>`] : []),
         `<span>${k('pause')}Pause</span>`,
       ].join('');
     }
+  }
+
+  /** Cap of the restart control for the current device (hold indicator). */
+  restartCap(): string {
+    const g = this.glyphs;
+    return g ? capHTML(g, 'restart') : '';
+  }
+
+  /** Glyph context with the given key bindings (the HUD is handed the live bindings every frame). */
+  private ctx(binds: KeyBindings): GlyphContext {
+    const g = this.glyphs ?? defaultGlyphs(binds);
+    return g.keybinds === binds ? g : { ...g, keybinds: binds };
   }
 
   // ------------------------------------------------------------------ hints
@@ -214,17 +245,20 @@ export class Hud {
       this.onboard.hidden = true;
       return;
     }
-    const text = esc(step.text).replace(/\{key:(\w+)\}/g, (_, a: string) => `<span class="rx-key">${esc(primaryLabel(binds, a as never))}</span>`);
+    const g = this.ctx(binds);
+    const text = esc(step.text).replace(/\{key:(\w+)\}/g, (_, a: string) => capHTML(g, a as never));
     const keys =
       step.keys === 'move'
-        ? (['moveUp', 'moveLeft', 'moveDown', 'moveRight'] as const).map((a) => primaryLabel(binds, a))
-        : step.keys.map((a) => primaryLabel(binds, a));
+        ? g.device.kind !== 'keyboard'
+          ? [capHTML(g, 'move')]
+          : (['moveUp', 'moveLeft', 'moveDown', 'moveRight'] as const).map((a) => capHTML(g, a))
+        : step.keys.map((a) => capHTML(g, a));
     const dots = Array.from({ length: total }, (_, i) => `<i class="${i <= index ? 'on' : ''}"></i>`).join('');
     this.onboard.hidden = false;
     this.onboard.innerHTML =
       `<div class="rx-hair"></div><div class="rx-eyebrow">Training · ${index + 1} / ${total}</div>` +
       `<div class="title">${esc(step.title)}</div><p>${text}</p>` +
-      (keys.length ? `<div class="keys">${keys.map((k) => `<span class="rx-key">${esc(k)}</span>`).join('')}</div>` : '') +
+      (keys.length ? `<div class="keys">${keys.join('')}</div>` : '') +
       `<div class="dots" aria-hidden="true">${dots}</div>`;
     const skip = h('button', { class: 'rx-iconbtn skip', type: 'button', 'aria-label': 'Skip tutorial', title: 'Skip tutorial', html: icon('close') });
     skip.style.pointerEvents = 'auto';

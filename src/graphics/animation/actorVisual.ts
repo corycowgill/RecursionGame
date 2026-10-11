@@ -5,6 +5,7 @@ import type { MaterialLibrary } from '../materials/library';
 import { labelTexture } from '../materials/textures';
 import { createTrailMaterial } from '../shaders/fx';
 import { Character, CHARACTER_RENDER_ORDER, type GestureKind } from './character';
+import type { CharacterLod } from './characterModel';
 
 /**
  * ActorVisual — one actor on screen: the animated Character plus readability layers:
@@ -62,11 +63,11 @@ export class ActorVisual {
   constructor(
     lib: MaterialLibrary,
     actor: ActorView,
-    opts: { trail: boolean },
+    opts: { trail: boolean; lod?: CharacterLod },
   ) {
     this.isPlayer = actor.kind === 'player';
     const tint = this.isPlayer ? PALETTE.gold : echoTint(actor.echoIndex);
-    this.character = new Character(lib, this.isPlayer ? 'player' : 'echo', tint, seedOf(actor.id));
+    this.character = new Character(lib, this.isPlayer ? 'player' : 'echo', tint, seedOf(actor.id), opts.lod ?? 0);
     this.character.root.scale.setScalar(CHARACTER_SCALE);
     this.root.add(this.character.root);
 

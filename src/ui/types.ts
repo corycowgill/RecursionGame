@@ -1,4 +1,5 @@
 import type { LevelDefinition, SimView, Timeline } from '../engine/contracts';
+import type { PadBindings } from '../engine/input/gamepadBindings';
 import type { InteractionPrompt } from '../gameplay/interactions/targeting';
 import type { CompletionResult } from '../gameplay/puzzles/completion';
 import type { ObjectiveStatus } from '../gameplay/puzzles/objectives';
@@ -34,6 +35,8 @@ export interface UICallbacks {
   onTimelineToggle?(expanded: boolean): void;
   onSettingsChange?(settings: Settings): void;
   onKeybindsChange?(binds: KeyBindings): void;
+  /** Gamepad bindings changed in Settings (persist with SaveStore.setPadBindings). */
+  onPadBindsChange?(binds: PadBindings): void;
   /** Level intro dismissed: start simulating. */
   onIntroDone?(): void;
   onNextLevel?(): void;

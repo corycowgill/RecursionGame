@@ -59,7 +59,8 @@ async function bootToMenu(page: Page): Promise<void> {
   await expect.poll(() => hook(page, (h) => h.mode)).toBe('menu');
 }
 
-test.describe.configure({ timeout: 240_000 });
+// SwiftShader: the full smoke flow takes ~4 min on an idle 4-CPU machine, right at the old 240 s budget (round 3).
+test.describe.configure({ timeout: 360_000 });
 
 test('menu → level 1 → move → record → rewind → echo replays → solve → complete → next level', async ({ page }) => {
   const errors = trackErrors(page);

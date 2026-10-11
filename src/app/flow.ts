@@ -1,5 +1,5 @@
 import type { LevelDefinition, PlayerInput, SimView, TemporalLoop } from '../engine/contracts';
-import type { QualityLevel } from '../engine/rendering';
+import { deviceProfile, resolveQuality, type QualityLevel } from '../engine/rendering';
 import type { ComfortSettings } from '../engine/rendering/comfort';
 import { QUALITY_PRESETS, type QualityPreset, type Settings } from '../persistence/settings';
 import { compileSolution } from '../testing/harness/harness';
@@ -12,9 +12,12 @@ import { compileSolution } from '../testing/harness/harness';
 /** Top-level app flow. `playing` covers the paused / timeline-inspect / temporal-preview sub-states. */
 export type AppMode = 'boot' | 'menu' | 'intro' | 'playing' | 'complete';
 
-/** Settings has an extra 'ultra' preset; the renderer tops out at 'high'. */
+/**
+ * Renderer preset for a Settings / URL value: 'auto' picks by device ('mobile' on phones/tablets, 'high' on
+ * desktop; see engine/rendering/device.ts); 'ultra' tops out at 'high'; explicit presets are respected.
+ */
 export function rendererQuality(q: QualityPreset | string | null | undefined): QualityLevel {
-  return q === 'low' || q === 'medium' ? q : 'high';
+  return resolveQuality(q, deviceProfile());
 }
 
 /**

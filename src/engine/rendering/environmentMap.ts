@@ -5,7 +5,7 @@ import * as THREE from 'three';
  * dark floor) with warm strip lights on one side and a large cool window panel on the other. Gives brass a
  * warm/cool split highlight that matches the chamber lighting instead of RoomEnvironment's neutral grey.
  */
-export function createEnvironmentTexture(renderer: THREE.WebGLRenderer): THREE.Texture {
+export function createEnvironmentTexture(renderer: THREE.WebGLRenderer, size = 256): THREE.Texture {
   const scene = new THREE.Scene();
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(50, 32, 16),
@@ -50,7 +50,7 @@ export function createEnvironmentTexture(renderer: THREE.WebGLRenderer): THREE.T
   scene.add(top);
 
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const rt = pmrem.fromScene(scene, 0.035);
+  const rt = pmrem.fromScene(scene, 0.035, 0.1, 100, { size });
   pmrem.dispose();
   scene.traverse((o) => {
     const m = o as THREE.Mesh;

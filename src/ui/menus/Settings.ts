@@ -15,6 +15,7 @@ import { esc, h } from '../dom';
 import { icon, shapeBadge } from '../icons';
 import { echoStyle, playerStyle } from '../palette';
 import type { Screen } from './MainMenu';
+import { createPadRemap, type PadRemapOptions } from './PadRemap';
 
 export interface SettingsActions {
   onChange(s: Settings): void;
@@ -40,9 +41,11 @@ export interface SettingsOptions {
    * selector and names the saved preset that applies without the override.
    */
   qualityOverride?: QualityPreset | null;
+  /** Gamepad remapping section in the Controls tab (round 3, gamepad input). Omitted = no gamepad section. */
+  pad?: PadRemapOptions;
 }
 
-const QUALITY_LABELS: Record<QualityPreset, string> = { low: 'Low', medium: 'Medium', high: 'High', ultra: 'Ultra' };
+const QUALITY_LABELS: Record<QualityPreset, string> = { auto: 'Auto', low: 'Low', mobile: 'Mobile', medium: 'Medium', high: 'High', ultra: 'Ultra' };
 
 /** Settings: display, audio, accessibility, controls (key remapping). Every change is emitted immediately. */
 export function createSettings(
@@ -51,7 +54,7 @@ export function createSettings(
   act: SettingsActions,
   startTab: Tab = 'graphics',
   opts: SettingsOptions = {},
-): Screen & { setTab(t: Tab): void } {
+): Screen & { setTab(t: Tab): void; padButton(index: number): boolean; readonly padCapturing: boolean } {
   const qualityOverride = opts.qualityOverride ?? null;
   let s: Settings = { ...initial };
   let binds: KeyBindings = initialBinds;
@@ -59,6 +62,7 @@ export function createSettings(
   let capture: { action: BindableAction; slot: number } | null = null;
   let notice = '';
   const id = ++uid;
+  const padRemap = opts.pad ? createPadRemap(opts.pad, act.sound) : null;
 
   const emit = (patch: Partial<Settings>): void => {
     s = { ...s, ...patch };
@@ -250,6 +254,7 @@ export function createSettings(
         render();
       });
       body.append(h('div', { class: 'rx-dialog-foot', style: 'justify-content:space-between;align-items:center' }, h('span', { class: 'rx-muted', role: 'status', 'aria-live': 'polite' }, notice), reset));
+      if (padRemap) body.append(padRemap.el);
     }
   }
 
@@ -330,7 +335,12 @@ export function createSettings(
   return {
     el,
     setTab,
+    padButton: (index: number) => padRemap?.padButton(index) ?? false,
+    get padCapturing() {
+      return padRemap?.capturing ?? false;
+    },
     dispose() {
+      padRemap?.dispose();
       window.removeEventListener('keydown', onKey, true);
     },
   };

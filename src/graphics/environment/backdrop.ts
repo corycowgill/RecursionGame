@@ -58,7 +58,18 @@ function windowTexture(): THREE.CanvasTexture {
   return t;
 }
 
-export function buildBackdrop(lib: MaterialLibrary, centre: THREE.Vector3, span: number, opts: { shafts: boolean; seed?: number }): Backdrop {
+/**
+ * `detail: 'reduced'` (mobile preset) keeps the silhouette but cuts fill-rate and vertex cost: one cloud layer
+ * instead of two, one haze curtain instead of three, half the towers and far spires, no bridges or flying arches,
+ * four of the nine clockwork rings and a coarser sky dome.
+ */
+export function buildBackdrop(
+  lib: MaterialLibrary,
+  centre: THREE.Vector3,
+  span: number,
+  opts: { shafts: boolean; seed?: number; detail?: 'full' | 'reduced' },
+): Backdrop {
+  const reduced = opts.detail === 'reduced';
   const group = new THREE.Group();
   group.name = 'backdrop';
   const disposables: { dispose(): void }[] = [];
@@ -71,7 +82,7 @@ export function buildBackdrop(lib: MaterialLibrary, centre: THREE.Vector3, span:
 
   // Sky
   const skyMat = own(createSkyMaterial());
-  const sky = new THREE.Mesh(own(new THREE.SphereGeometry(900, 48, 24)), skyMat);
+  const sky = new THREE.Mesh(own(reduced ? new THREE.SphereGeometry(900, 32, 16) : new THREE.SphereGeometry(900, 48, 24)), skyMat);
   sky.renderOrder = -10;
   sky.frustumCulled = false;
   sky.position.copy(centre);
@@ -85,16 +96,16 @@ export function buildBackdrop(lib: MaterialLibrary, centre: THREE.Vector3, span:
   clouds.position.set(centre.x, -55, centre.z);
   clouds.renderOrder = -5;
   group.add(clouds);
-  const clouds2 = new THREE.Mesh(clouds.geometry, own(createCloudMaterial(0x16466a, 0x9fd6f0)));
-  (clouds2.material as THREE.ShaderMaterial).uniforms['uOpacity']!.value = 0.45;
-  clouds2.rotation.x = -Math.PI / 2;
-  clouds2.position.set(centre.x, -32, centre.z);
-  clouds2.renderOrder = -4;
-  group.add(clouds2);
-  updaters.push((t) => {
-    cloudMat.uniforms['uTime']!.value = t;
-    (clouds2.material as THREE.ShaderMaterial).uniforms['uTime']!.value = t * 1.6 + 40;
-  });
+  updaters.push((t) => (cloudMat.uniforms['uTime']!.value = t));
+  if (!reduced) {
+    const clouds2 = new THREE.Mesh(clouds.geometry, own(createCloudMaterial(0x16466a, 0x9fd6f0)));
+    (clouds2.material as THREE.ShaderMaterial).uniforms['uOpacity']!.value = 0.45;
+    clouds2.rotation.x = -Math.PI / 2;
+    clouds2.position.set(centre.x, -32, centre.z);
+    clouds2.renderOrder = -4;
+    group.add(clouds2);
+    updaters.push((t) => ((clouds2.material as THREE.ShaderMaterial).uniforms['uTime']!.value = t * 1.6 + 40));
+  }
 
   // Towers (instanced): body + tier + spire + glowing crown ring
   const winTex = own(windowTexture());
@@ -109,8 +120,8 @@ export function buildBackdrop(lib: MaterialLibrary, centre: THREE.Vector3, span:
   spireGeo.rotateY(Math.PI / 4);
   const crownGeo = own(new THREE.TorusGeometry(0.75, 0.05, 6, 24));
   crownGeo.rotateX(Math.PI / 2);
-  const N = 96;
-  const FAR = 70; // far horizon spires (needles only, very tall, fogged to silhouettes)
+  const N = reduced ? 48 : 96;
+  const FAR = reduced ? 30 : 70; // far horizon spires (needles only, very tall, fogged to silhouettes)
   const bodies = new THREE.InstancedMesh(bodyGeo, towerMat, N * 2 + FAR);
   const spires = new THREE.InstancedMesh(spireGeo, towerTrim, N + FAR);
   const crowns = new THREE.InstancedMesh(crownGeo, lib.emissive(PALETTE.cyan, 2.0), N + 24);
@@ -221,43 +232,45 @@ export function buildBackdrop(lib: MaterialLibrary, centre: THREE.Vector3, span:
   group.add(arches, archLights);
 
   // Walkway bridges between towers (thin slabs with amber underlights)
-  const bridgeGeo = own(new THREE.BoxGeometry(1, 0.8, 3));
-  const bridges = new THREE.InstancedMesh(bridgeGeo, arcadeMat, 10);
-  const bridgeLightGeo = own(new THREE.BoxGeometry(1, 0.12, 0.25));
-  const bridgeLights = new THREE.InstancedMesh(bridgeLightGeo, lib.emissive(PALETTE.warmLamp, 2.4), 10);
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI * (0.15 + r() * 0.7);
-    const dist = span + 40 + r() * 80;
-    const len = 30 + r() * 60;
-    o.position.set(centre.x + Math.cos(a) * dist, -6 + r() * 30, centre.z + Math.sin(a) * dist);
-    o.rotation.set(0, a + Math.PI / 2 + (r() - 0.5) * 0.6, 0);
-    o.scale.set(len, 1, 1);
-    o.updateMatrix();
-    bridges.setMatrixAt(i, o.matrix);
-    o.position.y -= 0.5;
-    o.updateMatrix();
-    bridgeLights.setMatrixAt(i, o.matrix);
-  }
-  bridges.instanceMatrix.needsUpdate = true;
-  bridgeLights.instanceMatrix.needsUpdate = true;
-  bridges.computeBoundingSphere();
-  bridgeLights.computeBoundingSphere();
-  group.add(bridges, bridgeLights);
+  if (!reduced) {
+    const bridgeGeo = own(new THREE.BoxGeometry(1, 0.8, 3));
+    const bridges = new THREE.InstancedMesh(bridgeGeo, arcadeMat, 10);
+    const bridgeLightGeo = own(new THREE.BoxGeometry(1, 0.12, 0.25));
+    const bridgeLights = new THREE.InstancedMesh(bridgeLightGeo, lib.emissive(PALETTE.warmLamp, 2.4), 10);
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI * (0.15 + r() * 0.7);
+      const dist = span + 40 + r() * 80;
+      const len = 30 + r() * 60;
+      o.position.set(centre.x + Math.cos(a) * dist, -6 + r() * 30, centre.z + Math.sin(a) * dist);
+      o.rotation.set(0, a + Math.PI / 2 + (r() - 0.5) * 0.6, 0);
+      o.scale.set(len, 1, 1);
+      o.updateMatrix();
+      bridges.setMatrixAt(i, o.matrix);
+      o.position.y -= 0.5;
+      o.updateMatrix();
+      bridgeLights.setMatrixAt(i, o.matrix);
+    }
+    bridges.instanceMatrix.needsUpdate = true;
+    bridgeLights.instanceMatrix.needsUpdate = true;
+    bridges.computeBoundingSphere();
+    bridgeLights.computeBoundingSphere();
+    group.add(bridges, bridgeLights);
 
-  // Flying arches: slim gateway spans leaping between the arcade piers and the tower field
-  const flyGeo = own(archGateGeometry(9, 4, 1.4, 2.2));
-  const flyers = new THREE.InstancedMesh(flyGeo, towerTrim, 6);
-  for (let i = 0; i < 6; i++) {
-    const s = i % 2 === 0 ? -1 : 1;
-    o.position.set(centre.x + s * (30 + i * 14 + span * 0.5), -6 + i * 5, centre.z - span - 60 - i * 22);
-    o.rotation.set(0, s * 0.35, 0);
-    o.scale.setScalar(1 + i * 0.25);
-    o.updateMatrix();
-    flyers.setMatrixAt(i, o.matrix);
+    // Flying arches: slim gateway spans leaping between the arcade piers and the tower field
+    const flyGeo = own(archGateGeometry(9, 4, 1.4, 2.2));
+    const flyers = new THREE.InstancedMesh(flyGeo, towerTrim, 6);
+    for (let i = 0; i < 6; i++) {
+      const s = i % 2 === 0 ? -1 : 1;
+      o.position.set(centre.x + s * (30 + i * 14 + span * 0.5), -6 + i * 5, centre.z - span - 60 - i * 22);
+      o.rotation.set(0, s * 0.35, 0);
+      o.scale.setScalar(1 + i * 0.25);
+      o.updateMatrix();
+      flyers.setMatrixAt(i, o.matrix);
+    }
+    flyers.instanceMatrix.needsUpdate = true;
+    flyers.computeBoundingSphere();
+    group.add(flyers);
   }
-  flyers.instanceMatrix.needsUpdate = true;
-  flyers.computeBoundingSphere();
-  group.add(flyers);
 
   // Clockwork rings — all instanced together (4 draw calls total)
   const parts = new AnimatedParts();
@@ -279,12 +292,13 @@ export function buildBackdrop(lib: MaterialLibrary, centre: THREE.Vector3, span:
     { m: at(centre.x, -9, centre.z, -Math.PI / 2, 0), r: span * 0.62 + 4, speed: 0.02, teeth: 0.3, glow: 0.9 },
     { m: at(centre.x, -30, centre.z, -Math.PI / 2, 0), r: span * 0.72 + 6, speed: -0.012, teeth: 0.3, glow: 0.8, color: PALETTE.gold },
   ];
-  for (const sp of ringSpecs) addClockworkRing(parts, clock, lib, sp.m, sp.r, { teeth: sp.teeth, speed: sp.speed, glow: sp.glow, ...(sp.color !== undefined ? { color: sp.color } : {}) });
+  const RING_SUBSET = [0, 2, 5, 7];
+  for (const sp of reduced ? ringSpecs.filter((_, i) => RING_SUBSET.includes(i)) : ringSpecs) addClockworkRing(parts, clock, lib, sp.m, sp.r, { teeth: sp.teeth, speed: sp.speed, glow: sp.glow, ...(sp.color !== undefined ? { color: sp.color } : {}) });
   group.add(parts.build('backdrop-rings'));
   updaters.push((t) => parts.update(t));
 
   // Depth haze: concentric fog curtains between the layers (one instanced draw call)
-  const hazeGeo = own(new THREE.CylinderGeometry(1, 1, 1, 64, 1, true));
+  const hazeGeo = own(new THREE.CylinderGeometry(1, 1, 1, reduced ? 40 : 64, 1, true));
   hazeGeo.translate(0, 0.5, 0);
   const hazeMat = own(hazeMaterial());
   const hazeSpecs = [
@@ -292,6 +306,7 @@ export function buildBackdrop(lib: MaterialLibrary, centre: THREE.Vector3, span:
     { r: span * 1.6 + 150, y: -60, h: 110, c: 0x2a5f80, k: 1.0 },
     { r: 300, y: -60, h: 150, c: 0x2f6a8c, k: 1.0 },
   ];
+  if (reduced) hazeSpecs.splice(0, hazeSpecs.length, hazeSpecs[1]!);
   const haze = new THREE.InstancedMesh(hazeGeo, hazeMat, hazeSpecs.length);
   hazeSpecs.forEach((h, i) => {
     o.position.set(centre.x, h.y, centre.z);

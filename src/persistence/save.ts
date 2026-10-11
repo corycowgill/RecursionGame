@@ -2,6 +2,7 @@ import type { TemporalLoop } from '../engine/contracts';
 import { decodeLoop, encodeLoop, type EncodedLoop } from '../engine/temporal/loops';
 import type { CompletionResult } from '../gameplay/puzzles/completion';
 import { emptyProgress, recordCompletion, type CampaignProgress, type LevelRecord } from '../levels/progression';
+import { defaultPadBindings, sanitizePadBindings, type PadBindings } from '../engine/input/gamepadBindings';
 import { defaultKeybinds, sanitizeKeybinds, type KeyBindings } from './keybinds';
 import { defaultSettings, sanitizeSettings, type Settings } from './settings';
 import { MemoryStorage, detectLocalStorage, type StorageLike } from './storage';
@@ -26,6 +27,8 @@ export interface SaveData {
   progress: CampaignProgress;
   settings: Settings;
   keybinds: KeyBindings;
+  /** Gamepad button bindings (round 3, additive; older saves get the defaults). */
+  padbinds: PadBindings;
   /** Onboarding sequences already completed (e.g. "L01"). */
   seenTutorials: string[];
   /** Committed echoes per level, so "Continue" can resume a half-solved chamber. */
@@ -39,6 +42,7 @@ export function defaultSave(): SaveData {
     progress: emptyProgress(),
     settings: defaultSettings(),
     keybinds: defaultKeybinds(),
+    padbinds: defaultPadBindings(),
     seenTutorials: [],
     loops: {},
     lastLevelId: null,
@@ -118,6 +122,7 @@ export function migrateSave(raw: unknown): SaveData {
     progress: sanitizeProgress(r['progress']),
     settings: sanitizeSettings(r['settings']),
     keybinds: r['keybinds'] === undefined ? defaultKeybinds() : sanitizeKeybinds(r['keybinds']),
+    padbinds: r['padbinds'] === undefined ? defaultPadBindings() : sanitizePadBindings(r['padbinds']),
     seenTutorials: Array.isArray(r['seenTutorials'])
       ? [...new Set(r['seenTutorials'].filter((s): s is string => typeof s === 'string'))]
       : [],
@@ -212,6 +217,10 @@ export class SaveStore {
     return this.update((d) => ({ ...d, keybinds: sanitizeKeybinds(binds) })).keybinds;
   }
 
+  setPadBindings(binds: PadBindings): PadBindings {
+    return this.update((d) => ({ ...d, padbinds: sanitizePadBindings(binds) })).padbinds;
+  }
+
   /** Records a completion (keeps best results), clears saved loops for the level. Returns the new record. */
   recordResult(result: CompletionResult): { record: LevelRecord; isNewBestTime: boolean; isNewBestEchoes: boolean; firstClear: boolean } {
     const prev = this.current.progress.records[result.levelId];
@@ -261,7 +270,7 @@ export class SaveStore {
 
   /** Wipes progress (keeps settings and keybinds unless `everything`). */
   reset(everything = false): void {
-    this.update((d) => (everything ? defaultSave() : { ...defaultSave(), settings: d.settings, keybinds: d.keybinds }));
+    this.update((d) => (everything ? defaultSave() : { ...defaultSave(), settings: d.settings, keybinds: d.keybinds, padbinds: d.padbinds }));
   }
 
   private fallBack(err: unknown): void {

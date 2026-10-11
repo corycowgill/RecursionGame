@@ -119,6 +119,14 @@ function keys(pts: readonly (readonly [number, number])[]): (y: number) => numbe
   };
 }
 
+/**
+ * Tessellation multiplier while a model is being built: 1 = full detail (LOD 0), 0.4 for LOD 1 (mobile preset).
+ * Only segment counts change; proportions, panels and paint stay identical.
+ */
+let DETAIL = 1;
+/** Reduced segment count, never below `min` (silhouette) and never above the authored `n` (LOD 0 is untouched). */
+const seg = (n: number, min: number): number => (DETAIL >= 1 ? n : Math.min(n, Math.max(min, Math.round(n * DETAIL))));
+
 const bump = (x: number, c: number, w: number) => Math.exp(-((x - c) * (x - c)) / (w * w));
 
 interface SurfaceOpts {
@@ -149,8 +157,8 @@ interface Piece {
  * Partial phi ranges make conforming armour panels; `thick` adds edge walls (seams).
  */
 function surface(r: RFn, y0: number, y1: number, paint: Paint, o: SurfaceOpts = {}): Piece[] {
-  const rows = o.rows ?? 16;
-  const cols = o.cols ?? 28;
+  const rows = seg(o.rows ?? 16, 2);
+  const cols = seg(o.cols ?? 28, 3);
   const sx = o.sx ?? 1;
   const sz = o.sz ?? 1;
   const off = o.off ?? 0;
@@ -279,9 +287,10 @@ class Builder {
   }
 }
 
-const rbox = (w: number, h: number, d: number, r: number, seg = 3) => new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4));
-const sphere = (r: number, ws = 16, hs = 12, ts = 0, tl = Math.PI) => new THREE.SphereGeometry(r, ws, hs, 0, Math.PI * 2, ts, tl);
-const cone = (r: number, h: number, seg = 7) => new THREE.ConeGeometry(r, h, seg, 1);
+const rbox = (w: number, h: number, d: number, r: number, segs = 3) =>
+  new RoundedBoxGeometry(w, h, d, seg(segs, 1), Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4));
+const sphere = (r: number, ws = 16, hs = 12, ts = 0, tl = Math.PI) => new THREE.SphereGeometry(r, seg(ws, 6), seg(hs, 4), 0, Math.PI * 2, ts, tl);
+const cone = (r: number, h: number, segs = 7) => new THREE.ConeGeometry(r, h, seg(segs, 5), 1);
 const sym = (c: number, h: number) => () => [c - h, c + h] as const;
 
 // ------------------------------------------------------------------------------------------- model
@@ -715,24 +724,42 @@ function buildModel(): Record<BoneName, THREE.BufferGeometry> {
   return b.finish();
 }
 
-let shared: Record<BoneName, THREE.BufferGeometry> | null = null;
+const shared: (Record<BoneName, THREE.BufferGeometry> | null)[] = [null, null];
+/** Segment multiplier per LOD. */
+const LOD_DETAIL = [1, 0.4] as const;
 
-/** Shared, lazily-built per-bone geometries. Never dispose them (all characters reference the same ones). */
-export function characterGeometries(): Record<BoneName, THREE.BufferGeometry> {
-  if (!shared) shared = buildModel();
-  return shared;
+export type CharacterLod = 0 | 1;
+
+/**
+ * Shared, lazily-built per-bone geometries. Never dispose them (all characters reference the same ones).
+ * `lod` 1 is the reduced-tessellation mesh used by the mobile preset (same bones, same draw calls, ~half the
+ * triangles).
+ */
+export function characterGeometries(lod: CharacterLod = 0): Record<BoneName, THREE.BufferGeometry> {
+  let g = shared[lod];
+  if (!g) {
+    DETAIL = LOD_DETAIL[lod];
+    try {
+      g = buildModel();
+    } finally {
+      DETAIL = 1;
+    }
+    shared[lod] = g;
+  }
+  return g;
 }
 
 /**
  * PBR suit material driven by the per-vertex paint attribute (roughness, metalness, emissive, clearcoat).
  * Player only; echoes use the hologram shader, which reads the same attributes.
  */
-export function createSuitMaterial(): THREE.MeshPhysicalMaterial {
+export function createSuitMaterial(lod: CharacterLod = 0): THREE.MeshPhysicalMaterial {
   const m = new THREE.MeshPhysicalMaterial({
     vertexColors: true,
     roughness: 1,
     metalness: 1,
-    clearcoat: 1,
+    // LOD 1 drops the clearcoat lobe (a second specular evaluation per pixel); three.js compiles it out at 0
+    clearcoat: lod === 0 ? 1 : 0,
     clearcoatRoughness: 0.32,
   });
   m.onBeforeCompile = (shader) => {

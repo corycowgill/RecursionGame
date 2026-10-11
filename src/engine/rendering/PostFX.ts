@@ -76,6 +76,29 @@ export class PostFX {
     (this.grade.uniforms['uResolution']!.value as THREE.Vector2).set(w * pixelRatio, h * pixelRatio);
   }
 
+  /**
+   * Estimated bytes held by the post chain's render targets at a drawing-buffer size: two half-float RGBA ping-pong
+   * targets (+ depth on the scene pass) and, when bloom is on, its 5-level mip chain (two half-float targets per
+   * level, starting at half of bloomResolutionScale x the buffer) plus the bright-pass target.
+   */
+  renderTargetBytes(bufferW: number, bufferH: number): number {
+    const px = bufferW * bufferH;
+    let bytes = px * 8 * 2 + px * 4; // 2 x RGBA16F + depth24/stencil8
+    if (this.bloom.enabled) {
+      // UnrealBloomPass halves the size it is given (see setSize below)
+      let w = Math.max(1, Math.round((bufferW * this.bloomScale) / 2));
+      let h = Math.max(1, Math.round((bufferH * this.bloomScale) / 2));
+      bytes += w * h * 8; // bright pass
+      for (let i = 0; i < 5; i++) {
+        bytes += w * h * 8 * 2;
+        w = Math.max(1, Math.round(w / 2));
+        h = Math.max(1, Math.round(h / 2));
+      }
+    }
+    if (this.aaKind === 'smaa') bytes += px * 4 * 2 + 160 * 560 + 64 * 16; // edges + weights targets + area/search LUTs
+    return bytes;
+  }
+
   render(dt: number): void {
     this.composer.render(dt);
   }

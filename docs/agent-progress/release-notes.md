@@ -1,4 +1,113 @@
-# RECURSION — Release Notes (v0.2, round-2 gap-fix review)
+# RECURSION — Release Notes (v0.3, round 3: controllers and iPhone)
+
+Date: 2026-10-11 (v0.2 and v0.1: below) · Build: `npm run build` → static `dist/` (relative base path) · Reviewer: Game Director
+
+This is an honest status report. "Verified" means checked by a test that was run for this release. **Every v0.3
+browser check ran in Chromium only** (SwiftShader software WebGL): iPhone was emulated with Playwright's
+`devices['iPhone 15']` (touch, isMobile, DPR 3, landscape 852×393, safe-area insets injected through CDP) and
+controllers were mocked by overriding `navigator.getGamepads`. **Real Safari/WebKit, real touch screens and real
+controllers were NOT tested.**
+
+## v0.3 summary
+
+The product owner asked for the browser game to be playable with game controllers and on iPhone (Safari, plus Add to
+Home Screen running full screen), without becoming a native app. Round 3 delivers that through the existing input
+abstraction: keyboard, controller and touch all produce the same `PlayerInput` / `GameCommand` stream (movement
+quantized to -1/0/1 before the sampler; only `PlayerInput` is recorded). The simulation was not changed and all
+golden replays pass unchanged.
+
+- **Game controller** (standard Gamepad API mapping): full play and menu navigation, device-matched button glyphs
+  (Xbox / PlayStation / Switch), hold-X restart with a fill ring, controller timeline scrubbing and track control,
+  remapping in Settings → Controls → Gamepad, hot-plug toasts, auto-pause on disconnect, a button press skips the
+  studio intro (polled from `index.html`'s inline script; the vendored intro is unchanged).
+- **Touch / iPhone**: floating joystick, Interact / New echo / Timeline / Preview / Pause buttons, pinch zoom,
+  two-finger tap for the overview camera, a touch timeline bottom sheet, hold-to-restart in the pause menu, a portrait
+  "rotate your device" overlay, a compact phone layout with safe-area padding, prevention of iOS page zoom / rubber
+  band / callouts, audio unlock on first tap.
+- **Home-screen web app**: viewport-fit=cover and Apple meta tags, `manifest.webmanifest` (fullscreen, landscape),
+  180/192/512/maskable icons, a dismissible "Add to Home Screen" hint in iOS Safari.
+- **Mobile performance**: a new `mobile` quality preset chosen automatically on iPhone/iPad/Android (`auto` is the
+  new default; explicit saved presets and `?quality=` are respected): pixel ratio ≤ 1.5, blob shadows instead of a
+  shadow map, half-resolution bloom + FXAA, fewer particles/lights, reduced backdrop, a 13k-triangle character LOD,
+  half-resolution procedural textures. Dynamic resolution (off under automation), WebGL context-loss recovery, and
+  the frame loop / audio stop while the page is hidden.
+
+## v0.3 cross-device checks (director, Chromium)
+
+| Check | Result |
+|---|---|
+| Keyboard unchanged on desktop | **Pass**: movement, R echo, Tab timeline, Esc pause, key-cap hints; smoke + flows suites pass |
+| Touch controls never appear on desktop without touch | **Pass**: no `rx-touchdev` / `rx-touch-on`, no joystick, buttons, rotate overlay or A2HS hint |
+| Controller and keyboard interchangeable | **Pass**: one recording holds stick, D-pad and WASD moves, all -1/0/1; pad Menu pauses, Esc resumes |
+| Prompts swap glyphs | **Pass**: Xbox glyphs after pad use, key caps after a key; touch names on iPhone; a key press on a touch device hides the on-screen controls and a tap restores them |
+| Portrait overlay | **Pass**: shown at 393×852, hidden again in landscape |
+| Safe areas (iPhone 15 landscape insets 59/59/0/21 px) | **Pass**: menu buttons, HUD cards, touch buttons, timeline strip and Settings stay inside the insets |
+| No console errors | **Pass** in every desktop, controller and iPhone session |
+| All 10 levels complete via the debug hook under iPhone emulation | **Pass** (L01–L10, verified solutions, no page errors) |
+| Settings quality row (6 presets) at phone width | **Pass**: fits at 852×393 |
+
+Screenshots (overwritten/added): `docs/art-direction/screenshots/final-mobile-menu.png`, `final-mobile-hud.png`
+(L05 mid-solve, two echoes), `final-mobile-timeline.png` (touch timeline sheet), `final-gamepad-prompts.png` (Xbox
+glyphs in the HUD and tutorial card).
+
+## Check on real hardware (owner)
+
+None of this has run on a device. Please check:
+
+1. **iPhone Safari tab**: the game loads over HTTPS, renders, and the Mobile preset holds a playable frame rate
+   (target 30 fps; fps on a real GPU was never measured). Watch thermal throttling over 10+ minutes.
+2. **Add to Home Screen**: icon and name, launches full screen in landscape, the translucent status bar and the
+   Dynamic Island / home indicator do not cover HUD cards or touch buttons (safe-area padding was only emulated).
+3. **Touch feel**: joystick deadzone and size, multi-touch (stick + Interact together), pinch never zooms the page,
+   no text-selection or callouts on long press, the 0.75 s hold-to-restart, the timeline sheet drag-scrub.
+4. **Audio** unlocks on the first tap on iOS (including after the silent switch and after returning from background).
+5. **Background / lock**: the game pauses and resumes without a catch-up burst; WebGL context loss after a long
+   background restores correctly.
+6. **Controllers**: Xbox, PlayStation (DualSense/DualShock) and Switch Pro on desktop Chrome/Edge/Firefox/Safari and
+   on iOS Safari. Check glyph detection from the pad id, stick deadzone (0.35) and trigger threshold (0.5), that
+   Safari's "press a button first" connection works, hot-plug and the disconnect auto-pause, and that a button press
+   skips the studio intro.
+7. **iPad** with and without a keyboard: auto-picks Mobile, controls hide on key press and return on touch.
+
+## v0.3 known issues
+
+1. Real Safari/WebKit, touch hardware and controllers untested (above). Mobile fps is unmeasured; L10 on Mobile is
+   still ~270 draw calls (18 per-bone meshes per character, ~0.2 M triangles of static kit without LOD).
+2. The Gamepad API has no button events: a press shorter than one animation frame can be missed (presses seen in a
+   frame are latched to the next tick).
+3. Authored level hint texts still say "Press E…" on touch and controller; tutorial cards and prompts do switch.
+4. No touch button for the Space context action (no level uses it today).
+5. On very short screens (343 px tall) the hint card can sit over the left thumb area (it is narrower there and can be
+   collapsed).
+6. Switching to Mobile in Settings mid-session applies everything except the half-resolution textures (on reload).
+7. While a keyboard rebind waits for a key, pressing A on another row starts a new keyboard rebind (minor).
+8. iOS keeps home-screen app storage separate from Safari's, so progress does not carry over between them.
+9. The smoke flow test now takes ~4 min under SwiftShader; its budget was raised from 240 s to 360 s (see below).
+
+## v0.3 tests run (director)
+
+- `npm run verify` (start and end of the director pass): typecheck clean · Vitest **37 files, 533 tests passed**, no
+  skipped tests · build OK. Golden replay files unchanged (no diff under `src/testing/replays`).
+- Targeted Playwright run (`CI=1 E2E_PORT=4711`: `gamepad.spec.ts`, `mobile.spec.ts`, `smoke.spec.ts`,
+  `flows.spec.ts`, 29.2 min): **9 passed, 1 failed**. The smoke flow test hit its 240 s timeout while the director's
+  screenshot scripts were competing for the 4 CPUs (the failure context shows the pause menu had already closed).
+  Re-run alone: passed in 3.9 min, i.e. right at the budget even on an idle machine, so its timeout was raised to 360 s.
+- Full Playwright suite (`CI=1 E2E_PORT=4713 npx playwright test`, 26.9 min): **17 passed, 0 failed**, including the
+  gamepad and iPhone specs, the all-10-levels sweep and all visual baselines. **No baselines were re-blessed.**
+- Perf probe (SwiftShader, not meaningful for real GPUs): L10 high 0.43 fps / 376 draw calls / 0.77 M triangles,
+  low 0.48 fps / 253 / 0.60 M; identical draw calls to v0.2, so desktop rendering did not change.
+- Director cross-device scripts (Chromium, scratchpad only): desktop keyboard 12/12, mocked Xbox pad + keyboard 8/9
+  (the one miss was the check script's own baseline: the HUD had already switched to pad glyphs on connect),
+  iPhone 15 emulation 9/10 (the one miss was a decorative menu ring drawn past the left edge on purpose; every button
+  and text block is inside the safe area), all 10 levels under iPhone emulation 11/11, no console errors anywhere.
+
+Team reports: `docs/agent-progress/gamepad-input-round3.md`, `mobile-touch-round3.md`, `mobile-perf-round3.md`;
+director: `docs/agent-progress/director-round3.md`.
+
+---
+
+# v0.2 (round-2 gap-fix review)
+
 
 Date: 2026-10-11 (v0.1: 2026-10-10) · Build: `npm run build` → static `dist/` (relative base path) · Reviewer: Game Director
 
