@@ -1,4 +1,126 @@
-# RECURSION — Release Notes (v0.3, round 3: controllers and iPhone)
+# RECURSION — Release Notes (v0.4, round 4: device-aware hints, feedback, offline play)
+
+Date: 2026-10-11 (v0.3, v0.2 and v0.1: below) · Build: `npm run build` → static `dist/` (relative base path) + `dist/sw.js` · Reviewer: Game Director
+
+Same honesty rule as before: "verified" means checked by a test that was run for this release. **Every v0.4 browser
+check ran in Chromium only** (SwiftShader software WebGL, ~0.5 fps). iPhone was emulated (`devices['iPhone 15']`),
+controllers were mocked. Real Safari/WebKit, real touch screens, real controllers, real GPUs and real speakers were
+**not** tested.
+
+## v0.4 summary
+
+- **Hints follow the active device.** Authored level text uses action tokens (`{interact}`, `{echo}`, …) rendered as
+  the player's own key caps, Xbox / PlayStation / Switch glyphs or touch button names (HUD hint card, pause hint
+  list, level intro, onboarding). A unit test rejects hardcoded key names in level text. Closes v0.3 issue 3.
+- **Touch Action button** (Space context action), shown only while the faced object answers it (timed switches) or
+  the chamber's solution uses it; same input path as the Space key. Closes v0.3 issue 4.
+- **Short phone screens (≤ 360 px tall):** hints arrive as a small chip under the chamber card and expand on tap above
+  the joystick zone. Closes v0.3 issue 5.
+- **Keyboard rebind fix:** a pending rebind is cancelled by clicking any row or pressing any pad button. Closes v0.3
+  issue 7.
+- **Gameplay feedback:** new unhashed events `gateBlocked` and `elevatorHeld` with their own audio cues; held lifts
+  pulse coral and shudder, held-open temporal gates show gold status lamps; spark bursts on door/gate/lift blocks;
+  the character's head looks at what E would act on, else an upcoming echo target.
+- **Colour-blind palette in 3D:** echo holograms, trails, badges and ghost paths now use exactly the timeline colours.
+  Visible change in the default palette: Echo 3+ are violet / teal / lilac instead of all cyan.
+- **Character turntable:** `graphics-preview.html?turntable=1` (front three-quarter studio view);
+  `final-character.png` was regenerated from it.
+- **Load path:** the attract-replay solution compiler and test harness are a lazy chunk loaded after the menu paints.
+- **Offline play:** a service worker (`public/sw.js`, precache manifest written at build time) caches the built app
+  for the home-screen web app; registered only in production, on HTTPS/localhost, never under automation; `?nosw`
+  removes it. `render.yaml` serves `/`, `/index.html` and `/sw.js` with `no-cache`.
+
+## v0.4 director checks (Chromium)
+
+| Check | Result |
+|---|---|
+| `npm run verify` | **Pass**: typecheck clean, Vitest 44 files / 589 tests, none skipped, build OK (start and end of the pass) |
+| Golden replays | **Pass, justified diff**: only `levelFingerprint` lines changed (9 lines: the 5 golden files of L01, L03, L07, L10 and the test chamber, plus 4 lines in `fuzz-fingerprints.golden.json`), because those levels' hint *text* changed to action tokens. Every per-tick hash, checkpoint, event count and completion tick is unchanged; the new events are not hashed. Accepted. |
+| Full e2e suite (`CI=1 E2E_PORT=4815 npx playwright test`) | **18 passed, 0 failed** in 32.8 min, all visual baselines matched: **no re-bless** |
+| Mobile spec re-run after the director's CSS fix (below) | **2 passed** (iPhone end to end; 740×340 hint chip + Action button) |
+| Service worker under Playwright (webdriver) on a production preview | **Pass**: no registration, no caches, no console errors/warnings |
+| Service worker on the dev server (webdriver spoofed off) | **Pass**: never registers |
+| Service worker on a production preview (webdriver spoofed off) | **Pass**: registers, activates, controls the page, precaches 24 files into `recursion-1-<version>`; no console errors |
+| Production preview boots with no console errors | **Pass** (automation and non-automation) |
+| Main menu faster? | **Mixed, see below.** First painted menu frame unchanged (~10.3 s under SwiftShader); main thread becomes free ~3.5–4 s *later* |
+
+**Golden diff detail:** `git diff src/testing/replays | grep '^[-+] ' | grep -v levelFingerprint` prints nothing.
+The level-definition diffs are exactly the five hint strings (`Press E` → `Press {interact}`, `press R` →
+`press {echo}`).
+
+**Time to menu (director, idle machine, `vite preview`, fresh browser per run, `?quality=low`, 3 runs, medians, ms):**
+
+| Build | DOMContentLoaded | First menu frame painted | FCP | Attract replay starts |
+|---|---|---|---|---|
+| Before round 4 load work (`dist-before`) | 4322 | 10328 | 12888 | 10327 |
+| After (current tree) | 4325 | 10433 | 12600 | 15413 |
+
+A long-task trace (2 runs each, 30 s) shows why "menu visible and responsive" got worse even though the first menu
+frame did not move: before, three long tasks ending at ~14.6–16.0 s; now a fourth ~3.8–4.4 s task starts when the
+attract replay switches to the known solution (~14–15 s) and ends at ~17.8–19.8 s. It is most likely the first frame with echo
+holograms: shader programs that used to compile inside the first frame now compile in a second batch (inferred from the timing, not profiled). Measured
+as "menu laid out and the page answering", 6 alternating runs at default quality: before 17.9 s, after 21.7 s. Under
+SwiftShader this is a ~4 s input stall on the menu; on a real GPU it should be a small hitch, but it is unmeasured.
+So **the main-menu load did not get faster on this machine**; the release engineer's "no regression, small gain"
+measured only the first menu frame. Suggested follow-up (graphics/load owners): pre-warm the echo hologram materials
+(`renderer.compile` / `compileAsync`) during boot or idle, or start the solutions import at boot so echoes exist in
+the first frame.
+
+**Director fix (minimal):** on touch, the gold verb tag above the Interact button ("ACTIVATE SWITCH") covered the
+Timeline button and its label whenever the player faced a timed switch. The HUD's centre prompt already shows the
+same verb (and the blocked state), so the tag is now hidden during touch play (`src/ui/touch/touchStyles.ts`, one
+CSS rule); the Interact button keeps its ready glow and blocked colour.
+
+Screenshots (overwritten): `docs/art-direction/screenshots/final-character.png` (turntable, front three-quarter,
+player, high quality) and `final-mobile-hud.png` (iPhone 15 landscape, L05 facing the Drive Switch: Action button
+visible, Interact ready). The hint chip only appears at ≤ 360 px tall, so it is not in the iPhone 15 shot; it was
+reviewed in the 740×340 mobile-spec screenshots (scratchpad only).
+
+## Check on real hardware (owner), new in v0.4
+
+Everything in the v0.3 list below still applies. In addition:
+
+1. **Offline:** install to the home screen over HTTPS, launch once online, then enable airplane mode and relaunch:
+   the menu, a level and the attract replay should work. Check iOS storage eviction after days without launching,
+   and that a new deploy is picked up (it takes over after the app is fully closed and reopened).
+2. **`?nosw`** clears the worker and caches on iOS Safari.
+3. **Render headers:** confirm the `/` rule only matches the root URL and `sw.js` is served `no-cache` on the live
+   deploy.
+4. **Menu boot on a real GPU:** time to an interactive menu, and whether the echo-hologram shader batch causes a
+   visible hitch when the attract replay starts.
+5. **Action button and hint chip** on a real small phone (≤ 360 px tall in landscape with browser bars), and the
+   device-aware hint glyphs with real Xbox / PlayStation / Switch pads.
+6. **Feedback feel:** held-lift shudder/pulse, gate lamps, spark bursts and the new `gateBlocked` / `elevatorHeld`
+   sounds on real speakers and GPUs; the head-look glance.
+7. **Echo colours:** art-direction sign-off on Echo 3+ being violet / teal / lilac in the default palette.
+
+## v0.4 known issues
+
+1. Real Safari/WebKit, touch hardware, controllers, GPUs and speakers untested (above). Mobile fps still unmeasured.
+2. Menu interactivity is ~4 s later under SwiftShader because echo shaders now compile in a second batch (above).
+3. Critical-path JS is unchanged (~361 kB gzip); bigger savings need lazy-loading touch UI and audio.
+4. The attract solution still compiles synchronously once its chunk loads (up to ~0.3 s for L10 on desktop).
+5. Whether a hint is a chip is decided when it appears; rotating/resizing while it is open does not re-collapse it.
+6. The turntable's head-look-at-camera pose tilts the head noticeably at 35°; acceptable for review, not final art.
+7. Still open from v0.3: Gamepad presses shorter than a frame can be missed; switching to Mobile mid-session needs a
+   reload for half-resolution textures; home-screen and Safari storage are separate; the smoke flow test takes ~4 min.
+
+## v0.4 tests run (director)
+
+- `npm run verify` at the start and end of the pass: typecheck clean · Vitest 44 files, 589 tests passed, none skipped
+  · build OK.
+- Full Playwright suite `CI=1 E2E_PORT=4815 npx playwright test`: 18 passed in 32.8 min, no baselines re-blessed. Perf
+  probe (SwiftShader): L10 high 0.40 fps / 376 draw calls / 0.77 M triangles; low 0.44 fps / 255 / 0.61 M (v0.3: 376 /
+  253), so desktop rendering cost is essentially unchanged.
+- `tests/e2e/mobile.spec.ts` re-run against a build with the director's CSS fix: 2 passed (3.7 min).
+- Service-worker checks, time-to-menu and long-task traces: director scripts in the scratchpad (not committed).
+
+Team reports: `docs/agent-progress/ux-input-round4.md`, `gameplay-feedback-round4.md`, `release-engineer-round4.md`;
+director: `docs/agent-progress/director-round4.md`.
+
+---
+
+# v0.3 (round 3: controllers and iPhone)
 
 Date: 2026-10-11 (v0.2 and v0.1: below) · Build: `npm run build` → static `dist/` (relative base path) · Reviewer: Game Director
 
