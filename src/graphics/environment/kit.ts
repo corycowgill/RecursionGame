@@ -256,7 +256,13 @@ export function buildKit(level: LevelDefinition, lib: MaterialLibrary): BuiltKit
         b.add(wallGeo, lib.wallPanel, { x: cx, y: base + WALL_H / 2, z: cz });
         b.add(capGeo, lib.gunmetal, { x: cx, y: base + WALL_H + 0.14, z: cz });
         b.cube(lib.brass, { x: cx, y: base + WALL_H - 0.02, z: cz }, T + 0.08, 0.06, T + 0.08, { cast: false });
-        b.cube(lib.brass, { x: cx, y: base + WALL_H + 0.3, z: cz }, T + 0.06, 0.05, 0.3, { cast: false, rotY: open.some((d) => d % 2 === 1) ? Math.PI / 2 : 0 });
+        const capRot = open.some((d) => d % 2 === 1) ? Math.PI / 2 : 0;
+        if ((c + r) % 2 === 0) b.cube(lib.brass, { x: cx, y: base + WALL_H + 0.3, z: cz }, T + 0.06, 0.05, 0.3, { cast: false, rotY: capRot });
+        else {
+          // alternate caps carry a pale inspection plate with a status pip (rhythm along the dark wall tops)
+          b.cube(lib.ivory, { x: cx, y: base + WALL_H + 0.29, z: cz }, T - 0.5, 0.03, 0.8, { cast: false, rotY: capRot, color: new THREE.Color(0.6, 0.62, 0.66) });
+          b.cube(lib.glow, { x: cx, y: base + WALL_H + 0.31, z: cz }, 0.12, 0.02, 0.12, { cast: false, receive: false, color: (c + r) % 4 === 1 ? cyanStrip : amber });
+        }
         for (const d of open) {
           const f = face(cx, base, cz, d);
           const rotY = f.rotY;

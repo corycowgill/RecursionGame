@@ -339,7 +339,7 @@ export class DecorBuilder {
     const SPRING = 2.3;
     const TH = 0.32;
     const DEPTH = 0.7;
-    b.add(b.geo('archGate', () => archGateGeometry(R, SPRING, TH, DEPTH)), lib.gunmetal, at(0, 0, 0), { rotY });
+    b.add(b.geo('archGate', () => archGateGeometry(R, SPRING, TH, DEPTH)), lib.ivory, at(0, 0, 0), { rotY, color: new THREE.Color(0.8, 0.8, 0.8) });
     b.add(b.geo('archGateInner', () => archGateGeometry(R - 0.01, SPRING, 0.06, DEPTH + 0.06)), lib.brass, at(0, 0, 0), { rotY, cast: false });
     b.add(b.geo('archGateOuter', () => archGateGeometry(R + TH - 0.05, SPRING, 0.07, DEPTH + 0.06)), lib.brass, at(0, 0, 0), { rotY, cast: false });
     const gold = lib.glowColor(PALETTE.gold, 2.2);
@@ -347,7 +347,7 @@ export class DecorBuilder {
       const lx = s * (R + TH / 2);
       b.cube(lib.gunmetalDark, at(lx, 0.26, 0), TH + 0.22, 0.52, DEPTH + 0.2);
       b.cube(lib.brass, at(lx, 0.55, 0), TH + 0.26, 0.07, DEPTH + 0.24, { cast: false });
-      b.cube(lib.ivory, at(lx, 1.45, 0), TH - 0.12, 1.5, DEPTH + 0.04, { cast: false });
+      b.cube(lib.gunmetal, at(lx, 1.45, 0), TH - 0.1, 1.5, DEPTH + 0.04, { cast: false });
       b.cube(lib.brass, at(lx, SPRING, 0), TH + 0.16, 0.1, DEPTH + 0.14, { cast: false });
       for (const z of [-1, 1]) b.cube(lib.glow, at(lx, 1.45, z * (DEPTH / 2 + 0.025)), 0.04, 1.2, 0.012, { cast: false, receive: false, color: gold });
     }
