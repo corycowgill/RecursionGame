@@ -42,7 +42,7 @@ and the height map is turned into a normal map with a Sobel filter.
 - Environment: a custom PMREM gradient dome with warm strip lights on one side and a cool window panel on
   the other (`engine/rendering/environmentMap.ts`), so brass gets a warm/cool split highlight.
 
-## 4. Lighting
+## 4. Lighting (defaults; per-chamber values in 4b)
 - Key: warm directional `#ffcf9a` 3.6 from the front-left, PCF soft shadows fitted to the level bounds.
 - Rim: cool directional `#5fb6ff` 1.1 from behind. Hemisphere fill: sky `#8ab4d8`, ground `#4a3420`, 0.55.
 - Practicals: wall sconces, arch niches, lamps, pillars and observation windows register `KitLight`s. The
@@ -50,6 +50,23 @@ and the height map is turned into a normal map with a Sobel filter.
   portal owns one cyan point light.
 - Fog: `FogExp2(#24506e, 0.0085)`. The chamber is barely touched, and towers 100 m+ melt into the haze.
 - ACES Filmic, exposure 0.9, sRGB output.
+
+### 4b. Chamber moods (round 5, `graphics/environment/moods.ts`)
+Each campaign chamber has its own lighting mood, picked from the level id (graphics-side table, read-only from level
+data; unknown ids such as the test chamber keep the values above). A mood sets the key colour, intensity and sun
+direction, rim and hemisphere fill, exposure, environment strength, fog, the grade (split-tone colours, saturation,
+contrast, vignette), the practical-lamp tint, the backdrop (sky, cloud sea, haze curtains, tower windows, crown /
+arcade / clockwork-ring accents, light shafts) and the material variant below. Gameplay colours never change.
+| Wing | Chambers | Mood | Materials |
+|---|---|---|---|
+| Dawn Atrium | L01–L02 | low gold sun from the east, long morning shadows, peach horizon | oxidised brass (verdigris patina), light grime |
+| Chronometry Lab | L03–L04 | neutral-white overhead light, cyan rim, teal haze | clean panels, satin brass (slight chrome), little wear |
+| Machine Hall | L05–L06 | amber furnace light from the west, smoky brown haze | brushed brass, heavy grime and drips |
+| Paradox Wing | L07–L09 | warm-white side key, violet rim and fill, indigo dusk | lacquered metal, aged gold, light patina |
+| The Core | L10 | white-hot near-overhead light, pale luminous haze | polished chrome-gold, no wear |
+Rules: the key stays warm-to-neutral (never blue/violet dominant, so the gold player and ivory suit read); accents
+stay out of the coral hue range (`moods.test.ts`); no sun from the north at 40–55° elevation (floors and brass mirror
+it into the 43° camera).
 
 ## 5. Post (`engine/rendering/PostFX.ts`, `graphics/shaders/grade.ts`)
 RenderPass (half-float) → UnrealBloom (threshold 1.0, strength 0.42–0.48, half resolution) → OutputPass
@@ -87,6 +104,11 @@ Decor types (data-driven, unknown types are ignored):
 - `lamp`: a brass post with a warm light.
 
 Everything static is batched into InstancedMeshes per geometry/material (`Batcher`).
+
+Wear masks (round 5, `materials/wear.ts`): floors, walls, gunmetal and brass carry a shader hook that adds a
+world-space noise mask (blotches, wall drips, floor scuffs) driven by shared uniforms: patina (verdigris, less metallic),
+grime (darker, rougher) and chrome (desaturated, smoother brass). No textures, draw calls or per-level programs; off on
+the low and mobile presets (the tints still apply).
 
 ## 7. Backdrop (`graphics/environment/backdrop.ts`)
 - Sky dome shader: navy zenith, teal horizon haze, a warm glow toward the sun azimuth, and faint cloud
@@ -127,11 +149,15 @@ output is true. Inverted wires use coral.
   2 m tiles.
 - Animation is procedural:
   - Run cycle is phase-locked to distance travelled, so feet don't slide (2.1 m per cycle at 4.8 m/s).
-  - Idle breathing, weight shift and head look.
+  - Idle breathing, weight shift and head look (yaw-then-pitch, `YXZ` order on neck and head, so a turned head never
+    rolls when it looks up or down).
   - Carry pose holds the item overhead.
   - Interact reach (0.45 s), held-interact arm.
   - Ponytail secondary motion.
   - Heading turns with critical damping.
+- Face (round 5): brown irises with pupils and catchlights, an upper lash line, heavier brows, a slimmer nose and a
+  softer mouth; seven two-tone fringe locks, shorter bun wisps, matte hair (no hard rim-light blob). Review it with
+  `graphics-preview.html?turntable=1&focus=head`.
 - Echoes use the same silhouette with the hologram shader (fresnel rim, scanlines, upward sweep band,
   dissolve-in from the feet). They also get a per-index tint, a floating hex number badge (always on top),
   a cyan ground halo and a fading ground ribbon trail. They dim once finished and flicker coral after a

@@ -91,12 +91,12 @@ export const level04TheLift: LevelDefinition = {
   exitId: 'exit',
   maxEchoes: 3,
   loopDurationTicks: 60 * 60,
-  parTimeSeconds: 18,
+  parTimeSeconds: 20,
   parEchoes: 2,
   hints: [
     { text: 'The lift climbs only while the Call Plate is held — and drops again when it is released.' },
-    { text: 'Whoever stands on the Call Plate can never ride. Someone has to be aboard before the call comes.', afterSeconds: 30 },
-    { text: 'Echo 1 holds the Call Plate. Echo 2 rides up and holds the Gallery Plate. Ride up beside Echo 2.', afterSeconds: 70 },
+    { text: 'Whoever stands on the Call Plate can never ride. Someone has to be aboard before the call comes.', afterSeconds: 35 },
+    { text: 'Echo 1 holds the Call Plate. Echo 2 rides up and holds the Gallery Plate. Ride up beside Echo 2.', afterSeconds: 65 },
   ],
   solution: [
     // Loop 1 (Echo 1): the caller — walk the length of the hall and hold the Call Plate.

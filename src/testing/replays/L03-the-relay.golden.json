@@ -1,7 +1,7 @@
 {
  "schema": 1,
  "levelId": "L03-the-relay",
- "levelFingerprint": 297463902,
+ "levelFingerprint": 275452847,
  "maxEchoes": 2,
  "loopDurationTicks": 4500,
  "completedAtTick": 585,

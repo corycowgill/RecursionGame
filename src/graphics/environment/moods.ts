@@ -54,6 +54,12 @@ export interface ChamberMood {
   name: string;
   exposure: number;
   key: { color: Hex; intensity: number };
+  /**
+   * Direction toward the sun (world x east, y up, z south; normalised by the renderer). Absent = the original
+   * front-left key placement (DEFAULT_MOOD). Keep y >= ~0.6 so long shadows never swallow the play space, and avoid a sun from the north (-z) at
+   * 40–55° elevation: horizontal floors and brass then mirror it straight into the 43° iso camera (glare).
+   */
+  keyFrom?: readonly [number, number, number];
   rim: { color: Hex; intensity: number };
   hemi: { sky: Hex; ground: Hex; intensity: number };
   /** scene.environmentIntensity (metal reflections). */
@@ -124,10 +130,10 @@ const mood = (name: string, over: Omit<Partial<ChamberMood>, 'material'> & { mat
 
 // ---------------------------------------------------------------- wings
 
-const DAWN_MATERIAL: Partial<MaterialMood> = { brassTint: 0xf2e4c8, brassRough: 1.08, patina: 0.42, grime: 0.28, panelTint: 0xfff6ea, floorTint: 0xfff3e2 };
+const DAWN_MATERIAL: Partial<MaterialMood> = { brassTint: 0xf2e4c8, brassRough: 1.08, patina: 0.5, grime: 0.28, panelTint: 0xfff6ea, floorTint: 0xfff3e2 };
 const LAB_MATERIAL: Partial<MaterialMood> = { brassTint: 0xf4f0ea, brassRough: 0.9, patina: 0, grime: 0.08, chrome: 0.22, panelTint: 0xf2f7ff, floorTint: 0xeef3f8, gunmetalTint: 0x98a6b6 };
 const HALL_MATERIAL: Partial<MaterialMood> = { brassTint: 0xffe2b8, brassRough: 1.12, patina: 0.12, grime: 0.5, panelTint: 0xf6e8d6, floorTint: 0xf2e2cc, gunmetalTint: 0x9a9890 };
-const PARADOX_MATERIAL: Partial<MaterialMood> = { brassTint: 0xffe8c8, brassRough: 0.95, patina: 0.18, grime: 0.2, panelTint: 0xf0ecf6, floorTint: 0xece6f0, gunmetalTint: 0x948fa8 };
+const PARADOX_MATERIAL: Partial<MaterialMood> = { brassTint: 0xffe8c8, brassRough: 0.95, patina: 0.18, grime: 0.2, panelTint: 0xf0f0f6, floorTint: 0xeeeef2, gunmetalTint: 0x948fa8 };
 
 /**
  * Campaign moods keyed by the level-id prefix ("L01" …). Each chamber differs a little inside its wing (sun height,
@@ -137,13 +143,14 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   // ------------------------------------------------ Dawn Atrium (oxidised old wing, low gold sun)
   L01: mood('Dawn Atrium · first light', {
     exposure: 0.92,
-    key: { color: 0xffc483, intensity: 3.8 },
+    key: { color: 0xffbb76, intensity: 3.9 },
+    keyFrom: [0.78, 0.6, 0.22],
     rim: { color: 0x86b4ff, intensity: 1.0 },
     hemi: { sky: 0xa6b8cc, ground: 0x5e3c1e, intensity: 0.58 },
     fog: { color: 0x4a5866, density: 0.0078 },
     background: 0x141824,
     practical: { tint: 0xffb862, mix: 0.3, scale: 1.05 },
-    grade: { warm: rgb(0xffd59c), cool: rgb(0xa8c6ff), split: 0.24, saturation: 1.07, contrast: 1.08, vignette: 0.5 },
+    grade: { warm: rgb(0xffd090), cool: rgb(0xa8c6ff), split: 0.27, saturation: 1.07, contrast: 1.08, vignette: 0.5 },
     sky: { zenith: 0x0c1428, horizon: 0xc98a52, below: 0x2a2632, sun: 0xffb25e, sunDir: [-0.55, 0.06, -0.83], sunStrength: 1.1 },
     clouds: { low: 0x3a3440, lowHi: 0xe0a46a, high: 0x4a4250, highHi: 0xffc890 },
     haze: [0x4a4a52, 0x6a5a52, 0x7a6450],
@@ -157,6 +164,7 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   L02: mood('Dawn Atrium · east gallery', {
     exposure: 0.92,
     key: { color: 0xffcc92, intensity: 3.75 },
+    keyFrom: [0.62, 0.7, 0.3],
     rim: { color: 0x7cb2ff, intensity: 1.1 },
     hemi: { sky: 0x9cb8d2, ground: 0x583a20, intensity: 0.57 },
     fog: { color: 0x3e5464, density: 0.008 },
@@ -171,12 +179,13 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
     accent3: 0xffd9a0,
     windows: 0xffe0b8,
     shafts: { warm: 0xffc482, cool: 0x9cc8ff },
-    material: { ...DAWN_MATERIAL, patina: 0.34, grime: 0.24 },
+    material: { ...DAWN_MATERIAL, patina: 0.42, grime: 0.24 },
   }),
   // ------------------------------------------------ Chronometry Lab (cool cyan, clean)
   L03: mood('Chronometry Lab · relay floor', {
     exposure: 0.9,
     key: { color: 0xf0eadf, intensity: 3.4 },
+    keyFrom: [-0.3, 0.92, 0.22],
     rim: { color: 0x58c8ff, intensity: 1.45 },
     hemi: { sky: 0x92c8ea, ground: 0x34404a, intensity: 0.6 },
     env: 0.68,
@@ -197,6 +206,7 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   L04: mood('Chronometry Lab · freight stack', {
     exposure: 0.9,
     key: { color: 0xece8e2, intensity: 3.45 },
+    keyFrom: [0.25, 0.93, 0.25],
     rim: { color: 0x4cc0f0, intensity: 1.5 },
     hemi: { sky: 0x86c0e4, ground: 0x303a44, intensity: 0.58 },
     env: 0.66,
@@ -218,6 +228,7 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   L05: mood('Machine Hall · ferry deck', {
     exposure: 0.9,
     key: { color: 0xffb670, intensity: 3.85 },
+    keyFrom: [-0.82, 0.62, 0.05],
     rim: { color: 0x6aa6e0, intensity: 0.95 },
     hemi: { sky: 0xa69a8a, ground: 0x6a3c14, intensity: 0.56 },
     fog: { color: 0x463626, density: 0.0092 },
@@ -237,6 +248,7 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   L06: mood('Machine Hall · beam forge', {
     exposure: 0.88,
     key: { color: 0xffc286, intensity: 3.8 },
+    keyFrom: [-0.72, 0.66, -0.05],
     rim: { color: 0x70a8e8, intensity: 1.05 },
     hemi: { sky: 0x9a98a0, ground: 0x5e3818, intensity: 0.55 },
     fog: { color: 0x3c3428, density: 0.0094 },
@@ -256,9 +268,10 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   // ------------------------------------------------ Paradox Wing (violet dusk, lacquer and gold)
   L07: mood('Paradox Wing · broken sequence', {
     exposure: 0.9,
-    key: { color: 0xffd0b4, intensity: 3.6 },
+    key: { color: 0xffe0cc, intensity: 3.6 },
+    keyFrom: [-0.8, 0.72, -0.1],
     rim: { color: 0xa080ff, intensity: 1.5 },
-    hemi: { sky: 0x9a8cd0, ground: 0x3e2642, intensity: 0.56 },
+    hemi: { sky: 0x8c86c0, ground: 0x3a2842, intensity: 0.5 },
     fog: { color: 0x2e2650, density: 0.0092 },
     background: 0x0a0818,
     practical: { tint: 0xf4dcff, mix: 0.25, scale: 1 },
@@ -275,9 +288,10 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   }),
   L08: mood('Paradox Wing · recursive machine', {
     exposure: 0.9,
-    key: { color: 0xffd6c0, intensity: 3.55 },
+    key: { color: 0xffe4d4, intensity: 3.55 },
+    keyFrom: [0.75, 0.74, -0.1],
     rim: { color: 0x8c7cff, intensity: 1.6 },
-    hemi: { sky: 0x8c8ad4, ground: 0x34264a, intensity: 0.56 },
+    hemi: { sky: 0x8486c4, ground: 0x32284a, intensity: 0.5 },
     fog: { color: 0x262658, density: 0.0094 },
     background: 0x08081c,
     practical: { tint: 0xe8dcff, mix: 0.25, scale: 1 },
@@ -294,9 +308,10 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   }),
   L09: mood('Paradox Wing · paradox chamber', {
     exposure: 0.9,
-    key: { color: 0xffcdb8, intensity: 3.6 },
+    key: { color: 0xffdcc8, intensity: 3.6 },
+    keyFrom: [-0.6, 0.78, 0.15],
     rim: { color: 0xb07cff, intensity: 1.65 },
-    hemi: { sky: 0xa08ad6, ground: 0x402448, intensity: 0.57 },
+    hemi: { sky: 0x9086c6, ground: 0x3c2846, intensity: 0.5 },
     fog: { color: 0x32224e, density: 0.0096 },
     background: 0x0c0618,
     practical: { tint: 0xf0d4ff, mix: 0.25, scale: 1 },
@@ -315,13 +330,14 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
   L10: mood('The Core', {
     exposure: 0.93,
     key: { color: 0xfff1e2, intensity: 3.9 },
+    keyFrom: [0.15, 0.97, 0.2],
     rim: { color: 0xc4e4ff, intensity: 1.5 },
     hemi: { sky: 0xc4d8ec, ground: 0x4c4440, intensity: 0.66 },
     env: 0.72,
     fog: { color: 0x6c8aa0, density: 0.0078 },
     background: 0x18222e,
     practical: { tint: 0xfff0dc, mix: 0.45, scale: 1.05 },
-    grade: { warm: rgb(0xfff0dc), cool: rgb(0xc4dcff), split: 0.12, saturation: 1.02, contrast: 1.12, vignette: 0.56 },
+    grade: { warm: rgb(0xfff0dc), cool: rgb(0xc4dcff), split: 0.12, saturation: 1.02, contrast: 1.15, vignette: 0.56 },
     sky: { zenith: 0x101c2c, horizon: 0xb6cede, below: 0x3a4a5a, sun: 0xffffff, sunDir: [-0.2, 0.2, -0.96], sunStrength: 1.0 },
     clouds: { low: 0x4a5a68, lowHi: 0xd8e6f0, high: 0x5c6c7a, highHi: 0xf4fbff },
     haze: [0x5a7084, 0x7a90a2, 0x90a6b6],
@@ -330,7 +346,7 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
     accent3: 0xbfe6ff,
     windows: 0xf4f8ff,
     shafts: { warm: 0xfff0d8, cool: 0xdcefff },
-    material: { brassTint: 0xfff6e8, brassRough: 0.6, patina: 0, grime: 0, chrome: 0.5, panelTint: 0xfafcff, floorTint: 0xf6f8fa, gunmetalTint: 0xa6b0bc },
+    material: { brassTint: 0xfff6e8, brassRough: 0.6, patina: 0, grime: 0, chrome: 0.6, panelTint: 0xfafcff, floorTint: 0xf6f8fa, gunmetalTint: 0xa6b0bc },
   }),
 };
 

@@ -393,6 +393,11 @@ class GameRendererImpl implements GameRenderer {
       }
       return Promise.resolve();
     };
+    // Programs depend on the render target: the scene is drawn into the composer's half-float target (linear output, no
+    // tone mapping in the material; OutputPass does that), so compile against the same kind of target, or every
+    // program would be built for the canvas and compiled a second time on first draw.
+    const prevTarget = this.renderer.getRenderTarget();
+    this.renderer.setRenderTarget(this.post.composer.readBuffer);
     try {
       this.warmPromise = Promise.all([compile(this.scene, this.scene), compile(stage, this.scene)])
         .then(() => undefined)
@@ -405,6 +410,7 @@ class GameRendererImpl implements GameRenderer {
       stage.clear();
       this.warmPromise = Promise.resolve();
     }
+    this.renderer.setRenderTarget(prevTarget);
   }
 
   /** Resolves once the current chamber's shader warm-up has finished (debug / perf tooling). */
@@ -536,17 +542,29 @@ class GameRendererImpl implements GameRenderer {
     if (!b) return;
     const c = this.centre;
     const r = Math.hypot(b.maxX - b.minX, b.maxZ - b.minZ) / 2 + 3;
-    this.key.position.set(c.x - r * 0.75, 24 + r * 0.6, c.z + r * 0.45);
+    const from = this.mood.keyFrom;
+    let ext = r;
+    if (from) {
+      // round 5: the mood sets the sun direction (low dawn sun, overhead lab light, side-lit furnace hall, …)
+      const v = this.tmpA.set(from[0], from[1], from[2]).normalize();
+      const d = 30 + r;
+      this.key.position.set(c.x + v.x * d, v.y * d, c.z + v.z * d);
+      this.rim.position.set(c.x - v.x * (r + 14), 14, c.z - v.z * (r + 14));
+      // a lower sun throws longer shadows: widen the shadow frustum so walls still shadow the floor
+      ext = r * (v.y < 0.8 ? 1.2 : 1);
+    } else {
+      this.key.position.set(c.x - r * 0.75, 24 + r * 0.6, c.z + r * 0.45);
+      this.rim.position.set(c.x + r, 14, c.z - r * 1.4);
+    }
     this.key.target.position.set(c.x, 0, c.z);
     const cam = this.key.shadow.camera;
-    cam.left = -r;
-    cam.right = r;
-    cam.top = r;
-    cam.bottom = -r;
+    cam.left = -ext;
+    cam.right = ext;
+    cam.top = ext;
+    cam.bottom = -ext;
     cam.near = 1;
-    cam.far = 120;
+    cam.far = 140;
     cam.updateProjectionMatrix();
-    this.rim.position.set(c.x + r, 14, c.z - r * 1.4);
     this.rim.target.position.set(c.x, 0, c.z);
   }
 

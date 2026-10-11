@@ -98,14 +98,14 @@ export const level07BrokenSequence: LevelDefinition = {
   exitId: 'exit',
   maxEchoes: 2,
   loopDurationTicks: 60 * 75,
-  parTimeSeconds: 14,
+  parTimeSeconds: 17,
   parEchoes: 2,
   hints: [
     { text: 'The Archive Switch is too far from the exit to press yourself. An echo has to keep it lit.' },
-    { text: 'Echoes repeat your inputs, not your results. If a door is shut when you record, an echo pushing into it walks on once it opens.', afterSeconds: 45 },
+    { text: 'Echoes repeat your inputs, not your results. If a door is shut when you record, an echo pushing into it walks on once it opens.', afterSeconds: 55 },
     {
       text: 'Echo 1: hold the Hall Plate briefly, then push into the Archive Door pressing {interact} every second. Echo 2: hold the Reading Plate.',
-      afterSeconds: 100,
+      afterSeconds: 115,
     },
   ],
   solution: [

@@ -84,14 +84,14 @@ export const level08RecursiveMachine: LevelDefinition = {
   maxEchoes: 1,
   recursion: { delayTicks: 300, copies: 1 },
   loopDurationTicks: 60 * 75,
-  parTimeSeconds: 22,
+  parTimeSeconds: 21,
   parEchoes: 1,
   hints: [
     { text: 'Every echo here has a recursive copy that repeats it exactly, 5 s later. One echo is two bodies.' },
-    { text: 'Stand on the Feed Plate long enough and your copy arrives before you leave. The door never closes on you.', afterSeconds: 45 },
+    { text: 'Stand on the Feed Plate long enough and your copy arrives before you leave. The door never closes on you.', afterSeconds: 40 },
     {
       text: 'Hold the Feed Plate for 6 s, then push north into the Machine Door and keep pushing. The copy will be stopped at the threshold.',
-      afterSeconds: 100,
+      afterSeconds: 80,
     },
   ],
   solution: [

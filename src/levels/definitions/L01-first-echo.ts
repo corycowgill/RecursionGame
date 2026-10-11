@@ -65,12 +65,12 @@ export const level01FirstEcho: LevelDefinition = {
   exitId: 'exit',
   maxEchoes: 2,
   loopDurationTicks: 60 * 60,
-  parTimeSeconds: 12,
+  parTimeSeconds: 9,
   parEchoes: 1,
   hints: [
     { text: 'Step on the plate: the door opens. Step off: it seals again.' },
-    { text: 'Press {echo} to rewind. Your echo will repeat everything you just did.', afterSeconds: 15 },
-    { text: 'Let your echo hold the plate while you walk through the door.', afterSeconds: 40 },
+    { text: 'Press {echo} to rewind. Your echo will repeat everything you just did.', afterSeconds: 20 },
+    { text: 'Let your echo hold the plate while you walk through the door.', afterSeconds: 45 },
   ],
   solution: [
     // Echo 1: cross the hall to the balcony plate and hold it.

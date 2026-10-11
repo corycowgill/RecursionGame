@@ -213,12 +213,15 @@ export class MacroSearch {
         if (seen.has(key)) continue;
         seen.add(key);
         const steps = [...node.steps, stepLabel(step)];
+        // Longer plans first (post-order): a plan's extensions are tried before the plan itself is committed, which
+        // reaches complete multi-step plans sooner. The set of candidates examined is the same either way.
+        if (depth + 1 < this.bounds.echoSteps) dfs({ state: st, inputs, steps, ghost }, depth + 1);
+        if (this.halted()) return;
         this.stats.echoPlans[loopIdx]! += 1;
         const loop = loopFromInputs(loopIdx + 1, inputs);
         const next = [...committed, { steps, loop }];
         if (loopIdx + 1 < this.bounds.echoes) this.searchEcho(loopIdx + 1, next);
         else this.searchFinal(next, false);
-        if (depth + 1 < this.bounds.echoSteps) dfs({ state: st, inputs, steps, ghost }, depth + 1);
       }
     };
     dfs({ state: world.initial(), inputs: [], steps: [], ghost: null }, 0);
@@ -296,6 +299,44 @@ export class MacroSearch {
       return;
     }
     dfs({ state: world.initial(), inputs: [], steps: [], ghost: null }, 0);
+  }
+
+  /**
+   * Plan check: simulates ONE given macro plan (step labels per echo loop, then the final run's labels before exit)
+   * and returns the solution if it completes. Used to show that an intended solution is a plan of the vocabulary
+   * when the full space is too large to re-search in one run.
+   */
+  evaluatePlan(echoPlans: string[][], finalPlan: string[] = []): FoundSolution | null {
+    const byLabel = new Map<string, MacroStep>();
+    for (const st of [...this.echoOptions, ...this.finalOptions, ...this.exitOptions]) byLabel.set(stepLabel(st), st);
+    const lookup = (l: string): MacroStep => {
+      const st = byLabel.get(l);
+      if (!st) throw new Error(`evaluatePlan: '${l}' is not a step of this vocabulary`);
+      return st;
+    };
+    const committed: FoundLoop[] = [];
+    for (const labels of echoPlans) {
+      const world = new SolverWorld(
+        this.level,
+        committed.map((c) => c.loop),
+      );
+      const st = world.initial();
+      const inputs: PlayerInput[] = [];
+      let ghost: Ghost = null;
+      for (const l of labels) ghost = runStep(this.ctx(world), st, inputs, lookup(l), ghost).ghost;
+      committed.push({ steps: labels, loop: loopFromInputs(committed.length + 1, inputs) });
+    }
+    const world = new SolverWorld(
+      this.level,
+      committed.map((c) => c.loop),
+    );
+    const st = world.initial();
+    const inputs: PlayerInput[] = [];
+    for (const l of [...finalPlan, 'exit']) {
+      const r = runStep(this.ctx(world), st, inputs, lookup(l), null);
+      if (r.status === 'complete') return { levelId: this.level.id, echoes: committed, final: { steps: [...finalPlan, 'exit'], inputs }, completedAtTick: st.completedAtTick ?? st.tick };
+    }
+    return null;
   }
 
   private found(committed: FoundLoop[], steps: string[], inputs: PlayerInput[], completedAtTick: number): void {

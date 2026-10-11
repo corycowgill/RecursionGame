@@ -91,13 +91,13 @@ export const level03TheRelay: LevelDefinition = {
   exitId: 'exit',
   maxEchoes: 2,
   loopDurationTicks: 60 * 75,
-  parTimeSeconds: 15,
+  parTimeSeconds: 14,
   parEchoes: 2,
   hints: [
     { text: 'The Chrono Door needs both plates held AND the balcony switch pressed — all at the same moment.' },
-    { text: 'Press {interact} facing the crate to lift it, and {interact} again to set it down on the cell in front of you.', afterSeconds: 20 },
-    { text: 'The switch is too far: whoever presses it cannot get back in time. Let an echo press it for you.', afterSeconds: 45 },
-    { text: 'Loop 1: crate onto one plate, then stand on the other. Loop 2: press the switch. Then go.', afterSeconds: 90 },
+    { text: 'Press {interact} facing the crate to lift it, and {interact} again to set it down on the cell in front of you.', afterSeconds: 30 },
+    { text: 'The switch is too far: whoever presses it cannot get back in time. Let an echo press it for you.', afterSeconds: 55 },
+    { text: 'Loop 1: crate onto one plate, then stand on the other. Loop 2: press the switch. Then go.', afterSeconds: 85 },
   ],
   solution: [
     // Loop 1 (Echo 1): crate -> Crate Plate, then hold the Watch Plate.

@@ -264,6 +264,15 @@ describe('L05 Perfect Timing', () => {
     expect(ev.some((e) => e.type === 'interactFailed' && e.reason === 'cooldown')).toBe(true);
     expect(ev.some((e) => e.type === 'interactFailed' && e.reason === 'busy')).toBe(true);
   });
+
+  it('KNOWN, flagged for the product owner (round-5 solver): ONE echo can press the Drive Switch and then the Gate Switch', () => {
+    // The island door has no deadline: you can wait in front of it, so a single echo has time to walk from the Drive
+    // Switch to the Gate Switch (~3.8 s) after sending you across. No minimal layout tweak closes this (see
+    // docs/game-design/difficulty-report.md). This test pins the current behaviour; flip it when L05 is redesigned.
+    const echo: InputScript = [S.moveTo(6, 4), S.face(0), S.waitUntil(300), S.interact(), S.moveTo(2, 11), S.face(3), S.interact(), S.wait(30)];
+    const ride: InputScript = [S.moveTo(11, 7), S.moveTo(12, 7), S.moveTo(18, 7), S.moveTo(18, 3), S.moveTo(18, 1, 900)];
+    expect(runScripts(level05PerfectTiming, [echo, ride]).completed).toBe(true);
+  });
 });
 
 describe('L06 Chain Reaction', () => {
@@ -296,6 +305,16 @@ describe('L06 Chain Reaction', () => {
     expect(t('laserOn', 'laser-a')).toBe(s0 + 1);
     expect(t('laserOn', 'laser-b')).toBe(s0 + 2);
     expect(t('doorOpen', 'door-vault')).toBe(s0 + 3);
+  });
+
+  it('the doorstop route is closed: an echo holding the Lab doorway lets the Hall Plate echo walk in, but the Core Door also wants the Hall Plate', () => {
+    // Found by the round-5 solver: before plate-hall -> door-core, this completed with only 2 echoes.
+    const final = level06ChainReaction.solution[3]!;
+    const hallThenVault: InputScript = [S.moveTo(20, 11), S.moveTo(20, 12), S.waitUntil(300), S.move(0, -1, 25), S.move(-1, 0, 250), S.move(0, -1, 75), S.move(0, -1, 75), S.move(1, 0, 400), S.move(0, -1, 100), S.wait(30)];
+    const doorstopThenRelay: InputScript = [S.moveTo(10, 10), S.moveTo(10, 9), S.waitUntil(680), S.moveTo(10, 8), S.moveTo(4, 5), S.face(0), S.waitUntil(860), S.interact(), S.waitUntil(1060), S.interact(), S.wait(30)];
+    const res = runScripts(level06ChainReaction, [hallThenVault, doorstopThenRelay, final]);
+    expect(res.completed).toBe(false);
+    expect(res.game.getState().signals['plate-vault']).toBe(true); // the walk-in itself still works
   });
 });
 
@@ -435,6 +454,18 @@ describe('L10 The Core (finale)', () => {
     const final = finalScript(level10TheCore).map((st) => (st.op === 'moveTo' && st.row === 1 ? S.moveTo(10, 1, 600) : st));
     const res = runScripts(level10TheCore, [courier, ferryman, final]);
     expect(res.completed).toBe(false);
+  });
+
+  it('the Reliquary seals behind the Courier: its blind recording can no longer walk back out to the East Timer', () => {
+    // Found by the round-5 solver: before the socket -> gate (inverted) wire, this completed with only 2 echoes.
+    const [, , , final] = level10TheCore.solution as [InputScript, InputScript, InputScript, InputScript];
+    const courierAndTimer: InputScript = [...courier.slice(0, -1), S.move(0, 1, 50), S.move(0, 1, 181), S.move(1, 0, 75), S.face(2), S.waitUntil(1020), S.interact(), S.wait(30)];
+    const res = runScripts(level10TheCore, [courierAndTimer, ferryman, final]);
+    expect(res.completed).toBe(false);
+    const ev = res.passes[2]!.events;
+    expect(has(ev, 'cellInserted', 'socket-reliquary')).toBe(true);
+    expect(has(ev, 'gateClose', 'gate-reliquary')).toBe(true);
+    expect(has(ev, 'switchOn', 'timer-east')).toBe(false);
   });
 
   it('two echoes are not enough: pressing the East Timer yourself, the Core Lift has long since risen', () => {

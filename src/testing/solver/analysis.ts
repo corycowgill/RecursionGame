@@ -73,6 +73,10 @@ export function runJob(level: LevelDefinition, job: Job): JobResult {
       : undefined;
   const opts = { budgetMs: job.budgetMs, maxSolutions: job.maxSolutions, ...(job.shard ? { shard: job.shard } : {}), ...(accept ? { accept } : {}) };
   const r: SearchResult = search.run(opts);
+  if (job.kind === 'find' && r.solutions.length === 0 && cfg.plan && (!job.shard || job.shard.index === 0)) {
+    const sol = search.evaluatePlan(cfg.plan.echoes, cfg.plan.final ?? []);
+    if (sol) r.solutions.push({ ...sol, echoes: sol.echoes.map((e) => ({ ...e, steps: [...e.steps, '(plan check)'] })) });
+  }
   return {
     job,
     exhaustive: r.exhaustive,
@@ -115,10 +119,11 @@ export function levelJobs(level: LevelDefinition, budgetMs: number, kinds: reado
   if (kinds.includes('find'))
     jobs.push({ kind: 'find', levelId: level.id, bounds: { ...cfg.find, echoes: cfg.intended }, budgetMs, maxSolutions: 25 });
   if (kinds.includes('proof'))
-    for (let k = 0; k < cfg.intended; k++) {
-      if (k > 0 && cfg.proof.echoSteps === 0) continue;
-      jobs.push({ kind: 'proof', levelId: level.id, bounds: { ...cfg.proof, echoes: k }, budgetMs, maxSolutions: 3 });
-    }
+    for (const proof of cfg.proof)
+      for (let k = 0; k < cfg.intended; k++) {
+        if (k > 0 && proof.echoSteps === 0) continue;
+        jobs.push({ kind: 'proof', levelId: level.id, bounds: { ...proof, echoes: k }, budgetMs, maxSolutions: 3 });
+      }
   if (kinds.includes('cheese'))
     for (const b of cfg.cheese ?? []) jobs.push({ kind: 'cheese', levelId: level.id, bounds: b, budgetMs, maxSolutions: 3 });
   return jobs;

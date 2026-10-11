@@ -97,12 +97,12 @@ export const level05PerfectTiming: LevelDefinition = {
   exitId: 'exit',
   maxEchoes: 3,
   loopDurationTicks: 60 * 60,
-  parTimeSeconds: 16,
+  parTimeSeconds: 15,
   parEchoes: 2,
   hints: [
     { text: 'The ferry only moves while the Drive Switch is lit, and it freezes the moment the switch runs out.' },
-    { text: 'You cannot press the Drive Switch and still catch the ferry. Let an echo press it while you are aboard.', afterSeconds: 30 },
-    { text: 'Watch when the ferry lands, then record an echo that presses the Gate Switch just as it lands.', afterSeconds: 60 },
+    { text: 'You cannot press the Drive Switch and still catch the ferry. Let an echo press it while you are aboard.', afterSeconds: 60 },
+    { text: 'Watch when the ferry lands, then record an echo that presses the Gate Switch just as it lands.', afterSeconds: 115 },
   ],
   solution: [
     // Loop 1 (Echo 1): the driver — press the Drive Switch at ~5 s.

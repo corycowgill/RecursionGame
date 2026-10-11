@@ -90,11 +90,11 @@ export const level09ParadoxChamber: LevelDefinition = {
   exitId: 'exit',
   maxEchoes: 2,
   loopDurationTicks: 60 * 75,
-  parTimeSeconds: 18,
+  parTimeSeconds: 19,
   parEchoes: 2,
   hints: [
     { text: 'Look at the Vault Door wiring: it needs the Reading Plate held AND the Hall Plate EMPTY.' },
-    { text: 'Your Hall Plate echo has to step off once your Reading Plate echo is inside — but it was recorded first.', afterSeconds: 50 },
+    { text: 'Your Hall Plate echo has to step off once your Reading Plate echo is inside — but it was recorded first.', afterSeconds: 55 },
     {
       text: 'Delete Echo 1 and record it again. As the youngest loop it can watch Echo 2 go through, then leave the plate and follow into the vault.',
       afterSeconds: 110,

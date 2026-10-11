@@ -83,7 +83,7 @@ const FRAG_ALBEDO = /* glsl */ `
 if (uWearOn > 0.5) {
   vec3 wp = vWearPos;
   float n = wearNoise(wp * 0.55) * 0.65 + wearNoise(wp * 1.9 + 7.3) * 0.35;
-  wearMask = smoothstep(0.52, 0.78, n);
+  wearMask = smoothstep(0.48, 0.76, n);
   float up = abs(vWearN.y);
   // vertical drips on walls: noise stretched along y, strongest under ledges (high on the wall) fading downward
   float streak = wearNoise(vec3(wp.x * 4.1 + wp.z * 4.1, wp.y * 0.35, 3.1));
@@ -98,7 +98,7 @@ if (uWearOn > 0.5) {
   #if WEAR_KIND == 0
     float lumW = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
     // chrome / white gold: desaturate toward a cool bright grey
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lumW) * vec3(1.02, 1.04, 1.08) * 1.25, uChrome * 0.75);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lumW) * vec3(1.02, 1.04, 1.08) * 1.3, uChrome * 0.85);
     // verdigris in the mask (and a hint in drips)
     float pat = clamp(wearMask + wearDrip * 0.5, 0.0, 1.0) * uPatina;
     diffuseColor.rgb = mix(diffuseColor.rgb, uPatinaColor * (0.55 + lumW * 0.6), pat * 0.85);

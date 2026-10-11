@@ -13,6 +13,7 @@ import { makeInput, type SolverWorld } from './world';
  *          press(entity)   walk next to a console, face it, press {interact}
  *          pick(entity)    walk next to a crate / energy cell, face it, pick it up
  *          drop(cell)      walk next to a cell, face it, put the carried item down (or into a socket)
+ *          hold            do nothing (a step that is only its wait: "when the ferry docks again, ...")
  *          exit            (final run only) walk to the exit portal and keep trying until the world goes still
  *
  * Two ways to walk (echo loops may use both; the final run is always live):
@@ -26,13 +27,14 @@ import { makeInput, type SolverWorld } from './world';
  *          the next blind step, so multi-leg blind routes stay consistent.
  */
 
-export type TaskKind = 'go' | 'press' | 'pick' | 'drop' | 'exit';
+export type TaskKind = 'go' | 'press' | 'pick' | 'drop' | 'hold' | 'exit';
 
 export type Task =
   | { kind: 'go'; cell: NavCell; tag: string; blind?: boolean }
   | { kind: 'press'; entity: string; tag: string; blind?: boolean }
   | { kind: 'pick'; entity: string; tag: string; blind?: boolean }
   | { kind: 'drop'; cell: NavCell; tag: string; blind?: boolean }
+  | { kind: 'hold'; tag: string; blind?: boolean }
   | { kind: 'exit'; cell: NavCell; tag: string };
 
 export type Wait = { kind: 'none' } | { kind: 'ticks'; n: number } | { kind: 'signal'; id: string; value: boolean };
@@ -251,6 +253,7 @@ export function runStep(ctx: StepContext, st: SimState, out: PlayerInput[], step
   const blind = t.kind !== 'exit' && t.blind === true;
   const res = (status: StepStatus, ghost: Ghost = null): StepResult => ({ status, ghost });
 
+  if (t.kind === 'hold' && step.wait.kind === 'none') return res('invalid');
   // ---- wait phase
   const w = step.wait;
   if (w.kind === 'ticks') {
@@ -266,6 +269,7 @@ export function runStep(ctx: StepContext, st: SimState, out: PlayerInput[], step
   if (end0) return res(end0);
 
   // ---- task phase
+  if (t.kind === 'hold') return res('done', ghostIn);
   const me = ctx.world.player(st);
   const ghost = blind ? (ghostIn ? { ...ghostIn } : { x: me.x, z: me.z }) : null;
   const pos = ghost ?? { x: me.x, z: me.z };
@@ -346,6 +350,8 @@ export interface VocabularyOptions {
   onlyTasks?: string[];
   /** Remove tasks with these tags. */
   withoutTasks?: string[];
+  /** Offer the 'hold' task (a pure wait step). default true */
+  hold?: boolean;
   /** Offer blind variants of these task tags to echoes ('all' = every go/press/pick/drop). default 'all' */
   blind?: 'all' | 'none' | string[];
 }
@@ -371,6 +377,7 @@ export function buildVocabulary(level: LevelDefinition, opts: VocabularyOptions 
         tasks.push({ kind: 'go', cell: c, tag: `stand-in ${e.id}` });
         break;
       case 'elevator':
+      case 'movingPlatform':
         tasks.push({ kind: 'go', cell: c, tag: `board ${e.id}` });
         break;
       case 'timedSwitch':
@@ -391,6 +398,7 @@ export function buildVocabulary(level: LevelDefinition, opts: VocabularyOptions 
     if ((e.kind === 'pressurePlate' || e.kind === 'door') && hasCrate) tasks.push({ kind: 'drop', cell: c, tag: `drop-on ${e.id}` });
     if (e.kind === 'energySocket' && hasCell) tasks.push({ kind: 'drop', cell: c, tag: `insert ${e.id}` });
   }
+  if (opts.hold !== false) tasks.push({ kind: 'hold', tag: 'hold' });
   for (const c of opts.extraCells ?? []) tasks.push({ kind: 'go', cell: c, tag: `go ${cellTag(c)}` });
   for (const c of opts.extraDrops ?? []) tasks.push({ kind: 'drop', cell: c, tag: `drop-at ${cellTag(c)}` });
 
@@ -403,7 +411,7 @@ export function buildVocabulary(level: LevelDefinition, opts: VocabularyOptions 
     blindSel === 'none'
       ? []
       : filtered
-          .filter((t) => blindSel === 'all' || blindSel.includes(t.tag))
+          .filter((t) => t.kind !== 'hold' && (blindSel === 'all' || blindSel.includes(t.tag)))
           .map((t) => ({ ...t, blind: true, tag: `blind ${t.tag}` }) as Task);
 
   const signals = opts.signals ?? level.entities.filter((e) => AUTO_SIGNAL_KINDS.has(e.kind)).map((e) => e.id);

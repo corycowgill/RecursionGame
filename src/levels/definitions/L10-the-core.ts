@@ -24,7 +24,7 @@ import type { LevelDefinition } from '../../engine/contracts';
  *   r3   #______.......############   Core dais (h2, 7..13 x 3..5) beside the Great Abyss (1..6)
  *   r4   #______.......#######K####   K Reliquary socket (21,4)
  *   r5   #______.......#######.####   Reliquary (21,5)
- *   r6   #______===^===#######G####   ^ Core Lift (10,6) h0<->h2      G echo-only temporal gate (21,6)
+ *   r6   #______===^===#######G####   ^ Core Lift (10,6) h0<->h2      G echo-only temporal gate (21,6) <- NOT socket
  *   r7   #______..................#   Great Hall (h0, 7..24 x 7..15)
  *   r8   #______..................#
  *   r9   #______..p...............#   p Crown Plate (9,9)
@@ -36,9 +36,10 @@ import type { LevelDefinition } from '../../engine/contracts';
  *   r15  #______.w...............e#   w West Timer (8,15)   e East Timer (24,15)
  *   r16  ##########################
  *
- * Minimum echoes is 3 in practice: at the finish both timers need a hand each (they are 6.7 s apart and lit for
- * 2.5 s), the crate must already be on the Crown Plate, and the Courier is on the far side of an echo-only gate
- * (crossing back would need a second blind recording on top of the first).
+ * Minimum echoes is 3: at the finish both timers need a hand each (they are 6.7 s apart and lit for 2.5 s), the crate
+ * must already be on the Crown Plate, and the Courier is sealed in the Reliquary: the gate closes for good once the
+ * socket is powered (inverted wire). Round 5, puzzle analyst: before that seal the solver found a 2-echo route — the
+ * Courier's blind recording simply walked back out through the open echo gate and took the East Timer itself.
  */
 export const level10TheCore: LevelDefinition = {
   id: 'L10-the-core',
@@ -116,6 +117,7 @@ export const level10TheCore: LevelDefinition = {
   ],
   wires: [
     { from: 'socket-reliquary', to: 'laser-core' },
+    { from: 'socket-reliquary', to: 'gate-reliquary', invert: true },
     { from: 'receiver-core', to: 'lift-core' },
     { from: 'receiver-core', to: 'ferry' },
     { from: 'plate-crown', to: 'door-crown' },
@@ -126,15 +128,15 @@ export const level10TheCore: LevelDefinition = {
   exitId: 'exit',
   maxEchoes: 3,
   loopDurationTicks: 60 * 90,
-  parTimeSeconds: 24,
+  parTimeSeconds: 26,
   parEchoes: 3,
   hints: [
     { text: 'Only echoes can cross the Reliquary Gate. Carry the cell into the shimmer and press {interact} — your echo will finish the job.' },
-    { text: 'The cell wakes the Core Lift and the Ferry together. Whoever needs to ride either must already be aboard.', afterSeconds: 60 },
-    { text: 'The Crown Door needs the crate on the Crown Plate and both timers lit at once: two hands, sixteen tiles apart.', afterSeconds: 120 },
+    { text: 'The cell wakes the Core Lift and the Ferry together. Whoever needs to ride either must already be aboard.', afterSeconds: 100 },
+    { text: 'The Crown Door needs the crate on the Crown Plate and both timers lit at once: two hands, sixteen tiles apart.', afterSeconds: 200 },
     {
       text: 'Echo 1: cell into the gate. Echo 2: ride the ferry, bring the crate to the Crown Plate, press the West Timer. Echo 3: press the East Timer with Echo 2. You: ride the lift.',
-      afterSeconds: 200,
+      afterSeconds: 300,
     },
   ],
   solution: [

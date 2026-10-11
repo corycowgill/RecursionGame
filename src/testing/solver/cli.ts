@@ -1,11 +1,12 @@
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { cpus } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import type { LevelDefinition } from '../../engine/contracts';
 import { LEVELS } from '../../levels';
 import { levelJobs, mergeShards, runJob, type Job, type JobKind, type JobResult } from './analysis';
 import { analysisFor } from './levelConfigs';
-import { timingSlack } from './slack';
+import { estimateLevel, measureLevel, type LevelEstimate } from './difficulty';
+import { timingSlack, type SlackReport } from './slack';
 
 /**
  * PUZZLE SOLVER CLI — `npm run solve -- <level...> [options]` (bundled and launched by run.mjs).
@@ -18,6 +19,8 @@ import { timingSlack } from './slack';
  *
  * Options: --budget=<s per job> (default 300) · --workers=<n> (default min(3, cpus-1)) · --kinds=find,proof,cheese ·
  *          --json=<file> (write every job result) · --slack · --max=<solutions> · --blind=none
+ *          --difficulty[=<find.json>]  timing slack + playtime/par/hint model table (optionally reading the fastest
+ *                                      completions from an earlier `--kinds=find --json=...` run)
  * Each job is split into shards over worker threads (shard = first-level branch index mod workers).
  */
 
@@ -92,7 +95,42 @@ function report(r: JobResult): void {
   }
 }
 
+function difficultyTable(levels: readonly LevelDefinition[], findJson: string | undefined): void {
+  const best = new Map<string, number>();
+  if (findJson && existsSync(findJson)) {
+    const data = JSON.parse(readFileSync(findJson, 'utf8')) as { results: JobResult[] };
+    for (const r of data.results)
+      for (const s of r.solutions)
+        if (s.verified && s.echoes === analysisFor(levelById(r.job.levelId)).intended)
+          best.set(r.job.levelId, Math.min(best.get(r.job.levelId) ?? Infinity, s.completedAtTick + 1));
+  }
+  const rows: LevelEstimate[] = [];
+  const slacks: SlackReport[] = [];
+  for (const level of levels) {
+    const slack = timingSlack(level);
+    slacks.push(slack);
+    const est = estimateLevel(measureLevel(level, slack, best.get(level.id)), level.hints.length);
+    rows.push(est);
+    const m = est.metrics;
+    console.log(
+      `| ${level.order} | ${m.loops} | ${m.interactions} | ${(m.pathTicks / 60).toFixed(1)} | ${(m.recordTicks / 60).toFixed(1)} | ${m.constraints} | ${m.tightestTicks ?? '-'} | ${m.blind ? 'yes' : ''}${m.recursion ? ' nested' : ''} | ${est.score} | ${Math.round(est.seconds.low / 6) / 10}-${Math.round(est.seconds.high / 6) / 10} (${Math.round(est.seconds.median / 6) / 10}) | ${(m.bestTicks / 60).toFixed(2)} / ${(m.authoredTicks / 60).toFixed(2)} | ${level.parTimeSeconds} -> ${est.parSeconds} | ${level.hints.map((h) => h.afterSeconds ?? 0).join('/')} -> ${est.hintDelays.join('/')} |`,
+    );
+  }
+  const sum = (k: 'low' | 'median' | 'high'): number => Math.round(rows.reduce((n, r) => n + r.seconds[k], 0) / 60);
+  console.log(`\nTotal estimated playtime: ${sum('low')}-${sum('high')} min (median ${sum('median')} min)`);
+  const json = arg('json');
+  if (json) writeFileSync(json.replace(/\.json$/, '') + '.difficulty.json', JSON.stringify({ rows, slacks }, null, 1));
+}
+
 async function main(): Promise<void> {
+  if (process.argv.some((a) => a === '--difficulty' || a.startsWith('--difficulty='))) {
+    const ids0 = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+    const lv = ids0.length === 0 || ids0.includes('all') ? [...LEVELS] : ids0.map(levelById);
+    console.log('| # | loops | interactions | walk s | record s | constraints | tightest t | blind | score | est. min low-high (median) | best / authored s | par old -> model | hints old -> model |');
+    console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+    difficultyTable(lv, arg('difficulty'));
+    return;
+  }
   const ids = process.argv.slice(2).filter((a) => !a.startsWith('--'));
   const levels = ids.length === 0 || ids.includes('all') ? [...LEVELS] : ids.map(levelById);
   const budgetMs = Number(arg('budget') ?? 300) * 1000;

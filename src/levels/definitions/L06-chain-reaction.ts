@@ -15,7 +15,7 @@ import type { LevelDefinition } from '../../engine/contracts';
  *        0123456789012345678901
  *   r0   ######################
  *   r1   #########.X.##########   core sanctum          X exit (10,1)
- *   r2   ##########C###########   C Core Door (10,2)    <- Receiver B AND Vault Plate
+ *   r2   ##########C###########   C Core Door (10,2)    <- Receiver B AND Vault Plate AND Hall Plate
  *   r3   #Rb....r.....O...#..v#   R Receiver A (1,3)  b Laser B (2,3) ->east  r Receiver B (7,3)  v Vault Plate (20,3)
  *   r4   #...s............#...#   s Relay Switch (4,4)
  *   r5   #................V...#   V Vault Door (17,5)   <- Receiver B
@@ -28,9 +28,11 @@ import type { LevelDefinition } from '../../engine/contracts';
  *   r12  #...................h#   h Hall Plate (20,12)
  *   r13  ######################
  *
- * Minimum echoes is 3 by a body count: when you pass the Lab Door someone must be on the Hall Plate, and that body
- * can never reach the lab afterwards; at the finish someone must hold the Vault Plate and someone must have pressed
- * the Relay Switch within the last 2 s — and the switch is more than 2 s from the Core Door.
+ * Minimum echoes is 3 by a body count: when the Core Door opens, someone holds the Hall Plate, someone holds the Vault
+ * Plate and someone pressed the Relay Switch within the last 2 s — and the switch is more than 2 s from the Core Door.
+ * (Round 5, puzzle analyst: the Core Door also needs the Hall Plate. The solver found a 2-echo route without it: one
+ * echo stands in the Lab doorway — a door never closes on a body — while the Hall Plate echo walks in blind and
+ * becomes the Vault Plate holder.)
  */
 export const level06ChainReaction: LevelDefinition = {
   id: 'L06-chain-reaction',
@@ -82,17 +84,18 @@ export const level06ChainReaction: LevelDefinition = {
     { from: 'receiver-b', to: 'door-vault' },
     { from: 'receiver-b', to: 'door-core' },
     { from: 'plate-vault', to: 'door-core' },
+    { from: 'plate-hall', to: 'door-core' },
   ],
   playerSpawn: { col: 12, row: 11, facing: 0 },
   exitId: 'exit',
   maxEchoes: 3,
   loopDurationTicks: 60 * 75,
-  parTimeSeconds: 20,
+  parTimeSeconds: 19,
   parEchoes: 3,
   hints: [
     { text: 'Follow the light: the Relay Switch fires Laser A, Receiver A fires Laser B, Receiver B opens the doors.' },
-    { text: 'Whoever holds the Hall Plate can never follow you into the lab. Neither can whoever presses the switch reach the Core Door in time.', afterSeconds: 40 },
-    { text: 'Echo 1: Hall Plate. Echo 2: press the Relay Switch twice — once for Echo 3 to enter the vault, once for you.', afterSeconds: 90 },
+    { text: 'Whoever holds the Hall Plate can never follow you into the lab. Neither can whoever presses the switch reach the Core Door in time.', afterSeconds: 60 },
+    { text: 'Echo 1: Hall Plate. Echo 2: press the Relay Switch twice — once for Echo 3 to enter the vault, once for you.', afterSeconds: 115 },
   ],
   solution: [
     // Loop 1 (Echo 1): hold the Hall Plate for everyone who follows.
@@ -150,6 +153,7 @@ export const level06ChainReaction: LevelDefinition = {
     { type: 'conduit', col: 21, row: 12, facing: 3, params: { to: 'door-lab', color: 'teal' } },
     { type: 'conduit', col: 8, row: 2, facing: 2, params: { to: 'door-core', color: 'cyan' } },
     { type: 'conduit', col: 21, row: 3, facing: 3, params: { to: 'door-core', color: 'teal' } },
+    { type: 'conduit', col: 12, row: 3, facing: 0, params: { to: 'door-core', from: 'plate-hall', color: 'teal' } },
     { type: 'machinery', col: 5, row: 7, facing: 0, params: { variant: 'optics' } },
     { type: 'machinery', col: 15, row: 7, facing: 0, params: { variant: 'gears' } },
     { type: 'machinery', col: 19, row: 7, facing: 3, params: { variant: 'clockwork' } },
