@@ -39,8 +39,8 @@ export const level02TwoPlaces: LevelDefinition = {
   subtitle: 'Every echo acts in the same moment.',
   story: [
     'Ascendant Facility — Atrium of Doubles.',
-    'Two doors. Two plates. One of them lies beyond the other.',
-    'Your past selves do not take turns. They act together.',
+    'Two doors, two plates, one behind the other. Your past selves do not take turns.',
+    'LOG 014 · The crew keeps arriving early. Same faces. Same footsteps. — H.A.',
   ],
   grid: {
     width: 17,

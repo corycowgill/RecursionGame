@@ -48,8 +48,8 @@ export const level10TheCore: LevelDefinition = {
   subtitle: 'Everything you have been, at once.',
   story: [
     'Ascendant Facility — The Core.',
-    'This is where the loops were made. Every machine you have learned answers to it, and it answers to all of them.',
-    'Courier. Ferryman. Timekeeper. You. Four of you, one moment. Wake it.',
+    'Every machine you have learned answers to it. Courier, ferryman, timekeeper and you: one moment.',
+    'LOG 000 · For whoever wakes next: your name is Ansel. So was mine. Wake the Core, and let us go home.',
   ],
   grid: {
     width: 26,

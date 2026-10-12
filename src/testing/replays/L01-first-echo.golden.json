@@ -1,7 +1,7 @@
 {
  "schema": 1,
  "levelId": "L01-first-echo",
- "levelFingerprint": 1268641338,
+ "levelFingerprint": 3076028444,
  "maxEchoes": 2,
  "loopDurationTicks": 3600,
  "completedAtTick": 285,

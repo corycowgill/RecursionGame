@@ -15,6 +15,7 @@ import { buildLevelEntries, createLevelSelect } from './menus/LevelSelect';
 import { createMainMenu, type Screen } from './menus/MainMenu';
 import { createCredits, createLevelComplete, createLevelIntro, createPause } from './menus/Overlays';
 import { createSettings } from './menus/Settings';
+import { createEnding, type EndingOverlayFrame } from './menus/Ending';
 import { injectStyles } from './styles';
 import { TimelinePanel } from './timeline/TimelinePanel';
 import { dismissHomeScreenHint, homeScreenHintDismissed, shouldSuggestHomeScreen, type TouchEnv } from './touch/env';
@@ -24,7 +25,15 @@ import type { TouchVisibility } from './touch/visibility';
 import { actionButtonVisible } from './touch/actionButton';
 import type { LevelCompleteStats, LevelEntry, MainMenuData, PauseData, UICallbacks, UIFrame } from './types';
 
-export type ScreenName = 'menu' | 'levels' | 'settings' | 'credits' | 'pause' | 'intro' | 'complete';
+export type ScreenName = 'menu' | 'levels' | 'settings' | 'credits' | 'pause' | 'intro' | 'complete' | 'ending';
+
+/** Round 5: options for the credits screen when it follows the ending (base screen, auto-rolling, from white). */
+export interface ShowCreditsOptions {
+  /** Leave the credits (main menu). When set the credits replace every screen instead of opening over the menu. */
+  onExit(): void;
+  rolling?: boolean;
+  fromWhite?: boolean;
+}
 
 export interface CreateUIOptions {
   settings?: Settings;
@@ -70,7 +79,10 @@ export interface UIHandle {
   showMainMenu(data: MainMenuData): void;
   showLevelSelect(entries?: LevelEntry[]): void;
   showSettings(): void;
-  showCredits(): void;
+  /** Credits: over the main menu (no options), or as the full screen after the ending (round 5). */
+  showCredits(opts?: ShowCreditsOptions): void;
+  /** Round 5: the ending overlay (lines + fade to white); any input calls `onSkip`. The app drives its frames. */
+  showEnding(lines: readonly string[], onSkip: () => void): { render(frame: EndingOverlayFrame): void };
   showHUD(level: LevelDefinition, opts?: ShowHUDOptions): void;
   hideHUD(): void;
   /** Per-frame HUD + timeline refresh (read-only data). */
@@ -382,6 +394,8 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
         createLevelSelect(list, {
           onPick: (id) => cb.onStartLevel?.(id),
           onBack: () => closeSub(),
+          ...(cb.onPlayEnding ? { onEnding: () => cb.onPlayEnding?.() } : {}),
+          onCredits: () => ui.showCredits(),
           sound,
         }),
       );
@@ -391,8 +405,23 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       openSub('settings', settingsScreen());
     },
 
-    showCredits() {
-      openSub('credits', createCredits({ onBack: () => closeSub(), sound }));
+    showCredits(o) {
+      if (!o) {
+        openSub('credits', createCredits({ onBack: () => closeSub(), sound }));
+        return;
+      }
+      hudLayer.hidden = true;
+      setBase('credits', createCredits({ onBack: () => o.onExit(), sound, rolling: !!o.rolling, fromWhite: !!o.fromWhite, backLabel: 'Main menu', reducedMotion: settings.reducedMotion }));
+      announce('Credits');
+    },
+
+    showEnding(lines, onSkip) {
+      hudLayer.hidden = true;
+      hud.showOnboarding(null);
+      const screen = createEnding(lines, { onSkip });
+      setBase('ending', screen);
+      announce(lines.join(' '));
+      return screen;
     },
 
     showHUD(lvl, o = {}) {
@@ -538,6 +567,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
           onNext: () => cb.onNextLevel?.(),
           onReplay: () => cb.onReplayLevel?.(),
           onLevelSelect: () => ui.showLevelSelect(),
+          ...(cb.onPlayEnding ? { onEnding: () => cb.onPlayEnding?.() } : {}),
           sound,
         }),
       );
@@ -656,6 +686,9 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
         cb.onResume?.();
         return true;
       }
+      // Round 5: a base screen with its own Back (ending → skip, credits after the ending → main menu).
+      const own = base?.screen as Partial<{ back(): boolean }> | undefined;
+      if (own?.back) return own.back();
       return false;
     },
 

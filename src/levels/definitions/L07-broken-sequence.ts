@@ -54,9 +54,9 @@ export const level07BrokenSequence: LevelDefinition = {
   name: 'Broken Sequence',
   subtitle: 'Record what cannot work — yet.',
   story: [
-    'Ascendant Facility — The Archive.',
-    'Your echoes do not remember what happened. They remember what you did: every step, every press.',
-    'Change the world around them, and the same steps can carry them somewhere you have never been.',
+    'Paradox Wing — The Archive.',
+    'Your echoes remember what you did, not what happened. Change the world, and the same steps go further.',
+    'LOG 060 · The Archive is filing tomorrow’s logs. I read ahead. Then I stopped. — H.A.',
   ],
   grid: {
     width: 22,

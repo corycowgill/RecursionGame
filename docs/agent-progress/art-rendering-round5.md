@@ -163,13 +163,30 @@ with the sky), side-by-side sheets `sheet-*.png`.
   Paradox Wing (violet). The follow camera still shows mostly floor, so the backdrop variety is seen mainly in the intro
   fly-in, overview and menu.
 
+## Resumed session (after the usage-limit cut-off)
+
+- **Head roll, second fix.** The rotation-order fix removed the large tilt, but the idle contrapposto still left the head
+  rolled: hips -0.045, spine +0.03, chest +0.052, neck -0.026 and head +0.03 (each times the weight shift `ws`) sum to
+  +0.041 x ws, about 2.3 deg at full weight shift. The head's own roll term is now -0.01 x ws, so the net is about 0 and
+  the head stays level in world space whichever leg carries the weight (`character.ts`, graphics only, no simulation
+  effect). Regenerated `shots/r5-turntable.png` and `shots/r5-turntable-head.png`: the eye line is level in the
+  close-up. Compared with the concept turnaround, the silhouette, white/charcoal suit, gold trim and twin buns match.
+  Still open: the bun wisps read as spiky chestnuts, the fringe is blocky, and the head is a little small for the
+  shoulder pads. That needs a sculpt/hair pass, not a tweak, so it is **left for a later round and needs an art
+  sign-off**.
+- **Final round screenshots finished.** `final-L6`…`final-L10` were captured (the cut-off stopped after L5), so there
+  are final shots for all 10 chambers in `shots/`. Preview draw calls at those mid-solve ticks (high): L6 350, L7 243,
+  L8 237, L9 273, L10 345, all under the L10 budget. In `final-L7` the player is outside the frame at tick 420 with
+  6 settle frames: that is the capture framing, not a lighting problem.
+- No other code changes; tsc clean, 75/75 graphics/rendering unit tests pass.
+
 ## Files changed
 
 New: `src/graphics/environment/moods.ts`, `src/graphics/environment/moods.test.ts`, `src/graphics/materials/wear.ts`.
 Changed: `src/engine/rendering/GameRenderer.ts` (moods, sun direction, practical tint, warm-up, `getMood()`,
 `whenWarm()`), `src/engine/rendering/quality.ts` (`materialWear`), `src/graphics/environment/backdrop.ts` (mood
 colours), `src/graphics/materials/library.ts` (`applyMood`, wear hooks), `src/graphics/animation/character.ts`
-(rotation order), `src/graphics/animation/actorVisual.ts` (eye height), `src/graphics/animation/characterModel.ts`
+(rotation order, world-level head roll), `src/graphics/animation/actorVisual.ts` (eye height), `src/graphics/animation/characterModel.ts`
 (face, hair), `src/graphics/turntable.ts` (`focus`, `dist`, framing).
 Shared doc (additive): `docs/art-direction/art-bible.md` (section 4b chamber moods, wear masks, head look order, face).
 No contract, level, simulation, UI or test-harness file touched; golden replays unaffected.
@@ -178,8 +195,16 @@ No contract, level, simulation, UI or test-harness file touched; golden replays 
 
 - `npx tsc --noEmit`: clean.
 - `npx vitest run src/graphics src/engine/rendering`: 14 files, 75 tests passed (includes the new moods test).
-- `npm run verify`: RESULT_VERIFY
-- Visual baselines: RESULT_VISUAL
+- `npm run verify` (resumed session, after my last edit): 615 / 617 pass; the only 2 failures are the known golden
+  replays `L05-perfect-timing` and the fuzz fingerprints. They come from the puzzle analyst's in-progress L05 edit
+  (`levelFingerprint` 3146503592 vs golden 1396374141), not from rendering code. Nothing in `src/graphics/**` or
+  `src/engine/rendering/**` is part of the simulation, so I did not re-bless anything.
+- Visual baselines (`tests/e2e/visual.spec.ts`, own preview server on a private port, `CI=1`): all 4 3D scenes **pass**
+  (`l03-follow-low`, `l03-overview-low`, `showcase-overview-low`, `chamber-follow-high`), and so does the HUD/pause/complete
+  UI test. `main menu, level select, settings` hit the 240 s test timeout once while clicking the level select's Back
+  button, which never became "stable". That run overlapped my own screenshot job at load average ~9. Rerun on its own, it
+  **passes** (4.6 min). This is a UI-flow test with the canvas hidden: it is slow and sensitive to load, and the
+  failure was not a pixel diff.
 
 ## Outstanding / for the director
 

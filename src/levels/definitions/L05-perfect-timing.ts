@@ -36,9 +36,9 @@ export const level05PerfectTiming: LevelDefinition = {
   name: 'Perfect Timing',
   subtitle: 'Two moments, one crossing.',
   story: [
-    'Ascendant Facility — The Ferry Deck.',
-    'The ferry runs on a four-second charge. The island door breathes open for less.',
-    'Neither switch can be held. Each gives you one moment — make them meet while you are aboard.',
+    'Machine Hall — The Ferry Deck.',
+    'The ferry runs on a four-second charge. The island door opens for less. Neither switch can be held.',
+    'LOG 041 · The loop is drifting. The ferry docked a second late today. Or I did. — H.A.',
   ],
   grid: {
     width: 22,

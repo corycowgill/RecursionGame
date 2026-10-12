@@ -36,9 +36,9 @@ export const level04TheLift: LevelDefinition = {
   name: 'The Lift',
   subtitle: 'Somebody has to stay behind.',
   story: [
-    'Ascendant Facility — Freight Stack, Lower Hall.',
-    'The lift answers a call from the far end of the hall, and climbs only while the call is held.',
-    'Whoever presses the call will watch the others rise without them. Be aboard before you call yourself.',
+    'Chronometry Lab — The Freight Stack.',
+    'The lift climbs only while the call is held. Whoever calls it stays behind.',
+    'LOG 033 · Somebody always stays behind. I keep a list of who. Every name on it is the same. — H.A.',
   ],
   grid: {
     width: 18,

@@ -35,7 +35,16 @@ export function buildLevelEntries(levels: readonly LevelDefinition[], progress: 
   });
 }
 
-export function createLevelSelect(entries: LevelEntry[], act: { onPick(id: string): void; onBack(): void; sound(c: 'hover' | 'confirm' | 'error' | 'back'): void }): Screen {
+export interface LevelSelectActions {
+  onPick(id: string): void;
+  onBack(): void;
+  /** Round 5: replay the ending / open the credits. Shown once the final chamber has been completed. */
+  onEnding?(): void;
+  onCredits?(): void;
+  sound(c: 'hover' | 'confirm' | 'error' | 'back'): void;
+}
+
+export function createLevelSelect(entries: LevelEntry[], act: LevelSelectActions): Screen {
   const grid = h('div', { class: 'rx-levels', role: 'list' });
   for (const e of entries) {
     const locked = e.status === 'locked';
@@ -81,6 +90,21 @@ export function createLevelSelect(entries: LevelEntry[], act: { onPick(id: strin
     act.onBack();
   });
   const done = entries.filter((e) => e.status === 'completed').length;
+  // Round 5: after the campaign is finished (the last chamber completed), the ending and credits can be replayed.
+  const finished = entries.length > 0 && entries[entries.length - 1]?.status === 'completed';
+  const extra = (label: string, ic: Parameters<typeof icon>[0], testid: string, fn: () => void): HTMLButtonElement => {
+    const b = h('button', { class: 'rx-btn small', type: 'button', 'data-testid': testid, html: `${icon(ic)}<span>${esc(label)}</span>` });
+    b.addEventListener('click', () => {
+      act.sound('confirm');
+      fn();
+    });
+    return b;
+  };
+  const headBtns = h('div', { style: 'display:flex;gap:.6em;flex-wrap:wrap;justify-content:flex-end' });
+  if (finished && act.onEnding) headBtns.append(extra('Ending', 'play', 'levels-ending', act.onEnding));
+  if (finished && act.onCredits) headBtns.append(extra('Credits', 'star', 'levels-credits', act.onCredits));
+  headBtns.append(back);
+  const headRight = headBtns.childElementCount > 1 ? headBtns : back; // unchanged layout until the campaign is finished
   const panel = h(
     'section',
     { class: 'rx-panel rx-dialog', style: 'width:min(1080px,100%)' },
@@ -89,7 +113,7 @@ export function createLevelSelect(entries: LevelEntry[], act: { onPick(id: strin
       'div',
       { class: 'rx-dialog-head' },
       h('div', {}, h('div', { class: 'rx-eyebrow' }, `Chambers · ${done} / ${entries.length} restored`), h('h2', {}, 'Level select')),
-      back,
+      headRight,
     ),
     grid,
   );

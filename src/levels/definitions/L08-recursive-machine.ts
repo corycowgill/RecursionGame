@@ -43,9 +43,9 @@ export const level08RecursiveMachine: LevelDefinition = {
   name: 'Recursive Machine',
   subtitle: 'A loop inside the loop.',
   story: [
-    'Ascendant Facility — The Recursion Engine.',
-    'The engine folds every recording back on itself. Your echo will have an echo of its own, five seconds behind.',
-    'Same steps. Same presses. A different world, because the first of you already walked through it.',
+    'Paradox Wing — The Recursion Engine.',
+    'The engine folds every recording back on itself: each echo gains a copy, five seconds behind.',
+    'LOG 077 · The engine was meant to buy the crew more time. It bought me more of me. — H.A.',
   ],
   grid: {
     width: 20,

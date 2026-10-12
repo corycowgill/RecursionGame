@@ -33,15 +33,15 @@ threads), `npm run solve -- all --kinds=proof --budget=900`, `npm run solve -- a
 | # | Intended / limit | Fewer-echo search (k < intended) | Status | Cheese found | Fixed? |
 |---|---|---|---|---|---|
 | 1 | 1 / 2 | k=0: final run of 3 steps, every wait | **exhaustive, none** | none | - |
-| 2 | 2 / 3 | k=0,1: deep(3) and wide(2) | **exhaustive, none** | none | - |
+| 2 | 2 / 3 | k=0,1: deep(3) and wide(2) | **exhaustive, none** | 1-echo doorstop route | **Yes** (Door B needs both plates) |
 | 3 | 2 / 2 | k=0,1: deep(3); k=0: wide(2) | **exhaustive, none**; k=1 wide(2) budget-limited (900 s, none) | crate-free 2-echo route: searched deep(3) exhaustively, **none** | - |
 | 4 | 2 / 3 | k=0,1: deep(3) and wide(2) | **exhaustive, none** | none | - |
 | 5 | 2 / 3 | k=1: deep(3) and wide(2) | **1-echo solutions exist** | one echo presses Drive, then walks to Gate | **No, flagged (see 3.1)** |
 | 6 | 3 / 3 | k=0,1,2: deep(2); k=0,1: wide(1) | **exhaustive, none**; k=2 wide(1) budget-limited (900 s, none) + body count | 2-echo "doorstop" route | **Yes** (Core Door also needs the Hall Plate) |
-| 7 | 2 / 2 | see L07 row in 3.3 | see 3.3 | see 3.3 | - |
-| 8 | 1 / 1 | see 3.3 | see 3.3 | see 3.3 | - |
-| 9 | 2 / 2 | see 3.3 | see 3.3 | see 3.3 | - |
-| 10 | 3 / 3 | see 3.3 | see 3.3 | 2-echo route: the Courier walks back out of the Reliquary | **Yes** (gate seals once the socket is powered) |
+| 7 | 2 / 2 | k=0,1: deep(3); k=0: wide(2) | **exhaustive, none**; k=1 wide(2) budget-limited (480 s, none) | 2-echo routes without a blind recording: deep(3) budget-limited (480 s), **none** | - |
+| 8 | 1 / 1 | k=0: final run of 3 steps, every wait | **exhaustive, none** | wins with the Recursion Engine off: 1 echo × 2 steps, every wait, **exhaustive, none** | - |
+| 9 | 2 / 2 | k=0,1: deep(3); k=0: wide(2) | **exhaustive, none**; k=1 wide(2) budget-limited (480 s, none) | none (no separate cheese set; every find solution uses a blind recording) | - |
+| 10 | 3 / 3 | k=0,1,2: 2 steps per echo, live | k=0,1 **exhaustive, none**; k=2 budget-limited (480 s, none) + body count | 2-echo route: the Courier walks back out of the Reliquary | **Yes** (gate seals once the socket is powered) |
 
 "Find" evidence (the vocabulary is expressive enough for the proofs to mean something): the solver rediscovers a
 verified intended-count solution for every level from L01 to L09, usually faster than the authored one (L03 8.6 s vs
@@ -85,6 +85,9 @@ Switch". Par stays 15 s; it is derived from the fastest legal 2-echo completion 
 
 ### 3.2 Fixed this round (layout/wiring tweaks; intended solutions unchanged)
 
+* **L02 Two Places at Once, the doorstop route (1 echo).** You stood in the Atrium doorway while your only echo walked
+  off Plate A, through the door you were holding, and out to Plate B. **Fix:** Door B needs both plates (one wire plus
+  a conduit decor), so the minimum is a plain body count.
 * **L06 Chain Reaction, the doorstop route (2 echoes).** A door never closes on a body. One echo stood in the Lab
   doorway while the Hall Plate echo walked in blind and became the Vault Plate holder. **Fix:** the Core Door also
   needs the Hall Plate (one extra wire plus a conduit decor). The body count is now airtight: Hall Plate, Vault Plate
@@ -92,12 +95,22 @@ Switch". Par stays 15 s; it is derived from the fastest legal 2-echo completion 
 * **L10 The Core, the Courier walks back out (2 echoes).** The Courier's blind recording left through the open echo
   gate and pressed the East Timer itself. **Fix:** inverted wire `socket-reliquary -> gate-reliquary`, so the
   Reliquary seals once the cell is in. Regression test: "the Reliquary seals behind the Courier".
-* Goldens re-blessed for both: the hashes change because the wiring changed, not the solutions (both complete on the
+* Goldens re-blessed for all three: the hashes change because the wiring changed, not the solutions (both complete on the
   same tick as before). The L05 golden was re-blessed for its par/hint metadata only: every per-tick hash is identical.
 
-### 3.3 L07–L10 search results
+### 3.3 Searched and clean (no cheese within bounds)
 
-(filled from `npm run solve -- L07 L08 L09 L10 --kinds=proof,cheese --budget=480`)
+* **L03:** no 2-echo route leaves the crate off both plates (deep(3), exhaustive). The crate lesson holds.
+* **L07, L09:** no 1-echo route. Every 2-echo solution the solver found records an echo blind. The search for 2-echo
+  routes *without* a blind recording in L07 ran out of budget at 480 s with none found; that is evidence, not a proof.
+* **L08:** no route wins with the Recursion Engine switched off (exhaustive within 1 echo × 2 steps, every wait). The
+  nested loop is required.
+* **L10:** no route with 0 or 1 echo (exhaustive). The 2-echo search ran 480 s without finding anything; together with
+  the body count (two timer hands 6.7 s apart, plus a sealed Courier) it supports 3. The intended plan is verified as
+  a plan of the vocabulary (completes at 17.78 s). The `usesBlindEcho` check reports a false positive on that plan,
+  because the plan check walks live and the gate only blocks the live player in-game. Ignore it.
+* Budget-limited rows are the honest limit of a 4-CPU box shared with other teams. Re-run them with
+  `npm run solve -- L07 --kinds=proof --budget=3600` on a free machine to try to make them exhaustive.
 
 ## 4. Timing slack (intended solution, `--slack`)
 

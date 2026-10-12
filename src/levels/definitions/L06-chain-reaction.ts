@@ -40,9 +40,9 @@ export const level06ChainReaction: LevelDefinition = {
   name: 'Chain Reaction',
   subtitle: 'Each of you is the reason for the next.',
   story: [
-    'Ascendant Facility — Optics Laboratory.',
-    'The relay was built to be run by a crew of four. The crew is gone. You are still here, four times over.',
-    'Light carries the signal. Bodies stop light. Mind where you stand.',
+    'Machine Hall — Optics Laboratory.',
+    'Light carries the signal. Bodies stop light. The relay was built for a crew of four.',
+    'LOG 052 · The crew is gone. The manifest still lists four, all signed in the same hand. — H.A.',
   ],
   grid: {
     width: 22,

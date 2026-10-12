@@ -33,8 +33,8 @@ export const level01FirstEcho: LevelDefinition = {
   subtitle: 'Record. Rewind. Repeat.',
   story: [
     'Ascendant Facility — Calibration Wing.',
-    'The sanctum door answers only to weight on the far plate.',
-    'You are only one person. For now.',
+    'The far door answers only to weight on the plate. You are one person. For now.',
+    'LOG 001 · Subject is awake. Start them on one plate and one door. They will remember how. — H.A.',
   ],
   grid: {
     width: 15,

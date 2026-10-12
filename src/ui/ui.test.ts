@@ -58,6 +58,7 @@ beforeEach(() => {
     onTutorialComplete: vi.fn(),
     onUISound: vi.fn(),
     getLevelEntries: vi.fn(() => undefined),
+    onPlayEnding: vi.fn(),
   };
   ui = createUI(root, cb as unknown as UICallbacks);
 });

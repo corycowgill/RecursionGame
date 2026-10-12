@@ -9,7 +9,8 @@ import { QUALITY_PRESETS, type QualityPreset, type Settings } from '../persisten
  */
 
 /** Top-level app flow. `playing` covers the paused / timeline-inspect / temporal-preview sub-states. */
-export type AppMode = 'boot' | 'menu' | 'intro' | 'playing' | 'complete';
+/** `ending` / `credits` (round 5): the final chamber's ending sequence and the credits that follow it (see ./ending). */
+export type AppMode = 'boot' | 'menu' | 'intro' | 'playing' | 'complete' | 'ending' | 'credits';
 
 /**
  * Renderer preset for a Settings / URL value: 'auto' picks by device ('mobile' on phones/tablets, 'high' on

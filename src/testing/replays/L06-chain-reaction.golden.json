@@ -1,7 +1,7 @@
 {
  "schema": 1,
  "levelId": "L06-chain-reaction",
- "levelFingerprint": 2121163712,
+ "levelFingerprint": 3460517012,
  "maxEchoes": 3,
  "loopDurationTicks": 4500,
  "completedAtTick": 735,

@@ -53,6 +53,11 @@ export interface UICallbacks {
    * level-complete card, so it never shows the progress cached when the main menu was last built (QA fix).
    */
   getLevelEntries?(): LevelEntry[];
+  /**
+   * Round 5 (narrative & release): replay the ending of the final chamber (level select once the campaign is finished,
+   * or the results card of a repeat clear of the final chamber). The app plays it, then rolls the credits.
+   */
+  onPlayEnding?(): void;
 }
 
 /** Per-frame data for the HUD + timeline. All read-only; the UI keeps no gameplay state. */
@@ -106,6 +111,8 @@ export interface LevelCompleteStats {
   isNewBestEchoes?: boolean;
   firstClear?: boolean;
   best?: { ticks: number; echoes: number } | null;
+  /** Round 5: the final chamber was cleared again; the card offers "Watch ending" (calls UICallbacks.onPlayEnding). */
+  hasEnding?: boolean;
 }
 
 export interface PauseData {

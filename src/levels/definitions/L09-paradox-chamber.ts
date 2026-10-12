@@ -47,9 +47,9 @@ export const level09ParadoxChamber: LevelDefinition = {
   name: 'The Paradox Chamber',
   subtitle: 'Your first echo is in the way of your last.',
   story: [
-    'Ascendant Facility — The Paradox Spire.',
-    'Two keys that must turn in the right order. Each one waits on the other.',
-    'When the past blocks the future, rewrite the past. It will not mind.',
+    'Paradox Wing — The Paradox Spire.',
+    'Two keys, each waiting on the other. When the past blocks the future, rewrite the past.',
+    'LOG 089 · You have read this line before. The past does not mind being rewritten. I never did. — H.A.',
   ],
   grid: {
     width: 22,

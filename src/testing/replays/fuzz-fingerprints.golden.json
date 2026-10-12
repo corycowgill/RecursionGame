@@ -22,7 +22,7 @@
   },
   {
    "levelId": "L01-first-echo",
-   "levelFingerprint": 1268641338,
+   "levelFingerprint": 3076028444,
    "seed": 7,
    "ticks": 2000,
    "digest": 2495853436,
@@ -31,7 +31,7 @@
   },
   {
    "levelId": "L02-two-places",
-   "levelFingerprint": 3748362822,
+   "levelFingerprint": 1651742000,
    "seed": 7,
    "ticks": 2000,
    "digest": 634765793,
@@ -40,7 +40,7 @@
   },
   {
    "levelId": "L03-the-relay",
-   "levelFingerprint": 275452847,
+   "levelFingerprint": 3845057265,
    "seed": 7,
    "ticks": 2000,
    "digest": 1944177462,
@@ -49,7 +49,7 @@
   },
   {
    "levelId": "L04-the-lift",
-   "levelFingerprint": 3678866701,
+   "levelFingerprint": 722199107,
    "seed": 7,
    "ticks": 2000,
    "digest": 2252301014,
@@ -58,7 +58,7 @@
   },
   {
    "levelId": "L05-perfect-timing",
-   "levelFingerprint": 1396374141,
+   "levelFingerprint": 3198396733,
    "seed": 7,
    "ticks": 2000,
    "digest": 274311095,
@@ -67,7 +67,7 @@
   },
   {
    "levelId": "L06-chain-reaction",
-   "levelFingerprint": 2121163712,
+   "levelFingerprint": 3460517012,
    "seed": 7,
    "ticks": 2000,
    "digest": 51971361,
@@ -76,7 +76,7 @@
   },
   {
    "levelId": "L07-broken-sequence",
-   "levelFingerprint": 2491080056,
+   "levelFingerprint": 371506768,
    "seed": 7,
    "ticks": 2000,
    "digest": 3780284316,
@@ -85,7 +85,7 @@
   },
   {
    "levelId": "L08-recursive-machine",
-   "levelFingerprint": 1965627392,
+   "levelFingerprint": 470214518,
    "seed": 7,
    "ticks": 2000,
    "digest": 1086095623,
@@ -94,7 +94,7 @@
   },
   {
    "levelId": "L09-paradox-chamber",
-   "levelFingerprint": 1203010442,
+   "levelFingerprint": 2314485989,
    "seed": 7,
    "ticks": 2000,
    "digest": 4255058388,
@@ -103,7 +103,7 @@
   },
   {
    "levelId": "L10-the-core",
-   "levelFingerprint": 3204068761,
+   "levelFingerprint": 879805296,
    "seed": 7,
    "ticks": 2000,
    "digest": 1389942704,

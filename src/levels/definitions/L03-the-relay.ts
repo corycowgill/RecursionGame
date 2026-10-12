@@ -42,9 +42,9 @@ export const level03TheRelay: LevelDefinition = {
   name: 'The Relay',
   subtitle: 'Hand the moment forward.',
   story: [
-    'Ascendant Facility — Chrono Vault.',
-    'The vault door listens for three things at once: two weights, and a heartbeat from the far balcony.',
-    'You cannot be in three places. But you can be in three moments.',
+    'Chronometry Lab — The Chrono Vault.',
+    'Two weights and a heartbeat from the balcony, all at once. Not three people: three moments.',
+    'LOG 027 · The vault timer was set by hand. The handwriting on the dial is mine. I never set it. — H.A.',
   ],
   grid: {
     width: 20,

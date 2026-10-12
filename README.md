@@ -5,15 +5,18 @@ your past self. Every completed loop becomes an echo that replays your exact inp
 world, so your solutions are built out of coordinated recordings: one echo holds a plate, another carries a power
 cell through a door that is only open because a third pressed a switch eight seconds earlier.
 
-- 10 handcrafted chambers (First Echo → The Core), each with a verified solution, echo limit, par time and hints
+- 10 handcrafted chambers (First Echo → The Core), each with a verified solution, echo limit, par time and hints,
+  a short story told through intro cards and "H.A." log entries, and an ending sequence plus credits after the Core.
+  Estimated campaign length (difficulty model only, nobody has playtested yet): 31–134 min, median ≈ 61 min; see
+  [`docs/game-design/difficulty-report.md`](docs/game-design/difficulty-report.md)
 - One deterministic 60 Hz simulation shared by the player and every echo (integer maths, seeded RNG, state hashes)
 - Paradoxes are real: if an echo's recorded action can no longer happen, it fails visibly and the timeline marks
   the divergence; nothing is faked to keep a recording "working"
 - A signature temporal timeline (track per echo, interaction markers, scrubbing, delete / hide loops),
   in-world badges showing which echo will use or step on which object, and when, and ghost paths of every echo's
   route while you hold Q
-- Stylized sci-fi visuals in Three.js (PBR materials, procedural textures, bloom, colour grade), fully
-  procedural audio, save/load and quality presets
+- Stylized sci-fi visuals in Three.js (PBR materials, procedural textures, bloom, colour grade, a lighting mood and
+  material wear per facility wing), fully procedural audio, save/load and quality presets
 - Three input devices, one input stream: keyboard, game controller (standard Gamepad API mapping) and on-screen
   touch controls all produce the same `PlayerInput` / `GameCommand` stream, so echoes and replays are identical
   whatever you played with. Button prompts follow the device you used last
@@ -154,6 +157,12 @@ installable as a full-screen home-screen web app. `render.yaml` deploys it to Re
 `graphics-preview.html` is built as a separate entry: `index.html` never loads its chunks and the service worker
 does not precache them (`ui-preview.html` exists only on the dev server).
 
+**Share cards.** `index.html` carries Open Graph and Twitter card tags pointing at `public/og-image.jpg` (1200×630,
+rendered from the real game). Crawlers (Facebook, X, Slack, Discord) need an **absolute** image URL, so once the Render
+domain is known set the one constant `VITE_SITE_URL` (origin with a trailing slash, e.g.
+`https://recursion.onrender.com/`) in `.env`, or as a build environment variable in Render. Empty, the URLs stay
+relative.
+
 ### Service worker (offline play)
 
 `public/sw.js` lets the home-screen app start and play without a network. `src/main.ts` registers it only in
@@ -183,15 +192,17 @@ are relative to the worker's scope, so it works from any sub-folder.
 | `npm run typecheck` | `tsc --noEmit` (strict) |
 | `npm test` | Vitest unit/integration suite: engine determinism, all 12 puzzle components, every level's verified solution, golden replays, seeded fuzzing, save/load, UI, audio, camera |
 | `npm run verify` | typecheck + unit tests + production build in one go |
-| `npm run test:e2e` | Playwright browser suite (smoke flow, menus/timeline/pause flows, every level completes in the real app, visual regression, mocked-controller flow, iPhone-emulated touch flow). Builds and serves `dist/` itself |
+| `npm run test:e2e` | Playwright browser suite (smoke flow, menus/timeline/pause flows, every level completes in the real app, visual regression, mocked-controller flow, iPhone-emulated touch flow, credits and ending). Builds and serves `dist/` itself |
 | `npm run test:fuzz` | Heavy seeded fuzz run (`FUZZ_TICKS`, `FUZZ_SEEDS`) |
 | `npm run replays:update` | Re-bless the golden replays after an intentional level change |
 | `npm run test:e2e:update-snapshots` | Re-bless the visual-regression baselines after an intentional visual change (review the PNG diffs) |
 | `npm run test:e2e:perf` | FPS measurement — meaningful only on a real GPU |
 | `npm run bench` | Simulation tick-cost benchmark |
+| `npm run solve -- L07` | Puzzle solver over the real simulation: finds solutions, searches for fewer-echo routes and shortcuts (`--kinds=proof,cheese`, `--budget=<s>`, `--workers=<n>`), `-- all --difficulty` prints the playtime / par-time model. Results: [`docs/game-design/difficulty-report.md`](docs/game-design/difficulty-report.md) |
 
 Headless Chromium renders WebGL in software (SwiftShader, ~1–2 fps), so the e2e suite drives the deterministic
-simulation through the `window.__RECURSION__` debug hook instead of wall-clock timing and takes ~26 minutes.
+simulation through the `window.__RECURSION__` debug hook instead of wall-clock timing and takes ~30 minutes
+(22 tests in v0.5).
 Run it with `CI=1` (fresh preview server) and, when other servers may be running, a private port:
 `CI=1 E2E_PORT=4311 npm run test:e2e`.
 
@@ -223,7 +234,7 @@ Data flows one way: input → `TemporalGame.step()` (the only place gameplay sta
 plus events → renderer, UI and audio. Nothing visual or audible feeds back into the simulation. Details:
 [`docs/architecture/overview.md`](docs/architecture/overview.md) and
 [`docs/architecture/contracts.md`](docs/architecture/contracts.md). Level design notes and walkthroughs:
-[`docs/game-design/levels.md`](docs/game-design/levels.md). Art bible:
+[`docs/game-design/levels.md`](docs/game-design/levels.md). Story: [`docs/game-design/story.md`](docs/game-design/story.md). Art bible:
 [`docs/art-direction/art-bible.md`](docs/art-direction/art-bible.md).
 
 ## Team structure
@@ -241,6 +252,9 @@ module and reporting in [`docs/agent-progress/`](docs/agent-progress/):
 | UI / UX Designer | HUD, timeline, menus, settings, persistence UI |
 | Audio / VFX | procedural sound, music states, event-driven effects |
 | QA Engineer | harness, golden replays, fuzzing, Playwright suites, benchmarks |
+
+Later rounds added further roles (UX / input, gameplay feedback, release engineer, puzzle analyst, art & rendering,
+narrative & release); their reports are in the same folder.
 
 Rules the team works by: interfaces before parallel work, clear module ownership, small tested changes, never
 duplicate the temporal engine or bypass determinism, and never claim a test passed without running it.

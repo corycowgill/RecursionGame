@@ -1,4 +1,138 @@
-# RECURSION — Release Notes (v0.4, round 4: device-aware hints, feedback, offline play)
+# RECURSION — Release Notes (v0.5, round 5: story and ending, chamber moods, solver-checked difficulty)
+
+Date: 2026-10-12 (v0.4 and earlier: below) · Build: `npm run build` → static `dist/` + `dist/sw.js` · Reviewer: Game Director
+
+Same honesty rule as before: "verified" means checked by a test that was run for this release. **Every v0.5 browser
+check ran in Chromium only** (SwiftShader software WebGL, ~0.3–0.5 fps). iPhone was emulated, controllers were mocked.
+**Nobody has playtested this build.** Every playtime, par time and hint delay below comes from a model.
+
+## v0.5 summary
+
+- **Story, ending and credits.** Every chamber's intro card has a location line, a narration line and a log entry
+  signed "H.A."; the logs build to a reveal at the Core (`docs/game-design/story.md`). The first clear of L10 plays an
+  ending (camera pull-back, the echoes walk into the player, three lines, fade to white) and then the credits roll and
+  return to the main menu. Any fresh key, click, tap or controller button skips it. After finishing the campaign, level
+  select offers **Ending** and **Credits**. The main menu's **Credits** screen replaces the old placeholder
+  ("HALLUCINATED GAMES presents", the team, three.js / Orbitron / Rajdhani licences).
+- **Share card:** `public/og-image.jpg` (1200×630, a real L10 frame) and Open Graph / Twitter tags. `VITE_SITE_URL`
+  must be set to the Render origin before crawlers can load the image (see README).
+- **Chamber moods and wear:** each chamber gets its own lighting mood within five wings (Dawn Atrium, Chronometry Lab,
+  Machine Hall, Paradox Wing, Core), plus per-wing material variants (oxidised brass to chrome-gold) driven by uniforms
+  only, with no new draw calls.
+- **Shader warm-up:** echo-hologram and ghost-path programs are compiled at level load, so the first echo no longer
+  freezes the game (measured below).
+- **Character:** the turntable head tilt (rotation order) and the idle head roll were fixed; face and hair polished.
+- **Puzzle solver and difficulty report:** `npm run solve` searches the real simulation for solutions, fewer-echo
+  routes and shortcuts. Three shortcuts were found and closed with one extra wire each (L02 1-echo, L06 2-echo,
+  L10 2-echo); the intended solutions finish on the same tick as before. Par times and hint delays now come from a
+  documented difficulty model (`docs/game-design/difficulty-report.md`).
+- Main-menu footer now reads `v0.5` (it still said "v0.1 · vertical slice").
+
+## Estimated playtime and levels to playtest
+
+From the difficulty model, **not** from players: **31–134 min for the campaign, median ≈ 61 min**, against the
+60–120 min target (the median is at the low edge). L10 alone is about 27 % of it (median 17 min, high estimate 37 min).
+
+Flagged for the first playtest (difficulty report, section 7):
+
+| Level | Why |
+|---|---|
+| **L05** Perfect Timing | **Can be solved with one echo** (designed for two); solver-verified, completes at 9.42 s. Left open on purpose: no layout-only fix exists because the island door has no deadline. **Product-owner decision needed** between the three options in difficulty report §3.1 (remove the island, also wire the Drive Switch to the door, or keep it and offer 1 echo as an optional challenge). Current behaviour is pinned by a campaign test. |
+| L06 Chain Reaction | Tightest window in the first half (3.6 s). |
+| L07, L09 | Blind recording is priced as a flat 120 s "insight" in the model; real players may differ a lot. |
+| L08 Recursive Machine | Cheapest late chamber in the model; does the nested-loop idea land without the third hint? |
+| L10 The Core | About 27 % of the campaign; four timing constraints (tightest 2.7 s); first hint at 100 s. |
+| Whole campaign | Time real sessions per chamber to recalibrate the model. |
+
+Solver evidence: fewer-echo searches are exhaustive within stated bounds for every level except where noted as
+budget-limited (L03 wide 1-echo, L06 wide 2-echo, L07/L09 wide 1-echo, L10 2-echo); those found nothing in their time
+budget but are not proofs.
+
+## v0.5 director checks (Chromium)
+
+| Check | Result |
+|---|---|
+| `npm run verify` | **Pass** at the start and end of the pass: typecheck clean, Vitest 48 files / 636 tests, none skipped (no `.skip` / `.only` / `.todo` in `src` or `tests`), build OK |
+| Golden replays | **Pass, justified diffs.** (1) Uncommitted at the start of the pass: only the 20 `levelFingerprint` lines changed (10 level goldens + 10 lines in `fuzz-fingerprints`), because every level's intro `story` text changed; the level-definition diffs are only `story` lines; every per-tick hash, checkpoint and completion tick is identical. (2) Committed earlier this round: L10's per-tick hashes changed because of the new socket→gate inverted wire (a real layout change; the gate's state is hashed); completion tick unchanged (1063). L02, L06 and L05 changed only fingerprints (wires to existing entities, par/hint changes). Accepted. |
+| Full e2e suite (`CI=1 E2E_PORT=4401 npx playwright test`) | **22 passed, 0 failed** in 30.1 min (4 new credits/ending tests). All visual baselines matched: **no re-bless**. The 3D baselines use L03 (Chronometry Lab mood) and default-mood scenes; the L03 mood change stays inside the 5 % / 0.3 tolerance. |
+| Main-menu UI visual test after the director's `v0.5` label change | **Pass** (1.6 min), within the 2 % tolerance; baseline not re-blessed (it still shows the old footer text) |
+| Ending path, real app, L10 completed through the debug hook (fresh save, high quality) | **Pass** for keyboard, mocked Xbox controller and iPhone-emulated touch: first clear starts the ending; one key / A button / tap skips it; credits roll (studio header, Cory Cowgill, licences); Esc / B / tap on "Main menu" returns to the menu; L10 saved as completed; the simulation hash is unchanged by the ending; **0 console errors or warnings** in all four runs |
+| Ending left to play out (no input) | **Pass**: ending → credits → menu on its own. At SwiftShader frame rates it took 126 s of wall time (the ~14.6 s sequence is driven by frame time, which is clamped at ~0.3 fps); the skips above were sent 10–24 s in, so they were real skips |
+| Perf probe (L10, SwiftShader) | high 0.35 fps / 377 draw calls / 0.77 M triangles; low 0.41 fps / 253 / 0.61 M (v0.4: 376 / 255). Unchanged within noise |
+
+**First-echo hitch** (L01, record 1 s, press R; long tasks after the commit; 3 runs per cell; "before" = this tree with
+`prewarm()` disabled, "after" = this tree; idle machine, `vite preview`):
+
+| Quality | Before: hitch per run (median) | After | Level load, before → after (median) |
+|---|---|---|---|
+| high | 11.5, 8.8, 11.5 s (**11.5 s**) | **none in 3/3** (frame gaps stay at the normal ~3 s) | 10.9 s → 18.1 s |
+| low | 7.2, 7.3, 7.2 s (**7.2 s**) | **none in 3/3** | 8.5 s → 16.2 s |
+
+So the freeze when the first echo appears is gone, and the cost moved into the level load (+7 to +8 s here, behind the
+intro fly-in and the level card). On a real GPU with parallel shader compile it should overlap the intro: unmeasured.
+
+**Main menu** (`?quality=low`, fresh browser per run, before/after alternated, 4 runs each). The menu DOM exists at
+~1.3–2.0 s, behind the studio intro; app mode becomes `menu` at ~4.1 s in both builds. Then the first 3D frames
+of the attract replay stall the page:
+
+| Build | Frame stall after the menu appears (median) | Menu steady (first regular frame, median) |
+|---|---|---|
+| before (no warm-up) | 10.2 s (10.4, 10.0, 10.1, 10.7) | **14.6 s** |
+| after | 6.4 s (6.2, 6.9, 6.4, 6.4) | **10.7 s** |
+
+The round-4 "~4 s menu stall" is smaller: the menu is steady about 4 s sooner on this machine. Cause not profiled (the
+warm-up compiles the same programs in one batch at `setLevel` instead of across several first frames). In 3 of 8 runs
+(both builds) a later 4.6–6.6 s frame stall happened 20–37 s in, while the attract replay was running. Long-task
+counts alone understate the stall (most of it is GPU-process time), so these numbers are frame gaps.
+
+**Screenshots** (overwritten or new, `docs/art-direction/screenshots/`): `final-L01…L10-midsolve.png` (real app, high
+quality, solution paused mid-run), `final-character.png` (turntable, front three-quarter), new `final-ending.png`
+(the ending's three lines over the Core overview) and `final-credits.png`. Compared with the concept sheet: the five
+moods read as intended (warm Dawn in L01–L02, cool Lab in L03–L04, violet Paradox in L07–L09); no regressions found.
+In L07 the player stands behind the gate arch at that tick (same framing as the v0.4 shot). The character's head is
+still small for the shoulders and the hair reads blocky next to the concept: known, needs an art pass.
+
+## Check on real hardware (owner), new in v0.5
+
+Everything in the v0.4 list below still applies. In addition:
+
+1. **Playtest the campaign** and time each chamber; decide on **L05** (above).
+2. Ending pacing at real frame rates (~14.6 s), whether the reveal lands, and whether the intro log lines read as
+   mystery or clutter.
+3. Level load time on a real GPU now that shaders are compiled at load, and whether the intro hides it.
+4. Set `VITE_SITE_URL` in Render, then check the share card in Facebook / X / Slack.
+5. Art sign-off on the five moods (especially the Machine Hall and Paradox floors) and a colour-blind check of the
+   violet Paradox accents next to Echo 3's colour.
+
+## v0.5 known issues
+
+1. **L05 can be solved with one echo** (product-owner decision, above).
+2. Playtime, par times and hint delays are model output only.
+3. `og-image.jpg` (90 KB) is precached by the service worker; excluding it needs a change in
+   `src/build/precacheManifest.ts`.
+4. Echoes vanish abruptly when they reach the player in the ending (no dissolve effect yet); at share-card size the
+   characters are tiny.
+5. Character hair/sculpt pass outstanding; the main-menu UI visual test is slow (1.4–4.6 min) and can time out under
+   heavy machine load.
+6. `graphics-preview.html` has no favicon link, so the dev page logs one 404 for `/favicon.ico` (dev tool only).
+7. Still open from v0.4: real Safari/WebKit, touch hardware, controllers, GPUs and speakers untested; critical-path JS
+   unchanged; short gamepad presses can be missed.
+
+## v0.5 tests run (director)
+
+- `npm run verify` at the start and end of the pass (48 files / 636 tests, none skipped, build OK).
+- Full Playwright suite once: 22 passed in 30.1 min, no re-bless. Main-menu UI visual test re-run after the label
+  change: passed.
+- Director scripts in the scratchpad (not committed): ending play-through ×4 (keyboard, pad, touch, no input),
+  mid-solve and turntable captures, first-echo long-task trace (12 runs), main-menu frame-gap trace (8 runs + 3
+  long-task-only runs).
+
+Team reports: `docs/agent-progress/puzzle-analyst-round5.md`, `art-rendering-round5.md`,
+`narrative-release-round5.md`; director: `docs/agent-progress/director-round5.md`.
+
+---
+
+# v0.4 (round 4: device-aware hints, feedback, offline play)
 
 Date: 2026-10-11 (v0.3, v0.2 and v0.1: below) · Build: `npm run build` → static `dist/` (relative base path) + `dist/sw.js` · Reviewer: Game Director
 

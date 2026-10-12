@@ -20,6 +20,7 @@ import { wireTouch } from './touch';
 import { EchoForecastController, type ForecastFrame } from './forecast';
 import { attractSuspended, comfortOf, qualityOverrideOf, rendererQuality, sampleRewind, withoutHiddenEchoes, type AppMode } from './flow';
 import { loadedSolutions, loadSolutions } from './lazySolutions';
+import { autoPlayEnding, convergeView, ENDING_LINES, EndingFlow, isFinalChamber } from './ending';
 
 export interface AppHandle {
   readonly game: TemporalGame;
@@ -193,6 +194,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       onTutorialComplete: (id) => save.markTutorialSeen(id),
       onUISound: (cue) => audio.playUi(cue),
       getLevelEntries: () => buildLevelEntries(LEVELS, save.data.progress),
+      onPlayEnding: () => replayEnding(),
     },
     { settings: save.data.settings, keybinds: save.data.keybinds, seenTutorials: save.data.seenTutorials, qualityOverride, padbinds: save.data.padbinds, padsConnected: () => gamepad.input.connectedCount },
   );
@@ -208,7 +210,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       levels: buildLevelEntries(LEVELS, progress),
       totalStars: CAMPAIGN.totalStars(progress),
       maxStars: LEVELS.length * 3,
-      version: 'v0.1 · vertical slice',
+      version: 'v0.5',
       persistent: save.persistent,
     };
   }
@@ -228,6 +230,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
 
   /** Synchronously installs a level in the sim + renderer (no UI flow). */
   function loadLevel(l: LevelDefinition): void {
+    ending.cancel();
     level = l;
     autopilot = null;
     attractLevel = null;
@@ -433,7 +436,13 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
     const done = level;
     completeTimer = window.setTimeout(() => {
       if (mode !== 'complete' || level !== done) return;
+      // Round 5: the first clear of the final chamber plays the ending (then the credits) instead of the results card.
+      if (autoPlayEnding(LEVELS, done.id, rec.firstClear)) {
+        startEnding();
+        return;
+      }
       ui.showLevelComplete({
+        hasEnding: isFinalChamber(LEVELS, done.id),
         result,
         levelName: done.name,
         levelOrder: done.order,
@@ -444,6 +453,67 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
         best: { ticks: rec.record.bestTicks, echoes: rec.record.bestEchoes },
       });
     }, COMPLETE_CARD_MS);
+  }
+
+  // ------------------------------------------------------------------ ending + credits (round 5, see ./ending)
+  const ending = new EndingFlow({
+    showEnding: (skip) => ui.showEnding(ENDING_LINES, skip),
+    showCredits: (exit) => {
+      mode = 'credits';
+      renderer.setFraming({});
+      ui.showCredits({ onExit: exit, rolling: true, fromWhite: true });
+      audio.setMusicState('menu');
+    },
+    toMenu: () => goMenu(),
+    reducedMotion: () => save.data.settings.reducedMotion,
+  });
+  let endingOverview = false;
+
+  /** Plays the ending over the current (completed) final chamber. */
+  function startEnding(): void {
+    mode = 'ending';
+    pauseOpen = false;
+    audio.setPaused(false);
+    autopilot = null;
+    keyboard.releaseAll();
+    ui.hideHUD();
+    endingOverview = false;
+    renderer.setCameraMode('follow');
+    audio.setMusicState('complete');
+    ending.start();
+    syncInputGate();
+  }
+
+  /**
+   * Level select / results card: replay the ending. Over a completed final chamber it starts at once; otherwise the
+   * final chamber is loaded and its verified solution is simulated to completion (real sim, no rendering), so the
+   * ending always shows a genuine finished Core.
+   */
+  function replayEnding(): void {
+    const final = LEVELS[LEVELS.length - 1];
+    if (!final || transitioning) return;
+    if (level.id === final.id && game.getState().status === 'complete' && mode === 'complete') {
+      window.clearTimeout(completeTimer);
+      startEnding();
+      return;
+    }
+    transitioning = true;
+    void ui
+      .transition(async () => {
+        const solutions = loadedSolutions() ?? (await loadSolutions());
+        loadLevel(final);
+        const sol = solutions.solutionFor(final);
+        game.setLoops(sol.echoes);
+        for (let t = 0; t < final.loopDurationTicks && game.getState().status === 'playing'; t++) {
+          game.step(sol.final[t] ?? { ...IDLE_INPUT, tick: t });
+        }
+        game.drainEvents(); // the replayed run is silent: no completion VFX / audio burst
+        startEnding();
+      })
+      .catch(() => goMenu())
+      .finally(() => {
+        transitioning = false;
+      });
   }
 
   // ------------------------------------------------------------------ commands (meta keys, never recorded)
@@ -600,8 +670,20 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
         alpha = 1;
       }
     }
+    // Round 5 ending: presentation-only view of the finished chamber (echoes walking into the player), camera pull-back.
+    const endFrame = mode === 'ending' ? ending.update(dt) : null;
+    if (endFrame) {
+      view = convergeView(live, endFrame.converge);
+      prev = view;
+      alpha = 1;
+      if (endFrame.overview !== endingOverview) {
+        endingOverview = endFrame.overview;
+        renderer.setCameraMode(endingOverview ? 'overview' : 'follow');
+      }
+    }
     // Framing: keep the subject clear of the docked timeline (and of the title column on the main menu).
     if (mode === 'menu') renderer.setFraming({ lift: 0.04, shift: 0.17, zoom: 1.45 });
+    else if (endFrame) renderer.setFraming({ zoom: endFrame.zoom });
     else renderer.setFraming({ lift: ui.timelineExpanded ? 0.16 : mode === 'playing' ? 0.06 : 0 });
     const timeline = mode === 'playing' || mode === 'intro' || mode === 'complete' ? game.getTimeline() : null;
     const badges = mode === 'playing' && !rewindFrames.length;
@@ -612,7 +694,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
     renderer.setGhostPaths(badges && previewHeld ? forecast.ghostPaths(previewBase, hiddenEchoes) : null);
     // A main-menu sub-screen (settings, level select, credits) covers the attract replay: the sim is paused above
     // and the backdrop only redraws occasionally (also keeps it correct after a resize).
-    if (!attractSuspended(mode, ui.screen) || now - lastRenderAt >= SUSPENDED_RENDER_MS) {
+    if (!(attractSuspended(mode, ui.screen) || mode === 'credits') || now - lastRenderAt >= SUSPENDED_RENDER_MS) {
       renderer.render(withoutHiddenEchoes(view, hiddenEchoes), withoutHiddenEchoes(prev, hiddenEchoes), alpha, events, dt);
       lastRenderAt = now;
     }
