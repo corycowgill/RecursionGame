@@ -36,7 +36,7 @@ import type { LevelDefinition } from '../../engine/contracts';
  */
 export const level06ChainReaction: LevelDefinition = {
   id: 'L06-chain-reaction',
-  order: 6,
+  order: 7,
   name: 'Chain Reaction',
   subtitle: 'Each of you is the reason for the next.',
   story: [

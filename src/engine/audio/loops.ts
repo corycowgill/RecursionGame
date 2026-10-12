@@ -7,7 +7,8 @@ import { chain, filter, gain, type NoiseBank } from './synth';
  * Continuous machinery loops driven by STATE (not events), reconciled every frame:
  *   laser emitter on → beam hum · elevator moving → motor · moving platform travelling → whirr
  *   pressure plate pressed → teal hum · socket powered → energy buzz · exit portal active → portal choir
- *   temporal gate open → violet field.
+ *   temporal gate open → violet field · chrono relay with a pulse in flight → soft ticking packet whose tick rate rises
+ *   as the oldest packet nears the output (round 6).
  * Reconciling against state (instead of start/stop events) means a rewind, restart or scrub can never leave a
  * loop stuck on. Only the MAX_LOOPS nearest loops sound; the rest are culled. A loop is released only after it
  * has been undesired for RELEASE_GRACE seconds (prevents flapping at moving-platform waypoints).
@@ -15,7 +16,7 @@ import { chain, filter, gain, type NoiseBank } from './synth';
 export const MAX_LOOPS = 8;
 export const RELEASE_GRACE = 0.2;
 
-export type LoopKind = 'laser' | 'elevator' | 'platform' | 'plate' | 'socket' | 'portal' | 'gate';
+export type LoopKind = 'laser' | 'elevator' | 'platform' | 'plate' | 'socket' | 'portal' | 'gate' | 'relay';
 
 interface Desired {
   key: string;
@@ -47,6 +48,7 @@ const LEVEL: Record<LoopKind, number> = {
   socket: 0.03,
   portal: 0.07,
   gate: 0.03,
+  relay: 0.035,
 };
 
 export class LoopBank {
@@ -110,6 +112,12 @@ export class LoopBank {
         case 'temporalGate':
           if (e.state.open) push(`gate:${id}`, 'gate', e.x, e.z);
           break;
+        case 'chronoRelay': {
+          const p = e.state.pending;
+          // mod rises from 0 to 1 over the last 2 s before the oldest packet arrives (ticks speed up: "here it comes")
+          if (p.length > 0) push(`relay:${id}`, 'relay', e.x, e.z, Math.max(0, Math.min(1, 1 - (p[0] ?? 0) / 120)));
+          break;
+        }
         default:
           break;
       }
@@ -135,6 +143,10 @@ export class LoopBank {
       if (d.kind === 'elevator') {
         const p = v.params[0];
         if (p) p.setTargetAtTime(d.mod >= 0 ? 62 : 48, now, 0.25);
+      }
+      if (d.kind === 'relay') {
+        const p = v.params[0];
+        if (p) p.setTargetAtTime(3 + d.mod * 7, now, 0.2);
       }
     }
     for (const [key, v] of this.voices) {
@@ -263,6 +275,19 @@ export class LoopBank {
         const bp = filter(c, 'bandpass', 1200, 2);
         chain(nz('pink'), bp, gain(c, 0.5), sum);
         lfo(0.15, 700, bp.frequency);
+        break;
+      }
+      case 'relay': {
+        // Soft ticking packet: a high sine gated by a fast square LFO (tick rate = params[0]) through a band-pass.
+        const g = gain(c, 0);
+        chain(o('sine', 1320), filter(c, 'bandpass', 1500, 4), g, out);
+        const l = o('square', 3);
+        params.push(l.frequency);
+        const depth = gain(c, 0.5);
+        chain(l, depth);
+        depth.connect(g.gain);
+        g.gain.setValueAtTime(0.5, t);
+        g.connect(this.wet);
         break;
       }
       case 'gate': {

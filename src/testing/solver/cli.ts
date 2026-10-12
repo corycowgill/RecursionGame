@@ -3,6 +3,9 @@ import { cpus } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import type { LevelDefinition } from '../../engine/contracts';
 import { LEVELS } from '../../levels';
+import { SANDBOX_LEVELS } from '../../levels/definitions/sandbox-levels';
+import { ROUND6_B_LEVELS } from '../../levels/definitions/round6-b-levels';
+import { ROUND6_A_LEVELS } from '../../levels/definitions/round6-a-levels';
 import { levelJobs, mergeShards, runJob, type Job, type JobKind, type JobResult } from './analysis';
 import { analysisFor } from './levelConfigs';
 import { estimateLevel, measureLevel, type LevelEstimate } from './difficulty';
@@ -29,7 +32,8 @@ interface WorkerTask {
 }
 
 function levelById(id: string): LevelDefinition {
-  const l = LEVELS.find((x) => x.id === id || x.id.startsWith(id + '-') || x.id.startsWith(id));
+  const all = [...LEVELS, ...SANDBOX_LEVELS, ...ROUND6_A_LEVELS.filter((l) => !LEVELS.includes(l)), ...ROUND6_B_LEVELS.filter((l) => !LEVELS.includes(l))];
+  const l = all.find((x) => x.id === id || x.id.startsWith(id + '-') || x.id.startsWith(id));
   if (!l) throw new Error(`unknown level '${id}'`);
   return l;
 }

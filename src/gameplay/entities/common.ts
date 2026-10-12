@@ -2,6 +2,7 @@ import {
   PHYS,
   UNITS_PER_TILE,
   fdiv,
+  type ActorClass,
   type AnySimEntity,
   type EntityId,
   type EntityKind,
@@ -107,4 +108,13 @@ export function socketHolding(ctx: SimContext, cellId: EntityId): EntityId | nul
     if (e && e.kind === 'energySocket' && e.state.cellId === cellId) return id;
   }
   return null;
+}
+
+/**
+ * (round 6, Attuned Devices) Actor class membership: 'player' = the live actor, 'echoes' = every echo (nested-loop copies
+ * included: they are echoes), 'all' / undefined = anyone.
+ */
+export function actorMatchesClass(actor: { kind: 'player' | 'echo' }, cls: ActorClass | undefined): boolean {
+  if (cls === undefined || cls === 'all') return true;
+  return cls === 'player' ? actor.kind === 'player' : actor.kind === 'echo';
 }

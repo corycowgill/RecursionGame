@@ -260,7 +260,7 @@ test.describe('short phone screen (740×340)', () => {
 
     // ---- Action button: hidden until the player faces a timed switch (L05's Drive Switch), then a tap presses Space
     await expect(page.getByTestId('touch-action')).toBeHidden();
-    const l5 = CAMPAIGN_LEVELS.find((l) => l.order === 5) as LevelDefinition;
+    const l5 = CAMPAIGN_LEVELS.find((l) => l.id === 'L05-perfect-timing') as LevelDefinition; // by id: round 6 renumbered L05 to chamber 6
     const walk = compileSolution(l5)[0]!.inputs.slice(0, 122); // loop 1 walks up to the Drive Switch (tick 122)
     await page.evaluate(`window.__RECURSION__.loadLevel(${CAMPAIGN_LEVELS.indexOf(l5)})`);
     await expect.poll(() => hook(page, (h) => h.mode), { timeout: 60_000 }).toBe('playing');

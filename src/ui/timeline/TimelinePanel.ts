@@ -1,4 +1,4 @@
-import type { Timeline } from '../../engine/contracts';
+import type { SimEvent, Timeline } from '../../engine/contracts';
 import type { PadEvent } from '../../engine/input/GamepadInput';
 import type { KeyBindings } from '../../persistence/keybinds';
 import { primaryLabel } from '../../persistence/keybinds';
@@ -23,11 +23,15 @@ import {
   type TrackModel,
   type Viewport,
 } from './model';
+import { collectShatters, type RelayRowModel, type ShatterMarker } from './devices';
+import { installTimelineExpansionStyles } from './expansionStyles';
 
 export interface TimelineUpdate {
   paused: boolean;
   /** Tick being previewed (from scrubbing or temporal preview), or null. */
   previewTick: number | null;
+  /** (round 6, optional) Chrono relay rows (devices.ts relayRows) drawn under the echo tracks. */
+  relays?: readonly RelayRowModel[];
 }
 
 /**
@@ -83,8 +87,14 @@ export class TimelinePanel {
   private paused = false;
   private playedEls = new Map<string, HTMLElement>();
   private playerSpan: HTMLElement | null = null;
+  /** Round 6: Paradox Glass shatter markers for the current pass, and the chrono relay rows (rebuilt every frame). */
+  private shatters: readonly ShatterMarker[] = [];
+  private relays: readonly RelayRowModel[] = [];
+  private relayLanes = new Map<string, HTMLElement>();
+  private relayHtml = new Map<string, string>();
 
   constructor(private readonly cb: UICallbacks) {
+    installTimelineExpansionStyles();
     this.timeEl = h('span', { class: 'time', 'aria-live': 'off' });
     this.previewEl = h('span', { class: 'preview', hidden: true });
     this.zoomEl = h('span', {});
@@ -211,8 +221,21 @@ export class TimelinePanel {
     return this.el.offsetHeight || (this.expanded ? 260 : 96);
   }
 
+  /**
+   * (round 6) Feeds drained events: collects Paradox Glass shatter markers for the breaking actor's track (cleared on a
+   * new pass). `labelOf` names devices in marker titles.
+   */
+  noteEvents(events: readonly SimEvent[], labelOf?: (entityId: string) => string): void {
+    const next = collectShatters(this.shatters, events, labelOf);
+    if (next !== this.shatters) {
+      this.shatters = next;
+      this.sig = '';
+    }
+  }
+
   update(timeline: Timeline, opts: TimelineUpdate): void {
     this.timeline = timeline;
+    this.relays = opts.relays ?? [];
     this.paused = opts.paused;
     this.externalPreview = opts.previewTick;
     const echoCount = timeline.tracks.filter((t) => t.kind === 'echo' && t.recursion === undefined).length;
@@ -226,11 +249,16 @@ export class TimelinePanel {
     this.vp = computeViewport(timeline.maxTicks, this.zoom, focus);
     this.tracks = buildTrackModels(timeline, { palette: this.palette, hidden: this.hidden, selectedEcho: this.selected });
 
-    const sig = tracksSignature(this.tracks, this.zoom, this.palette) + (this.expanded ? 'E' : 'C') + timeline.maxTicks;
+    const sig =
+      tracksSignature(this.tracks, this.zoom, this.palette) +
+      (this.expanded ? 'E' : 'C') +
+      timeline.maxTicks +
+      `|r:${this.relays.map((r) => r.id).join(',')}|s:${this.shatters.length}`;
     if (sig !== this.sig) {
       this.sig = sig;
       this.rebuildLanes();
     }
+    this.updateRelayLanes(timeline.maxTicks);
     const width = this.stage.clientWidth || 1000;
     const rsig = `${this.zoom}|${timeline.maxTicks}|${Math.round(width / 40)}`;
     if (rsig !== this.rulerSig) {
@@ -495,12 +523,51 @@ export class TimelinePanel {
         );
       }
       for (const d of t.divergences) {
-        lane.append(h('span', { class: 'rx-dv', style: `left:${(contentFrac(d.tick, max) * 100).toFixed(3)}%`, role: 'img', 'aria-label': d.title, title: d.title, html: DIVERGENCE_ICON }));
+        lane.append(
+          h('span', { class: `rx-dv${d.intended ? ' intended' : ''}`, style: `left:${(contentFrac(d.tick, max) * 100).toFixed(3)}%`, role: 'img', 'aria-label': d.title, title: d.title, html: DIVERGENCE_ICON }),
+        );
       }
+      for (const sh of this.shatters) {
+        if (sh.actorId !== t.key) continue;
+        lane.append(h('span', { class: 'rx-sh', style: `left:${(contentFrac(sh.tick, max) * 100).toFixed(3)}%`, role: 'img', 'aria-label': sh.title, title: sh.title }));
+      }
+      lanes.push(lane);
+    }
+    // Round 6: one row per chrono relay (input waveform, its delayed ghost and planned arrivals); content per frame.
+    this.relayLanes.clear();
+    this.relayHtml.clear();
+    for (const r of this.relays) {
+      labels.push(h('div', { class: 'rx-tl-label relay' }, h('span', { class: 'name', title: `${r.label}: the conduit remembers the last ${Math.round(r.delayTicks / 6) / 10} s` }, r.label)));
+      const lane = h('div', { class: 'rx-tl-lane relay', 'data-relay': r.id });
+      this.relayLanes.set(r.id, lane);
       lanes.push(lane);
     }
     this.labels.replaceChildren(...labels);
     this.lanes.replaceChildren(...lanes);
+  }
+
+  /** Round 6: redraws the chrono relay rows (cheap: a few spans per relay). */
+  private updateRelayLanes(maxTicks: number): void {
+    if (this.relays.length === 0) return;
+    const pct = (t: number): string => (contentFrac(t, maxTicks) * 100).toFixed(3);
+    for (const r of this.relays) {
+      const lane = this.relayLanes.get(r.id);
+      if (!lane) continue;
+      const parts: string[] = [];
+      for (let i = 0; i < r.input.length; i++) {
+        const a = r.input[i]!;
+        const g = r.ghost[i]!;
+        parts.push(`<i class="in" style="left:${pct(a.from)}%;width:${(Number(pct(a.to)) - Number(pct(a.from))).toFixed(3)}%"></i>`);
+        parts.push(`<i class="gh" style="left:${pct(g.from)}%;width:${(Number(pct(g.to)) - Number(pct(g.from))).toFixed(3)}%"></i>`);
+        parts.push(`<i class="cn" style="left:${pct(a.from)}%;width:${(Number(pct(g.from)) - Number(pct(a.from))).toFixed(3)}%"></i>`);
+      }
+      for (const ar of r.arrivals) parts.push(`<i class="ar${ar.rising ? ' rise' : ''}" style="left:${pct(ar.tick)}%" title="${esc(ar.label)}" aria-label="${esc(ar.label)}"></i>`);
+      const html = parts.join('');
+      if (this.relayHtml.get(r.id) !== html) {
+        this.relayHtml.set(r.id, html);
+        lane.innerHTML = html;
+      }
+    }
   }
 
   private renderLabel(t: TrackModel, cls: string): HTMLElement {

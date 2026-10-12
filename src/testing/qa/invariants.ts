@@ -125,6 +125,11 @@ export class InvariantChecker {
       for (const b of world.solids) {
         if (!(a.y < b.maxY && b.minY < a.y + PHYS.ACTOR_HEIGHT)) continue;
         if (b.blocks && !b.blocks(a)) continue;
+        // Round 6: an actor overlapping a check valve is always one the valve admitted (collision only refuses
+        // ENTERING the cell; the directional predicate deliberately reports a body straddling the downstream edge as
+        // "solid for" it so it cannot come back once fully out). The directional rule is checked across ticks by
+        // checkValveCrossings().
+        if (this.rt.def(b.entityId).kind === 'checkValve') continue;
         if (a.x - PHYS.ACTOR_HALF < b.maxX && b.minX < a.x + PHYS.ACTOR_HALF && a.z - PHYS.ACTOR_HALF < b.maxZ && b.minZ < a.z + PHYS.ACTOR_HALF)
         {
           const kind = this.rt.def(b.entityId).kind;
@@ -219,6 +224,53 @@ export class InvariantChecker {
         }
       }
     }
+  }
+
+  /** Last seen actor centres (per actor id) and valve directions, for checkValveCrossings. */
+  private valveMemo: { tick: number; actors: Map<string, { x: number; z: number; y: number }>; dirs: Map<string, number> } | null = null;
+
+  /**
+   * (round 6) Stateful check-valve rule, to be called once per simulated tick IN ORDER (it remembers the previous tick
+   * and resets itself when the tick does not advance by one, e.g. on a new pass): no actor may go from NOT overlapping a
+   * valve cell, with its centre downstream (along >= HALF_TILE) or beside it (lateral >= HALF_TILE) of the direction
+   * the valve had during that move, to overlapping it. Previews / scrubs must not call it.
+   */
+  checkValveCrossings(view: SimView): Violation[] {
+    const out: Violation[] = [];
+    const valves = this.level.entities.filter((d) => d.kind === 'checkValve');
+    if (valves.length === 0) return out;
+    const memo = this.valveMemo;
+    const prevOk = memo !== null && memo.tick + 1 === view.tick;
+    const actors = new Map<string, { x: number; z: number; y: number }>();
+    for (const a of view.actors) actors.set(a.id, { x: a.x, z: a.z, y: a.y });
+    const dirs = new Map<string, number>();
+    for (const d of valves) {
+      const e = view.entities[d.id];
+      if (!e || e.kind !== 'checkValve') continue;
+      dirs.set(d.id, e.state.dir);
+      if (!prevOk) continue;
+      const dir = memo.dirs.get(d.id);
+      if (dir === undefined) continue;
+      const ux = dir === 1 ? 1 : dir === 3 ? -1 : 0;
+      const uz = dir === 2 ? 1 : dir === 0 ? -1 : 0;
+      const cx = d.col * UNITS_PER_TILE + 500;
+      const cz = d.row * UNITS_PER_TILE + 500;
+      const H = PHYS.ACTOR_HALF;
+      const overlaps = (p: { x: number; z: number }) => Math.abs(p.x - cx) < 500 + H && Math.abs(p.z - cz) < 500 + H;
+      for (const a of view.actors) {
+        const before = memo.actors.get(a.id);
+        if (!before || Math.abs(before.y - e.y) >= 1000) continue;
+        if (overlaps(before) || !overlaps(a)) continue;
+        const dx = before.x - cx;
+        const dz = before.z - cz;
+        const along = dx * ux + dz * uz;
+        const lateral = Math.abs(dx * uz - dz * ux);
+        if (along >= 500 || lateral >= 500)
+          out.push({ rule: 'solid', tick: view.tick, message: `${a.id} entered check valve '${d.id}' against its direction (from ${before.x},${before.z} to ${a.x},${a.z}, dir ${dir})`, entityKind: 'checkValve' });
+      }
+    }
+    this.valveMemo = { tick: view.tick, actors, dirs };
+    return out;
   }
 
   /** Kind of the entity providing a surface override at a cell (elevator / moving platform), if any. */

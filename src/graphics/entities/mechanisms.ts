@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { unitsToWorld, type EntityView } from '../../engine/contracts';
 import { PALETTE } from '../materials/palette';
 import { createRingMaterial } from '../shaders/fx';
+import { AttunedDecor } from './expansion';
 import { damp, facingRotY, lerp, Parts, type EntityFrame, type EntityVisual, type EntityVisualContext } from './types';
 
 /* Pressure plate · door · timed switch · elevator · moving platform */
@@ -17,9 +18,12 @@ export class PressurePlateVisual implements EntityVisual {
   private press = 0;
   private pulseT = 1;
   private wasPressed = false;
+  /** Round 6: gold / cyan / glass overlay (null on ordinary plates). */
+  private readonly attuned: AttunedDecor | null = null;
+  private readonly shatterOn: 'echoes' | 'player' | undefined;
 
   constructor(ctx: EntityVisualContext) {
-    const { lib } = ctx;
+    const { lib, def } = ctx;
     const p = this.p;
     p.mesh(p.rbox(1.62, 0.12, 1.62, 0.04), lib.gunmetalDark, this.root, 0, 0.06, 0);
     // brass frame
@@ -58,6 +62,16 @@ export class PressurePlateVisual implements EntityVisual {
     pg.rotateX(-Math.PI / 2);
     this.pulse = p.dyn(p.mesh(pg, this.pulseMat, this.root, 0, 0.2, 0, false));
     this.pulse.visible = false;
+    const cfg = def.kind === 'pressurePlate' ? def.config : {};
+    this.shatterOn = cfg.shatterOn;
+    if ((cfg.accepts !== undefined && cfg.accepts !== 'all') || cfg.shatterOn !== undefined) {
+      this.attuned = new AttunedDecor(p, lib, cfg, 0.55, def.col, def.row);
+      this.attuned.group.position.y = 0.062;
+      this.pad.add(this.attuned.group);
+      // the inner cyan core reads as "anyone"; attuned plates replace it with their own glyphs
+      for (const c of [...this.pad.children]) if ((c as THREE.Mesh).material === this.coreMat || (c as THREE.Mesh).material === this.ringMat) this.pad.remove(c);
+      if (cfg.shatterOn !== undefined) (this.pad as THREE.Mesh).material = lib.glass;
+    }
   }
 
   update(f: EntityFrame): void {
@@ -65,9 +79,10 @@ export class PressurePlateVisual implements EntityVisual {
     const pressed = e.state.pressed;
     if (pressed && !this.wasPressed) this.pulseT = 0;
     this.wasPressed = pressed;
+    const refused = this.attuned ? this.attuned.update(f.state, e.state.broken === true, f.time, f.dt, this.shatterOn) : 0;
     this.press = damp(this.press, pressed ? 1 : 0, 22, f.dt);
     this.pad.position.y = 0.16 - this.press * 0.06;
-    const idle = 0.9 + 0.35 * Math.sin(f.time * 2.4);
+    const idle = (0.9 + 0.35 * Math.sin(f.time * 2.4)) * (refused ? 0.35 : 1);
     this.ringMat.emissive.set(PALETTE.cyan).lerp(new THREE.Color(PALETTE.teal), this.press);
     this.ringMat.emissiveIntensity = lerp(idle, 4.2, this.press);
     this.coreMat.emissive.copy(this.ringMat.emissive);
@@ -167,11 +182,16 @@ export class TimedSwitchVisual implements EntityVisual {
   private readonly buttonMat: THREE.MeshStandardMaterial;
   private readonly button: THREE.Mesh;
   private readonly duration: number;
+  /** Round 6: gold / cyan / glass overlay on the head (null on ordinary consoles). */
+  private readonly attuned: AttunedDecor | null = null;
+  private readonly shatterOn: 'echoes' | 'player' | undefined;
 
   constructor(ctx: EntityVisualContext) {
     const { lib, def } = ctx;
     const p = this.p;
     this.duration = def.kind === 'timedSwitch' ? Math.max(1, def.config.durationTicks) : 300;
+    const cfg = def.kind === 'timedSwitch' ? def.config : { durationTicks: 1 };
+    this.shatterOn = cfg.shatterOn;
     const inner = new THREE.Group();
     inner.rotation.y = facingRotY(def.facing);
     this.root.add(inner);
@@ -194,14 +214,23 @@ export class TimedSwitchVisual implements EntityVisual {
       m.rotation.y = a;
       this.segs.push(m);
     }
+    if ((cfg.accepts !== undefined && cfg.accepts !== 'all') || cfg.shatterOn !== undefined) {
+      this.attuned = new AttunedDecor(p, lib, cfg, 0.36, def.col, def.row);
+      this.attuned.group.position.y = 1.475;
+      inner.add(this.attuned.group);
+      if (cfg.shatterOn !== undefined) for (const c of inner.children) if ((c as THREE.Mesh).material === lib.ivory) (c as THREE.Mesh).material = lib.glass;
+    }
   }
 
   update(f: EntityFrame): void {
     const e = f.e as EntityView<'timedSwitch'>;
+    const broken = e.state.broken === true;
+    if (this.attuned) this.attuned.update(f.state, broken, f.time, f.dt, this.shatterOn);
     const lit = e.state.on ? Math.ceil((e.state.remainingTicks / this.duration) * 12) : 0;
     this.segs.forEach((m, i) => (m.material = i < lit ? this.segOn : this.segOff));
-    this.buttonMat.emissive.set(e.state.on ? PALETTE.teal : PALETTE.gold);
-    this.buttonMat.emissiveIntensity = e.state.on ? 3.5 + Math.sin(f.time * 10) * 0.6 : 1.1 + Math.sin(f.time * 2.5) * 0.4;
+    const accent = this.attuned?.accepts === 'echoes' ? PALETTE.cyan : PALETTE.gold;
+    this.buttonMat.emissive.set(broken ? PALETTE.coral : e.state.on ? PALETTE.teal : accent);
+    this.buttonMat.emissiveIntensity = broken ? 0.25 : e.state.on ? 3.5 + Math.sin(f.time * 10) * 0.6 : 1.1 + Math.sin(f.time * 2.5) * 0.4;
     this.button.position.y = e.state.on ? 1.37 : 1.4;
     this.root.position.copy(f.pos);
   }

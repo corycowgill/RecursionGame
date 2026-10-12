@@ -20,6 +20,9 @@ import { verifySolution } from './verify';
  *   recursion      the nested-loop engine is in play (L08)
  *   newIdeas       teaching tags introduced by the chamber
  *   bestTicks      fastest verified completion (solver or authored) — the par-time anchor
+ *   relay          (round 6) the level uses a chrono relay (anticipation: acting now for an effect later)
+ *   delayedPresses (round 6) presses whose effect lands more than 3 s later: delayed rising pulses delivered by a relay
+ *                  with delayTicks > 180 in the winning pass; each counts as one more constrained window
  */
 
 export interface LevelMetrics {
@@ -36,6 +39,9 @@ export interface LevelMetrics {
   newIdeas: number;
   bestTicks: number;
   authoredTicks: number;
+  /** (round 6) */
+  relay?: boolean;
+  delayedPresses?: number;
 }
 
 export interface LevelEstimate {
@@ -69,6 +75,10 @@ export function measureLevel(level: LevelDefinition, slack: SlackReport | null, 
   const final = loops[loops.length - 1]!;
   const v = verifySolution(level, { levelId: level.id, echoes, final: { steps: [], inputs: final.inputs }, completedAtTick: res.completedAtTick ?? 0 });
   const constraints = slack ? slack.params.filter((p) => !p.capped && p.width < 600).length : 0;
+  // Round 6: delayed rising pulses delivered by a relay whose delay exceeds 3 s.
+  const longRelays = new Set(level.entities.filter((e) => e.kind === 'chronoRelay' && e.config.delayTicks > 3 * SIM_HZ).map((e) => e.id));
+  let delayedPresses = 0;
+  for (const e of res.passes[res.passes.length - 1]?.events ?? []) if (e.type === 'entity' && e.name === 'relayEmit' && e.value === 1 && longRelays.has(e.entityId)) delayedPresses++;
   const authoredTicks = (res.completedAtTick ?? 0) + 1;
   return {
     levelId: level.id,
@@ -84,6 +94,8 @@ export function measureLevel(level: LevelDefinition, slack: SlackReport | null, 
     newIdeas: level.teaches?.length ?? 0,
     bestTicks: Math.min(bestTicks ?? Infinity, authoredTicks),
     authoredTicks,
+    relay: level.entities.some((e) => e.kind === 'chronoRelay'),
+    delayedPresses,
   };
 }
 
@@ -99,6 +111,8 @@ const PER_IDEA = 12;
 /** The two counter-intuitive lessons cost extra insight time: recording "blind" and nested loops. */
 const BLIND_INSIGHT = 120;
 const RECURSION_INSIGHT = 90;
+/** (round 6) Anticipation insight for a level with a chrono relay: acting now for an effect that lands later. */
+const RELAY_INSIGHT = 60;
 /** Overhead per recording: rewind, re-orient, start walking (on top of the recording itself). */
 const PER_RECORDING_OVERHEAD = 4;
 /** Failed full attempts before the winning one: base + per extra loop + per constraint (+1 if a window < 3 s). */
@@ -120,10 +134,11 @@ export function estimateLevel(m: LevelMetrics, hintCount: number): LevelEstimate
     ORIENT +
     PER_LOOP * m.loops +
     PER_INTERACTION * m.interactions +
-    PER_CONSTRAINT * m.constraints +
+    PER_CONSTRAINT * (m.constraints + (m.delayedPresses ?? 0)) +
     PER_IDEA * m.newIdeas +
     (m.blind ? BLIND_INSIGHT : 0) +
-    (m.recursion ? RECURSION_INSIGHT : 0);
+    (m.recursion ? RECURSION_INSIGHT : 0) +
+    (m.relay ? RELAY_INSIGHT : 0);
   const oneAttempt = m.recordTicks / SIM_HZ + PER_RECORDING_OVERHEAD * m.loops;
   const tight = m.tightestTicks !== null && m.tightestTicks < 3 * SIM_HZ ? 1 : 0;
   const attempts = 1 + ATTEMPTS_BASE + ATTEMPTS_PER_LOOP * (m.loops - 2) + ATTEMPTS_PER_CONSTRAINT * m.constraints + tight;

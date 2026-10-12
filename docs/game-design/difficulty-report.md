@@ -1,4 +1,11 @@
-# RECURSION: Difficulty and Solvability Report (round 5)
+# RECURSION: Difficulty and Solvability Report (rounds 5 and 6)
+
+> **Round 6 (expansion to 18 chambers).** In the tables below, `#` is the level id number (L01..L18), not the play
+> order: the campaign order since round 6 is L01, L02, L03, L04, **L11**, L05, L06, **L12**, **L13**, L07, **L14**, L08,
+> **L15**, L09, **L16**, **L17**, **L18**, L10 (The Core stays the finale). The round-6 rows come from the level designers'
+> solver runs (details in [`levels-round6-A.md`](./levels-round6-A.md) and [`levels-round6-B.md`](./levels-round6-B.md))
+> and the director's re-run of `npm run solve -- all --difficulty` on the integrated campaign (section 5).
+> **New campaign estimate: 61–268 min, median ≈ 122 min** (round 5: 31–134, median ≈ 61).
 
 Owner: puzzle analyst / level designer. Tools: `src/testing/solver/*` (`npm run solve -- <level>`), CI subset in
 `src/testing/solver/solver.test.ts`. **Nobody has playtested yet.** Every time estimate in this document comes from
@@ -42,6 +49,14 @@ threads), `npm run solve -- all --kinds=proof --budget=900`, `npm run solve -- a
 | 8 | 1 / 1 | k=0: final run of 3 steps, every wait | **exhaustive, none** | wins with the Recursion Engine off: 1 echo × 2 steps, every wait, **exhaustive, none** | - |
 | 9 | 2 / 2 | k=0,1: deep(3); k=0: wide(2) | **exhaustive, none**; k=1 wide(2) budget-limited (480 s, none) | none (no separate cheese set; every find solution uses a blind recording) | - |
 | 10 | 3 / 3 | k=0,1,2: 2 steps per echo, live | k=0,1 **exhaustive, none**; k=2 budget-limited (480 s, none) + body count | 2-echo route: the Courier walks back out of the Reliquary | **Yes** (gate seals once the socket is powered) |
+| 11 | 1 / 2 | k=0: final run 4 steps no waits; 3 steps every wait | **exhaustive, none** | doorstop / walk-back: none (nothing ever closes; the valve forbids walking back up) | - |
+| 12 | 1 / 1 | k=0: final run 3 steps; 2 steps every wait | **exhaustive, none** | relay bypass (`relayBypassed`): none; budget-limited at 600 s | - |
+| 13 | 2 / 3 | k=0,1: deep(2) and wide(1); k=0: deep(3)/wide(2) | **exhaustive, none**; k=1 deep(3)/wide(2) budget-limited (1200 s, none) + valve-directed distance (N→S 10.8 s > 5 + 2.5 s) | walk-back impossible by valves; relay bypass none (600 s budget) | - |
+| 14 | 1 / 2 | k=0: exhaustive | **exhaustive, none** | 1 echo × 2 steps, every wait: **exhaustive**, nothing skips the lesson | - |
+| 15 | 2 / 2 | k=0,1: deep(3); k=0: wide(2) | **exhaustive, none**; k=1 wide(2) budget-limited (1200 s, none) + keys/body count | shortest (glass) route fails on replay (teaching check `noShatter`); 2-echo cheese hunt budget-limited (300 s, none) | - |
+| 16 | 2 / 2 | k=0,1: deep(2) and wide(1); k=0: deep(3)/wide(2) | **exhaustive, none**; k=1 deep(3)/wide(2) budget-limited (600 s, none) + body count and edge argument | doorstop / walk-back / relay bypass: none (600 s budget) | - |
+| 17 | 2 / 2 | k=0,1: deep(3) | **exhaustive, none**; k=1 wide(2) budget-limited (300 s, none) | a 7.9 s route with no valve involved (copy holds a second plate) | **Yes** (designer B: Non-return Flap valve, plates ≥ 7.5 s apart, Head Plate pocket, teaching check) |
+| 18 | 3 / 3 | k=0: exhaustive; k=1,2: budget-limited (300 s each, none) | k=0 **exhaustive, none**; k=1,2 + body count (as for L10) | none found; open search budget-limited, intended plan verified as a plan | - |
 
 "Find" evidence (the vocabulary is expressive enough for the proofs to mean something): the solver rediscovers a
 verified intended-count solution for every level from L01 to L09, usually faster than the authored one (L03 8.6 s vs
@@ -129,8 +144,16 @@ adapt by themselves and have no parameter.
 | 8 | 800 t (13.3 s) | loose; the difficulty is conceptual (nested loop) |
 | 9 | 676 t (11.3 s) | loose; conceptual |
 | 10 | **162 t (2.7 s)** | Ferryman's West Timer press; also 260 t, 281 t, 410 t windows |
+| 11 | 813 t (capped) | loose; the difficulty is the commitment (valve) |
+| 12 | 721 t (capped) | loose: the bell hold works anywhere from 0 to 12 s |
+| 13 | **271 t (4.5 s)** | both timer hands |
+| 14 | **243 t (4.05 s)** | the echo's console press vs your seal hold |
+| 15 | **213 t (3.55 s)** | the twin-timer schedule on the long (glass-free) route |
+| 16 | 384 t (6.4 s) | Echo 2's Hall Plate hold |
+| 17 | **172 t (2.87 s)** | the 5 s brake window (copy turned back by the braked valve) |
+| 18 | 311 t (5.2 s) | one constrained window (the relayed console press); designer kept 1 window, not ~3, to hold the model score at 11.1 |
 
-No window is under 2.5 s, which meets the levels.md principle "at least 0.5–1 s of slack". L10 has four constrained
+No window is under 2.5 s (the round-6 bar), the tightest being L10's 2.7 s and L17's 2.87 s. L10 has four constrained
 moments and is the timing peak: **flagged for playtest**.
 
 ## 5. Playtime and difficulty model
@@ -151,30 +174,47 @@ playtest data:
   average ratio of the round-4 hand-set delays to this model's medians, so the overall hint pace stays the same; only
   the per-level spacing becomes consistent. (The HUD also unlocks a hint every 3 failed attempts.)
 
-| # | Loops | Interactions | Constrained windows | Blind / nested | Score | Est. minutes low–high (median) | Best / authored s | Par s | Hint delays s |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | 2 | 0 | 0 | | 3.6 | 1.2–5.4 (2.5) | 4.77 / 4.77 | 9 | 0/20/45 |
-| 2 | 3 | 0 | 0 | | 4.3 | 1.7–7.3 (3.3) | 8.05 / 8.05 | 14 | 0/30/60 |
-| 3 | 3 | 3 | 0 | | 5.4 | 2.4–10.3 (4.7) | 8.60 / 9.77 | 14 | 0/30/55/85 |
-| 4 | 3 | 0 | 0 | | 4.3 | 1.9–8.2 (3.7) | 12.88 / 13.38 | 20 | 0/35/65 |
-| 5 | 3 | 2 | 2 | | 7.6 | 3.2–14.1 (6.4) | 9.43 / 11.38 | 15 | 0/60/115 |
-| 6 | 4 | 1 | 1 | | 6.8 | 3.3–14.3 (6.5) | 12.27 / 12.27 | 19 | 0/60/115 |
-| 7 | 3 | 1 | 0 | blind | 6.5 | 3.2–14.0 (6.3) | 10.88 / 12.62 | 17 | 0/55/115 |
-| 8 | 2 | 0 | 0 | nested | 4.9 | 2.3–10.0 (4.6) | 14.30 / 19.80 | 21 | 0/40/80 |
-| 9 | 3 | 0 | 0 | blind | 6.5 | 3.1–13.5 (6.2) | 12.33 / 14.78 | 19 | 0/55/110 |
-| 10 | 4 | 6 | 4 | blind | 15.2 | 8.4–36.9 (16.8) | 17.73 / 17.73 | 26 | 0/100/200/300 |
+| Order | Id | Loops | Interactions | Constrained windows | Blind / nested | Score | Est. minutes low–high (median) | Best / authored s | Par s | Hint delays s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | L01 | 2 | 0 | 0 |  | 3.6 | 1.2-5.4 (2.5) | 4.77 / 4.77 | 9 | 0/20/45 |
+| 2 | L02 | 3 | 0 | 0 |  | 4.3 | 1.7-7.3 (3.3) | 8.05 / 8.05 | 14 | 0/30/60 |
+| 3 | L03 | 3 | 3 | 0 |  | 5.4 | 2.4-10.3 (4.7) | 8.60 / 9.77 | 14 | 0/30/55/85 |
+| 4 | L04 | 3 | 0 | 0 |  | 4.3 | 1.9-8.2 (3.7) | 12.88 / 13.38 | 20 | 0/35/65 |
+| 5 | L11 | 2 | 2 | 0 |  | 3.7 | 1.5-6.5 (2.9) | 10.62 / 12.33 | 17 | 0/25/55 |
+| 6 | L05 | 3 | 2 | 2 |  | 7.6 | 3.2-14.1 (6.4) | 9.43 / 11.38 | 15 | 0/60/115 |
+| 7 | L06 | 4 | 1 | 1 |  | 6.8 | 3.3-14.3 (6.5) | 12.27 / 12.27 | 19 | 0/60/115 |
+| 8 | L12 | 2 | 1 | 0 |  | 5.6 | 2.6-11.4 (5.2) | 18.98 / 19.00 | 27 | 0/45/95 |
+| 9 | L13 | 3 | 2 | 2 |  | 9.2 | 5.2-22.7 (10.3) | 23.65 / 25.47 | 33 | 0/60/125/185 |
+| 10 | L07 | 3 | 1 | 0 | yes | 6.5 | 3.2-14 (6.3) | 10.88 / 12.62 | 17 | 0/55/115 |
+| 11 | L14 | 2 | 1 | 1 | yes | 6.9 | 2.7-12 (5.4) | 6.28 / 6.83 | 11 | 0/50/100 |
+| 12 | L08 | 2 | 0 | 0 | nested | 4.9 | 2.3-10 (4.6) | 14.30 / 19.80 | 21 | 0/40/80 |
+| 13 | L15 | 3 | 2 | 2 |  | 7.4 | 3.5-15.4 (7) | 12.52 / 13.73 | 19 | 0/65/125 |
+| 14 | L09 | 3 | 0 | 0 | yes | 6.5 | 3.1-13.5 (6.2) | 12.33 / 14.78 | 19 | 0/55/110 |
+| 15 | L16 | 3 | 0 | 1 |  | 8 | 3.8-16.8 (7.7) | 17.88 / 17.88 | 26 | 0/45/90/140 |
+| 16 | L17 | 3 | 0 | 2 | nested | 9.4 | 4.7-20.8 (9.5) | 16.77 / 17.70 | 24 | 0/85/170 |
+| 17 | L18 | 4 | 4 | 1 | yes | 11.1 | 6.5-28.8 (13.1) | 27.23 / 27.48 | 38 | 0/120/235 |
+| 18 | L10 | 4 | 6 | 4 | yes | 15.2 | 8.4-36.9 (16.8) | 17.73 / 17.73 | 26 | 0/100/200/300 |
 
-**Total: 31–134 min, median ≈ 61 min** against the 60–120 min target. The median sits at the low edge of the
-target, but it is not "far below" it. The model ignores the menu, the story cards and replaying levels for stars,
-all of which add time. All par times and hint delays in `src/levels/definitions/*` now equal the model's output (the
-CLI prints "old -> model" and every row matches).
+**Total (round 6, 18 chambers): 61–268 min, median ≈ 122 min** (round 5, 10 chambers: 31–134, median ≈ 61). The eight
+new chambers add ≈ 61 min of model median (L11 2.9, L12 5.2, L13 10.3, L14 5.4, L15 7.0, L16 7.7, L17 9.5, L18 13.1),
+inside the planned +55–75 min. Run: `npm run solve -- all --difficulty=<find.json>` on the integrated campaign, with
+the fastest verified completions merged from the round-5 find run and the round-6 designers' and director's find runs
+(L11 and L15 re-found by the director: 10.60 s and 12.50 s). Every par time and hint delay in the level files equals the
+model's output ("old -> model" matches on all 18 rows). The round-6 model adds +35 s per press that lands more than
+3 s later and +60 s for any chamber with a relay (`difficulty.ts`). L10 (score 15.2) is still the campaign maximum;
+the highest new chamber is L18 at 11.1. Round-5 note kept below: the model ignores the menu, the story cards and
+replaying levels for stars.
 
 Model observations (all **need playtest**):
 
 * **The curve is not monotonic.** L04 (4.3) scores below L03 (5.4), and L08 (4.9) below L07 (6.5). Both dips are
   deliberate breathers after a new idea: L04 reuses L03's "be there before the moment" in a vertical space, and L08's
-  difficulty is the nested-loop insight, which the model prices at a flat 90 s.
-* **L10 is about 2.5× any other chamber** (median 17 min, ~27 % of the campaign). Expected for a finale, but the
+  difficulty is the nested-loop insight, which the model prices at a flat 90 s. Round 6 adds planned breathers: L11
+  (3.7, the valve introduction) after L04, L12 (5.6) after L06's 3-echo chain and L14 (6.9) after L07. From L15 on the
+  scores climb to the end (7.4, then L09 6.5 as the one exception, 8.0, 9.4, 11.1, 15.2). L11 scores below its 4.5 slot
+  and L13 (9.2) above its 6.5 slot: both **need playtest**.
+* **L10 is about 2.5× any round-5 chamber** (median 17 min; ~27 % of the round-5 campaign, ~14 % of the round-6 one).
+  L18 (13.1 min) now sits just before it as the penultimate exam. Expected for a finale, but the
   high-end estimate (37 min) is a frustration risk.
 * **L05 is likely over-scored**, because the model measures the authored 2-echo solution, not the 1-echo cheese.
 
@@ -201,6 +241,11 @@ partner of option 3 in section 3.1.
 * **L06**: the tightest window in the first half of the game (3.6 s on Echo 2's first press).
 * **L07, L09**: blind recording is priced as a flat 120 s "insight" cost; real players may need far longer, or far less.
 * **L08**: the model's cheapest late chamber; check that the nested-loop idea lands without the third hint.
-* **L10**: about 27 % of the campaign; four timing constraints, the tightest 2.7 s; first hint at 100 s.
-* **Campaign length**: the median of 61 min is at the bottom of the target; the first playtest should time real
+* **L10**: about 27 % of the round-5 campaign (14 % of round 6); four timing constraints, the tightest 2.7 s; first hint at 100 s.
+* **Round 6 chambers** (nobody has played them): L13's forced lap after entering the ring and L16's second ring of the
+  Hall Plate to leave (designer A); L17's 2.87 s brake window and the "same recording, both sides of the valve" idea;
+  L18's one constrained window (the plan asked for about three; the designer kept the model score at 11.1 instead);
+  L15 and L18's glass galleries are 1-tile corridors behind thick walls, so the glass seal is hard to see from the
+  follow camera (director screenshots).
+* **Campaign length** (round 5 note; round 6 brings the median to 122 min, the middle of the target): the first playtest should time real
   sessions per chamber to recalibrate the coefficients in `difficulty.ts`.

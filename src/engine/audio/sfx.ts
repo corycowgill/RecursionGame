@@ -721,6 +721,74 @@ function buildInteractUse(e: VoiceEnv): number {
   return 0.2;
 }
 
+/* ---- round 6 mechanics ---- */
+
+/** Check valve pass: a mechanical clack (turnstile fin) with a small ratchet click. */
+function buildValvePass(e: VoiceEnv): number {
+  const t = e.t;
+  thump(e, t, 220, 110, 0.06, 0.35);
+  burst(e, t, 'bandpass', 2600, 3, 0.03, 0.25);
+  burst(e, t + 0.05, 'bandpass', 3400, 4, 0.02, 0.15);
+  return 0.2;
+}
+
+/** Check valve denial: a dull thud against the closed face plus a short rattle. */
+function buildValveDenied(e: VoiceEnv): number {
+  const t = e.t;
+  thump(e, t, 90, 50, 0.16, 0.5);
+  burst(e, t, 'lowpass', 500, 0.8, 0.1, 0.25, 'brown');
+  for (let i = 0; i < 3; i++) burst(e, t + 0.04 + i * 0.035, 'bandpass', 1900, 5, 0.015, 0.08);
+  return 0.3;
+}
+
+/** Reversible valve flip: a violet servo sweep. */
+function buildValveFlip(e: VoiceEnv): number {
+  servo(e, e.t, 180, 360, 0.4, 0.05);
+  tone(e, e.t + 0.32, 'sine', midiToHz(83), 0.05, 0.01, 0.05, 0.3, e.wet);
+  return 0.7;
+}
+
+/** Relay armed (an edge enters the conduit): a soft glassy tick. */
+function buildRelayArm(e: VoiceEnv): number {
+  tone(e, e.t, 'sine', 2093, 0.035, 0.002, 0.01, 0.08);
+  burst(e, e.t, 'highpass', 6000, 0.7, 0.015, 0.05);
+  return 0.15;
+}
+
+/** Relay output toggles: bright chime on rising, a soft falling pair on falling. */
+function buildRelayEmit(e: VoiceEnv): number {
+  const t = e.t;
+  if ((e.p['rising'] ?? 1) > 0) {
+    bell(e, t, midiToHz(86), 0.9, 0.045, 2, 1.4, e.wet);
+    tone(e, t, 'triangle', midiToHz(74), 0.05, 0.005, 0.08, 0.35);
+    return 1.0;
+  }
+  tone(e, t, 'sine', midiToHz(81), 0.035, 0.005, 0.05, 0.2);
+  tone(e, t + 0.09, 'sine', midiToHz(74), 0.03, 0.005, 0.05, 0.25);
+  return 0.45;
+}
+
+/** Paradox Glass shatter: a crack, then a shower of high glassy grains. */
+function buildShatter(e: VoiceEnv): number {
+  const t = e.t;
+  burst(e, t, 'highpass', 2500, 0.7, 0.05, 0.45);
+  thump(e, t, 300, 120, 0.05, 0.3);
+  for (let i = 0; i < 9; i++) tone(e, t + 0.03 + i * 0.03 + e.rng.range(0, 0.02), 'sine', 2600 + e.rng.range(0, 2400), 0.03, 0.001, 0.005, 0.07, i % 3 === 0 ? e.wet : e.out);
+  burst(e, t + 0.05, 'bandpass', 5200, 1.2, 0.35, 0.18, 'white', e.wet);
+  return 0.8;
+}
+
+/** Attuned refusal ("wrong timeline"): a soft detuned two-note fall, gentler than a failure buzz. */
+function buildAttunedFail(e: VoiceEnv): number {
+  const t = e.t;
+  const lp = filter(e.ctx, 'lowpass', 1800, 0.7);
+  lp.connect(e.out);
+  tone(e, t, 'triangle', midiToHz(76), 0.045, 0.01, 0.06, 0.18, lp);
+  tone(e, t, 'triangle', midiToHz(76) * 1.012, 0.03, 0.01, 0.06, 0.18, lp);
+  tone(e, t + 0.13, 'triangle', midiToHz(70), 0.045, 0.01, 0.08, 0.28, lp);
+  return 0.5;
+}
+
 function buildEntityGeneric(e: VoiceEnv): number {
   tone(e, e.t, 'triangle', 880, 0.06, 0.005, 0.03, 0.12);
   return 0.2;
@@ -869,6 +937,13 @@ export const RECIPES: Record<string, Recipe> = {
   portalOn: { category: 'stinger', wet: 0.45, build: buildPortalOn },
   portalOff: { category: 'mechanical', wet: 0.3, build: buildPortalOff },
   entityGeneric: { category: 'mechanical', wet: 0.15, build: buildEntityGeneric },
+  valvePass: { category: 'mechanical', wet: 0.15, build: buildValvePass },
+  valveDenied: { category: 'mechanical', wet: 0.1, build: buildValveDenied },
+  valveFlip: { category: 'temporal', wet: 0.3, build: buildValveFlip },
+  relayArm: { category: 'mechanical', wet: 0.25, build: buildRelayArm },
+  relayEmit: { category: 'mechanical', wet: 0.35, build: buildRelayEmit },
+  shatter: { category: 'mechanical', wet: 0.3, build: buildShatter },
+  attunedFail: { category: 'mechanical', wet: 0.2, build: buildAttunedFail },
 };
 
 for (const kind of ['hover', 'click', 'confirm', 'back', 'toggle', 'error', 'open', 'close', 'slider', 'scrub']) {

@@ -16,8 +16,8 @@ Contracts: [`contracts.md`](./contracts.md). Product brief: `docs/game-design/ma
 | `src/engine/rendering/*` | Renderer, scene graph, camera, interpolation | **Graphics** |
 | `src/graphics/{materials,shaders,effects,animation}` | PBR materials, shaders, VFX, character animation | **Graphics** |
 | `src/engine/audio/*` | Procedural audio, music states, event → sound | **Audio** |
-| `src/gameplay/{entities,interactions,puzzles,player}` | Entity behaviours (all 12 kinds), puzzle helpers | **Gameplay engineer** |
-| `src/levels/{definitions,loaders,validators}` | 10 campaign levels + validation | **Level designer** |
+| `src/gameplay/{entities,interactions,puzzles,player}` | Entity behaviours (12 core kinds + round-6 checkValve, chronoRelay), puzzle helpers | **Gameplay engineer** |
+| `src/levels/{definitions,loaders,validators}` | 18 campaign levels (round 6; ids stable, `order` = play position) + sandboxes + validation | **Level designer** |
 | `src/ui/{hud,timeline,menus}` | HUD, temporal timeline, menus, overlays (`#ui` root) | **UI** |
 | `src/persistence/*` | Save/load (use `encodeLoop`/`decodeLoop`) | **UI / Director** |
 | `src/testing/{harness,replays,benchmarks}`, `tests/e2e` | Headless harness, replays, perf, Playwright | **QA** (harness bootstrapped by the temporal engineer) |

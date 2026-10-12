@@ -319,6 +319,8 @@ export function runFuzz(level: LevelDefinition, opts: FuzzOptions): FuzzReport {
       report.digest = mix(report.digest, h);
       if (game.getState().tick !== tick + 1) violate('data', `tick went ${tick} -> ${game.getState().tick}`);
       if (report.ticks % checkEvery === 0) for (const v of checker.check(game.getState(), game.getLoops(), opts.invariants)) violate(v.rule, v.message, v.entityKind);
+      // round 6: directional check-valve rule, every tick in order (stateful; a no-op in levels without valves)
+      for (const v of checker.checkValveCrossings(game.getState())) violate(v.rule, v.message, v.entityKind);
     }
     // Drain the meta-event queue too: it must never throw or grow without bound.
     game.drainEvents();
@@ -382,7 +384,11 @@ export function findPath(checker: InvariantChecker, view: SimView, c0: number, r
 }
 
 function countEvents(into: Record<string, number>, events: readonly SimEvent[]): void {
-  for (const e of events) into[e.type] = (into[e.type] ?? 0) + 1;
+  for (const e of events) {
+    into[e.type] = (into[e.type] ?? 0) + 1;
+    // round 6: generic entity events are also tallied by name (valvePass, relayArm, shatter, ...)
+    if (e.type === 'entity') into[`entity:${e.name}`] = (into[`entity:${e.name}`] ?? 0) + 1;
+  }
 }
 
 export function hashString(s: string): number {

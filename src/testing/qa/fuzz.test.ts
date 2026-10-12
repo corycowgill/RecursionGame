@@ -2,7 +2,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { LevelDefinition } from '../../engine/contracts';
 import { LEVELS, TEST_LEVELS, validateLevel } from '../../levels';
 import { crateRoom, openRoom, terrainRoom } from '../harness/fixtures';
-import { componentGauntlet } from './fixtures';
+import { componentGauntlet, expansionGauntlet } from './fixtures';
+import { SANDBOX_LEVELS } from '../../levels/definitions/sandbox-levels';
 import { runFuzz } from './fuzz';
 import { summarizeViolations, type Violation } from './invariants';
 
@@ -28,7 +29,7 @@ export function knownIssue(_v: Violation): string | null {
   return null;
 }
 
-const targets: LevelDefinition[] = [...LEVELS, ...TEST_LEVELS, openRoom(3), crateRoom(3), terrainRoom(), componentGauntlet(3)];
+const targets: LevelDefinition[] = [...LEVELS, ...TEST_LEVELS, openRoom(3), crateRoom(3), terrainRoom(), componentGauntlet(3), expansionGauntlet(3), ...SANDBOX_LEVELS];
 
 /** Known-issue hits across this run (printed at the end so reported bugs stay visible). */
 const knownTally = new Map<string, { count: number; where: string }>();
@@ -43,6 +44,22 @@ describe('fuzz: random inputs, rewinds, deletes, restarts, save/load and scrubs'
   it('the QA component gauntlet is a structurally valid level', () => {
     const errors = validateLevel(componentGauntlet()).filter((i) => i.severity === 'error');
     expect(errors).toEqual([]);
+  });
+
+  it('the round-6 expansion gauntlet is a structurally valid level', () => {
+    expect(validateLevel(expansionGauntlet()).filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('covers the round-6 mechanics: across seeds the fuzzer passes valves, arms relays and refuses attuned presses', () => {
+    const totals: Record<string, number> = {};
+    for (let seed = 1; seed <= 4; seed++) {
+      const r = runFuzz(expansionGauntlet(), { seed, ticks: 3000, checkEvery: 4, replayCheck: false });
+      expect(r.violations, `seed ${seed}: ${summarizeViolations(r.violations)}`).toEqual([]);
+      expect(r.error).toBeNull();
+      for (const [k, v] of Object.entries(r.events)) totals[k] = (totals[k] ?? 0) + v;
+    }
+    expect(totals['footstep'] ?? 0).toBeGreaterThan(0);
+    for (const e of ['entity:valvePass', 'entity:relayArm', 'entity:relayEmit', 'interactFailed']) expect(totals[e] ?? 0, `event ${e}`).toBeGreaterThan(0);
   });
 
   for (const level of targets) {

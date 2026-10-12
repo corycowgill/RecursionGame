@@ -49,11 +49,13 @@ const NAMES: Record<EntityKind, string> = {
   temporalGate: 'gate',
   movingPlatform: 'platform',
   exitPortal: 'exit',
+  checkValve: 'valve',
+  chronoRelay: 'relay',
 };
 
 type ViewEntity = SimView['entities'][string];
 
-const SOLID_KINDS: ReadonlySet<EntityKind> = new Set(['timedSwitch', 'energySocket', 'laserEmitter', 'laserReceiver', 'temporalGate', 'crate']);
+const SOLID_KINDS: ReadonlySet<EntityKind> = new Set(['timedSwitch', 'energySocket', 'laserEmitter', 'laserReceiver', 'temporalGate', 'crate', 'checkValve']);
 const CARRIABLE: ReadonlySet<EntityKind> = new Set(['crate', 'energyCell']);
 
 const defCache = new WeakMap<LevelDefinition, { ids: EntityId[]; defs: Map<EntityId, EntityDefinition> }>();
@@ -128,6 +130,12 @@ export function predictInteraction(level: LevelDefinition, view: SimView, actorI
     switch (e.kind) {
       case 'timedSwitch': {
         const cfg = def?.kind === 'timedSwitch' ? def.config : undefined;
+        // Round 6: Paradox Glass / Attuned Devices (mirrors timedSwitch.ts: broken, shatter, attuned checks first).
+        if (e.state.broken === true) return { action: 'blocked', entityId: e.id, entityKind: e.kind, label: 'Shattered', cell: probe };
+        const cls = actor.kind === 'player' ? 'player' : 'echoes';
+        if (cfg?.shatterOn === cls) return { action: 'blocked', entityId: e.id, entityKind: e.kind, label: 'Glass - it will shatter', cell: probe };
+        if (cfg?.accepts !== undefined && cfg.accepts !== 'all' && cfg.accepts !== cls)
+          return { action: 'blocked', entityId: e.id, entityKind: e.kind, label: cfg.accepts === 'echoes' ? 'Echoes only' : 'Only you, now', cell: probe };
         if (e.state.on && cfg?.retrigger === false)
           return { action: 'blocked', entityId: e.id, entityKind: e.kind, label: 'Switch running', cell: probe };
         if (!e.state.on && (e.state.cooldown ?? 0) > 0)

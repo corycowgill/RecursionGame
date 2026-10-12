@@ -1,5 +1,7 @@
 import type { EntityKind, PuzzleEntityBehaviour } from '../../engine/contracts';
 import { EntityRegistry } from '../../engine/simulation/registry';
+import { checkValveBehaviour } from './checkValve';
+import { chronoRelayBehaviour } from './chronoRelay';
 import { crateBehaviour } from './crate';
 import { doorBehaviour } from './door';
 import { elevatorBehaviour } from './elevator';
@@ -13,6 +15,8 @@ import { temporalGateBehaviour } from './temporalGate';
 import { timedSwitchBehaviour } from './timedSwitch';
 
 export {
+  checkValveBehaviour,
+  chronoRelayBehaviour,
   crateBehaviour,
   doorBehaviour,
   elevatorBehaviour,
@@ -27,8 +31,11 @@ export {
   timedSwitchBehaviour,
 };
 export { traceBeam, beamEnd, LASER_BEAM_HEIGHT, type BeamTrace } from './laser';
+export { valveAxes, valveSolidFor, oppositeDir } from './checkValve';
+export { clampRelayDelay } from './chronoRelay';
+export { actorMatchesClass } from './common';
 
-/** Every core behaviour, one per entity kind (all 12 kinds from the brief). */
+/** Every behaviour, one per entity kind (the 12 core kinds from the brief, then the round-6 expansion kinds). */
 export const CORE_BEHAVIOURS: readonly PuzzleEntityBehaviour<EntityKind>[] = [
   pressurePlateBehaviour,
   doorBehaviour,
@@ -42,6 +49,8 @@ export const CORE_BEHAVIOURS: readonly PuzzleEntityBehaviour<EntityKind>[] = [
   temporalGateBehaviour,
   movingPlatformBehaviour,
   exitPortalBehaviour,
+  checkValveBehaviour,
+  chronoRelayBehaviour,
 ] as unknown as readonly PuzzleEntityBehaviour<EntityKind>[];
 
 /**
@@ -61,6 +70,9 @@ export function registerCoreEntities(registry: EntityRegistry): EntityRegistry {
   registry.register(temporalGateBehaviour);
   registry.register(movingPlatformBehaviour);
   registry.register(exitPortalBehaviour);
+  // Round 6 expansion kinds (registered after the core 12; registration order never affects simulation order).
+  registry.register(checkValveBehaviour);
+  registry.register(chronoRelayBehaviour);
   return registry;
 }
 

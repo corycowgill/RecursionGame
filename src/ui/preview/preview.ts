@@ -121,7 +121,7 @@ const menuData = {
   continueLevel: { id: L03.id, order: L03.order, name: L03.name },
   levels: entries,
   totalStars,
-  maxStars: 30,
+  maxStars: CAMPAIGN_LEVELS.length * 3,
   version: 'v0.1',
 };
 

@@ -14,6 +14,7 @@
  *   L05–L06  Machine Hall     amber furnace light, smoky haze; brushed brass, heavy wear
  *   L07–L09  Paradox Wing     violet dusk; dark lacquered metal, aged gold leaf
  *   L10      The Core         white-hot; polished chrome-gold, no wear
+ *   Round 6: L11 (Lab), L12-L13 (Machine Hall), L14-L18 (Paradox Wing) are variants of their wing's moods.
  * Unknown ids (test chamber, showcase, user levels) get DEFAULT_MOOD, which is exactly the pre-round-5 look.
  *
  * Read-only from level data: the only input is `level.id` (and `order` as a fallback). Nothing here feeds back into
@@ -139,7 +140,7 @@ const PARADOX_MATERIAL: Partial<MaterialMood> = { brassTint: 0xffe8c8, brassRoug
  * Campaign moods keyed by the level-id prefix ("L01" …). Each chamber differs a little inside its wing (sun height,
  * haze, accent), so consecutive chambers never look identical.
  */
-export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
+const WING_MOODS: Readonly<Record<string, ChamberMood>> = {
   // ------------------------------------------------ Dawn Atrium (oxidised old wing, low gold sun)
   L01: mood('Dawn Atrium · first light', {
     exposure: 0.92,
@@ -347,6 +348,71 @@ export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
     windows: 0xf4f8ff,
     shafts: { warm: 0xfff0d8, cool: 0xdcefff },
     material: { brassTint: 0xfff6e8, brassRough: 0.6, patina: 0, grime: 0, chrome: 0.6, panelTint: 0xfafcff, floorTint: 0xf6f8fa, gunmetalTint: 0xa6b0bc },
+  }),
+};
+
+/**
+ * Round-6 chambers (L11..L18) borrow their wing's look with a different sun angle, haze and accent so consecutive
+ * chambers still differ: L11 Chronometry Lab; L12-L13 Machine Hall; L14-L18 Paradox Wing.
+ */
+const variant = (base: ChamberMood, name: string, over: Omit<Partial<ChamberMood>, 'material'> & { material?: Partial<MaterialMood> }): ChamberMood => ({
+  ...base,
+  ...over,
+  name,
+  material: { ...base.material, ...over.material },
+});
+const base = (id: string): ChamberMood => WING_MOODS[id] as ChamberMood;
+/** Campaign moods keyed by the level-id prefix ("L01" …), round-6 variants included. */
+export const CHAMBER_MOODS: Readonly<Record<string, ChamberMood>> = {
+  ...WING_MOODS,
+  L11: variant(base('L04'), 'Chronometry Lab · the sump', {
+    keyFrom: [-0.35, 0.9, 0.3],
+    fog: { color: 0x163f58, density: 0.0096 },
+    sky: { ...base('L04').sky, sunDir: [-0.45, 0.08, -0.89], sunStrength: 0.35 },
+    accent3: 0x5ed0e8,
+    material: { grime: 0.2 },
+  }),
+  L12: variant(base('L06'), 'Machine Hall · the echo line', {
+    keyFrom: [0.7, 0.64, 0.1],
+    fog: { color: 0x3a3228, density: 0.009 },
+    sky: { ...base('L06').sky, sunDir: [-0.3, 0.09, -0.95], sunStrength: 0.75 },
+    accent2: 0x58d0e0,
+  }),
+  L13: variant(base('L05'), 'Machine Hall · the roundabout', {
+    keyFrom: [-0.66, 0.68, 0.3],
+    fog: { color: 0x42342a, density: 0.0096 },
+    sky: { ...base('L05').sky, sunDir: [0.8, 0.07, -0.6], sunStrength: 0.85 },
+    accent3: 0xffc070,
+  }),
+  L14: variant(base('L07'), 'Paradox Wing · attuned archive', {
+    keyFrom: [0.6, 0.76, 0.2],
+    sky: { ...base('L07').sky, sunDir: [0.5, 0.11, -0.86] },
+    accent3: 0x6fe0f0,
+  }),
+  L15: variant(base('L08'), 'Paradox Wing · glass gallery', {
+    keyFrom: [-0.7, 0.7, 0.1],
+    fog: { color: 0x26285a, density: 0.0088 },
+    sky: { ...base('L08').sky, sunDir: [-0.55, 0.13, -0.83] },
+    windows: 0xe0e8ff,
+  }),
+  L16: variant(base('L09'), 'Paradox Wing · afterimage', {
+    keyFrom: [0.5, 0.8, -0.2],
+    fog: { color: 0x2c2450, density: 0.0094 },
+    sky: { ...base('L09').sky, sunDir: [0.35, 0.12, -0.93] },
+    accent3: 0x70e0d0,
+  }),
+  L17: variant(base('L08'), 'Paradox Wing · upstream chute', {
+    keyFrom: [0.2, 0.85, 0.45],
+    fog: { color: 0x22285a, density: 0.0098 },
+    sky: { ...base('L08').sky, sunDir: [0.1, 0.16, -0.98], sunStrength: 0.7 },
+    accent3: 0x90d0ff,
+  }),
+  L18: variant(base('L09'), 'Paradox Wing · hour of glass', {
+    keyFrom: [-0.3, 0.86, 0.35],
+    exposure: 0.91,
+    fog: { color: 0x3a3060, density: 0.009 },
+    sky: { ...base('L09').sky, horizon: 0x8a5cb4, sunDir: [-0.75, 0.1, -0.65], sunStrength: 0.9 },
+    accent3: 0xe4f0ff,
   }),
 };
 

@@ -5,10 +5,15 @@ your past self. Every completed loop becomes an echo that replays your exact inp
 world, so your solutions are built out of coordinated recordings: one echo holds a plate, another carries a power
 cell through a door that is only open because a third pressed a switch eight seconds earlier.
 
-- 10 handcrafted chambers (First Echo → The Core), each with a verified solution, echo limit, par time and hints,
+- 18 handcrafted chambers (First Echo → The Core), each with a verified solution, echo limit, par time and hints,
   a short story told through intro cards and "H.A." log entries, and an ending sequence plus credits after the Core.
-  Estimated campaign length (difficulty model only, nobody has playtested yet): 31–134 min, median ≈ 61 min; see
+  Estimated campaign length (difficulty model only, nobody has playtested yet): 61–268 min, median ≈ 122 min; see
   [`docs/game-design/difficulty-report.md`](docs/game-design/difficulty-report.md)
+- v0.6 expansion mechanics, taught one at a time in eight new chambers: the **check valve** (a one-way turnstile
+  doorway: whoever passes cannot come back; some valves reverse while powered), the **chrono relay** (a conduit that
+  delivers its input signal a fixed number of seconds later: act before you need it), **attuned devices** (gold
+  plates count only you, the live player; cyan consoles answer only echoes) and **paradox glass** (a gold seal that
+  shatters if an echo steps on it, so you route your past selves, not just time them)
 - One deterministic 60 Hz simulation shared by the player and every echo (integer maths, seeded RNG, state hashes)
 - Paradoxes are real: if an echo's recorded action can no longer happen, it fails visibly and the timeline marks
   the divergence; nothing is faked to keep a recording "working"
@@ -190,7 +195,7 @@ are relative to the worker's scope, so it works from any sub-folder.
 | Command | What it runs |
 |---|---|
 | `npm run typecheck` | `tsc --noEmit` (strict) |
-| `npm test` | Vitest unit/integration suite: engine determinism, all 12 puzzle components, every level's verified solution, golden replays, seeded fuzzing, save/load, UI, audio, camera |
+| `npm test` | Vitest unit/integration suite: engine determinism, all 14 puzzle components, every level's verified solution, golden replays, seeded fuzzing, save/load, UI, audio, camera |
 | `npm run verify` | typecheck + unit tests + production build in one go |
 | `npm run test:e2e` | Playwright browser suite (smoke flow, menus/timeline/pause flows, every level completes in the real app, visual regression, mocked-controller flow, iPhone-emulated touch flow, credits and ending). Builds and serves `dist/` itself |
 | `npm run test:fuzz` | Heavy seeded fuzz run (`FUZZ_TICKS`, `FUZZ_SEEDS`) |
@@ -201,8 +206,8 @@ are relative to the worker's scope, so it works from any sub-folder.
 | `npm run solve -- L07` | Puzzle solver over the real simulation: finds solutions, searches for fewer-echo routes and shortcuts (`--kinds=proof,cheese`, `--budget=<s>`, `--workers=<n>`), `-- all --difficulty` prints the playtime / par-time model. Results: [`docs/game-design/difficulty-report.md`](docs/game-design/difficulty-report.md) |
 
 Headless Chromium renders WebGL in software (SwiftShader, ~1–2 fps), so the e2e suite drives the deterministic
-simulation through the `window.__RECURSION__` debug hook instead of wall-clock timing and takes ~30 minutes
-(22 tests in v0.5).
+simulation through the `window.__RECURSION__` debug hook instead of wall-clock timing and takes ~40 minutes
+(22 tests; 38 min in v0.6, where the all-levels sweep covers 18 chambers).
 Run it with `CI=1` (fresh preview server) and, when other servers may be running, a private port:
 `CI=1 E2E_PORT=4311 npm run test:e2e`.
 
@@ -219,10 +224,11 @@ src/
     input/      keyboard, gamepad (and the touch sampler source) → PlayerInput / GameCommand
     rendering/  GameRenderer facade, camera rig, post-processing, quality presets
     audio/      procedural SFX, ambience, adaptive music
-  gameplay/     the 12 puzzle components (plates, doors, timed switches, crates, cells, sockets, elevators,
-                lasers, receivers, temporal gates, moving platforms, exit portals)
+  gameplay/     the 14 puzzle components (plates, doors, timed switches, crates, cells, sockets, elevators,
+                lasers, receivers, temporal gates, moving platforms, exit portals, check valves, chrono relays)
+                plus attuned (gold / cyan) and glass options on plates and consoles
   graphics/     procedural materials/textures, environment kit, entity visuals, characters, VFX, shaders
-  levels/       the 10 campaign chambers + validators
+  levels/       the 18 campaign chambers (+ mechanic sandboxes) + validators
   persistence/  save data, settings, key bindings (localStorage)
   ui/           HUD, temporal timeline, menus and overlays (DOM), device glyphs, controller focus navigation,
                 touch controls (ui/touch)
@@ -247,14 +253,15 @@ module and reporting in [`docs/agent-progress/`](docs/agent-progress/):
 | Game Director | product vision, integration (`src/app`), final quality gate and polish |
 | Temporal Systems Engineer | contracts, simulation, temporal engine, physics, input |
 | Gameplay / Puzzle Engineer | the 12 puzzle components and interaction rules |
-| Level Designer | the 10 campaign chambers, solutions, hints, level docs |
+| Level Designer | the campaign chambers, solutions, hints, level docs |
 | Graphics Engineer | renderer, camera, materials, environment kit, characters, VFX |
 | UI / UX Designer | HUD, timeline, menus, settings, persistence UI |
 | Audio / VFX | procedural sound, music states, event-driven effects |
 | QA Engineer | harness, golden replays, fuzzing, Playwright suites, benchmarks |
 
 Later rounds added further roles (UX / input, gameplay feedback, release engineer, puzzle analyst, art & rendering,
-narrative & release); their reports are in the same folder.
+narrative & release; in round 6, mechanics engineer and two level designers for the expansion); their reports are in
+the same folder.
 
 Rules the team works by: interfaces before parallel work, clear module ownership, small tested changes, never
 duplicate the temporal engine or bypass determinism, and never claim a test passed without running it.

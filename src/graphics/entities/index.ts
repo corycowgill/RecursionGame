@@ -2,12 +2,14 @@ import type { EntityKind } from '../../engine/contracts';
 import { EnergyCellVisual, EnergySocketVisual, CrateVisual } from './items';
 import { ExitPortalVisual, LaserEmitterVisual, LaserReceiverVisual, TemporalGateVisual } from './energy';
 import { DoorVisual, ElevatorVisual, MovingPlatformVisual, PressurePlateVisual, TimedSwitchVisual } from './mechanisms';
+import { ChronoRelayVisual, CheckValveVisual } from './expansion';
 import { Parts, type EntityVisual, type EntityVisualContext } from './types';
 
 export type { EntityVisual, EntityVisualContext, EntityFrame, VfxSink } from './types';
 export { MovingPlatformVisual } from './mechanisms';
+export { relaySegments, relayArrivals } from './expansion';
 
-/** Visual factory for all 12 puzzle kinds. Unknown future kinds return null (renderer skips them). */
+/** Visual factory for every puzzle kind (12 core + round-6 expansion). Unknown future kinds return null (renderer skips them). */
 const FACTORIES: Record<EntityKind, (ctx: EntityVisualContext) => EntityVisual> = {
   pressurePlate: (c) => new PressurePlateVisual(c),
   door: (c) => new DoorVisual(c),
@@ -21,6 +23,8 @@ const FACTORIES: Record<EntityKind, (ctx: EntityVisualContext) => EntityVisual> 
   temporalGate: (c) => new TemporalGateVisual(c),
   movingPlatform: (c) => new MovingPlatformVisual(c),
   exitPortal: (c) => new ExitPortalVisual(c),
+  checkValve: (c) => new CheckValveVisual(c),
+  chronoRelay: (c) => new ChronoRelayVisual(c),
 };
 
 export function createEntityVisual(ctx: EntityVisualContext): EntityVisual | null {

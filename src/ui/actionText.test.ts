@@ -83,10 +83,11 @@ describe('authored text never hardcodes a key (device-aware hints, round 4)', ()
   });
 
   it('the hints that name a control use tokens (L01 rewind, L03 / L07 / L10 interact)', () => {
-    const byOrder = (n: number): LevelDefinition => CAMPAIGN_LEVELS.find((l) => l.order === n) as LevelDefinition;
-    expect(byOrder(1).hints.some((h) => h.text.includes('{echo}'))).toBe(true);
-    for (const n of [3, 7, 10]) expect(byOrder(n).hints.some((h) => h.text.includes('{interact}')), `L${n}`).toBe(true);
-    expect(byOrder(2).hints.some((h) => hasActionTokens(h.text))).toBe(false);
+    // By id, not order: round 6 renumbered the campaign (L07 is now chamber 10, L10 chamber 18).
+    const byId = (n: number): LevelDefinition => CAMPAIGN_LEVELS.find((l) => l.id.startsWith(`L${String(n).padStart(2, '0')}-`)) as LevelDefinition;
+    expect(byId(1).hints.some((h) => h.text.includes('{echo}'))).toBe(true);
+    for (const n of [3, 7, 10]) expect(byId(n).hints.some((h) => h.text.includes('{interact}')), `L${n}`).toBe(true);
+    expect(byId(2).hints.some((h) => hasActionTokens(h.text))).toBe(false);
   });
 });
 

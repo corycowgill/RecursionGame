@@ -84,3 +84,56 @@ export function componentGauntlet(maxEchoes = 3): LevelDefinition {
     solution: [[{ op: 'wait', ticks: 1 }]],
   };
 }
+
+/**
+ * Round-6 QA chamber with every expansion mechanic, for the fuzzer: a fixed check valve, a reversible valve driven by a
+ * chrono relay, an Echo Plate feeding that relay, an Echo Console, a Gold Console made of Paradox Glass and a Glass
+ * Seal. Kept separate from componentGauntlet so the existing fuzz fingerprints stay byte-identical. Not solvable on
+ * purpose (placeholder solution); the exit is wired so the devices matter.
+ *
+ *   r0  ##############
+ *   r1  #S..g...E....#   g Glass Seal (4,1)  E Echo Console (8,1)
+ *   r2  #............R   R chrono relay on the east wall (13,2), 90 ticks
+ *   r3  #..p.....c...#   p Echo Plate (3,3)  c Gold Console of glass (9,3)
+ *   r4  ####V####v####   V valve (4,4) south only   v reversible valve (9,4) north only, reversed while the relay is on
+ *   r5  #............#
+ *   r6  #...C....X...#   C crate (4,6)  X exit (9,6)
+ *   r7  ##############
+ */
+export function expansionGauntlet(maxEchoes = 3): LevelDefinition {
+  return {
+    id: 'qa-expansion-gauntlet',
+    order: 0,
+    name: 'QA Expansion Gauntlet',
+    grid: {
+      width: 14,
+      height: 8,
+      tiles: ['##############', '#............#', '#............#', '#............#', '####.####.####', '#............#', '#............#', '##############'],
+    },
+    entities: [
+      { id: 'console-echo', kind: 'timedSwitch', col: 8, row: 1, config: { durationTicks: 180, accepts: 'echoes' } },
+      { id: 'console-gold', kind: 'timedSwitch', col: 9, row: 3, config: { durationTicks: 120, accepts: 'player', shatterOn: 'echoes' } },
+      { id: 'crate', kind: 'crate', col: 4, row: 6, config: {} },
+      { id: 'exit', kind: 'exitPortal', col: 9, row: 6, logic: 'or', config: {} },
+      { id: 'plate-echo', kind: 'pressurePlate', col: 3, row: 3, config: { accepts: 'echoes' } },
+      { id: 'relay', kind: 'chronoRelay', col: 13, row: 2, config: { delayTicks: 90 } },
+      { id: 'seal', kind: 'pressurePlate', col: 4, row: 1, config: { accepts: 'player', shatterOn: 'echoes', latch: true } },
+      { id: 'valve-fixed', kind: 'checkValve', col: 4, row: 4, facing: 2, config: {} },
+      { id: 'valve-rev', kind: 'checkValve', col: 9, row: 4, facing: 0, config: { reverseWhenPowered: true } },
+    ],
+    wires: [
+      { from: 'plate-echo', to: 'relay' },
+      { from: 'relay', to: 'valve-rev' },
+      { from: 'seal', to: 'exit' },
+      { from: 'console-echo', to: 'exit' },
+      { from: 'console-gold', to: 'exit' },
+    ],
+    playerSpawn: { col: 1, row: 1, facing: 1 },
+    exitId: 'exit',
+    maxEchoes,
+    loopDurationTicks: 1800,
+    parTimeSeconds: 30,
+    hints: [],
+    solution: [[{ op: 'wait', ticks: 1 }]],
+  };
+}

@@ -1,4 +1,5 @@
 import type { EntityId, EntityKind, LevelDefinition, SimView } from '../../engine/contracts';
+import { defaultMechanicLabel } from './mechanicText';
 
 /**
  * PUZZLE OBJECTIVES — read-only status of what the exit (and every wired consumer) is waiting for. UI uses it
@@ -46,6 +47,8 @@ const KIND_LABEL: Record<EntityKind, string> = {
   temporalGate: 'Temporal gate',
   movingPlatform: 'Moving platform',
   exitPortal: 'Exit portal',
+  checkValve: 'Check valve',
+  chronoRelay: 'Echo line',
 };
 
 /** Status of one wired consumer (door, portal, gate…). */
@@ -63,7 +66,7 @@ export function consumerStatus(level: LevelDefinition, view: SimView, consumerId
       return {
         entityId: w.from,
         kind,
-        label: src?.label ?? KIND_LABEL[kind],
+        label: src?.label ?? (src ? defaultMechanicLabel(src) : null) ?? KIND_LABEL[kind],
         inverted,
         satisfied: (view.signals[w.from] === true) !== inverted,
       };

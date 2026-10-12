@@ -226,7 +226,7 @@ html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select:
   .rx-dialog-head { margin-bottom: .6em; }
   .rx-dialog-head h2 { font-size: 1.2em; }
   .rx-dialog-foot { margin-top: .8em; }
-  .rx-levels { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .5em; }
+  .rx-levels { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .5em; }
   .rx-level { min-height: 7.4em; padding: .55em .6em .5em; }
   .rx-level .no { font-size: 1.4em; }
   .rx-level .nm { margin-top: .35em; min-height: 2.5em; font-size: .6em; letter-spacing: .14em; }

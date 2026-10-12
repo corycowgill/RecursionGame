@@ -163,6 +163,11 @@ export function mapEvents(events: readonly SimEvent[], state: SimView, mc: MapCo
       case 'interactFailed': {
         const echo = isEcho(ev.actorId);
         const s = actorPos(ev.actorId);
+        if (ev.reason === 'attuned') {
+          // round 6: a refused attuned press is a soft "wrong timeline" tone, not a failure buzz
+          out.push(cue('attunedFail', { ...s, gain: s.gain * (echo ? 0.6 : 1), delay: d, actor: echo ? 'echo' : 'player', key: `fail:${ev.actorId}` }));
+          break;
+        }
         out.push(
           cue('interactFailed', {
             ...s,
@@ -244,6 +249,30 @@ export function mapEvents(events: readonly SimEvent[], state: SimView, mc: MapCo
       }
       case 'entity': {
         const s = entityPos(ev.entityId);
+        // round 6 mechanics have their own recipes; anything else falls back to the generic blip
+        const named: Record<string, string> = {
+          valvePass: 'valvePass',
+          valveDenied: 'valveDenied',
+          valveFlip: 'valveFlip',
+          relayArm: 'relayArm',
+          relayEmit: 'relayEmit',
+          shatter: 'shatter',
+        };
+        const sound = named[ev.name];
+        if (sound) {
+          const echo = isEcho(ev.actorId);
+          out.push(
+            cue(sound, {
+              ...s,
+              gain: s.gain * (echo ? ECHO_SFX_GAIN : 1) * (ev.name === 'relayArm' ? 0.7 : 1),
+              delay: d,
+              key: `${ev.name}:${ev.entityId}`,
+              ...(ev.actorId ? { actor: echo ? ('echo' as const) : ('player' as const) } : {}),
+              params: ev.name === 'relayEmit' ? { rising: ev.value === 1 ? 1 : 0 } : {},
+            }),
+          );
+          break;
+        }
         out.push(cue('entityGeneric', { ...s, gain: s.gain * 0.6, delay: d, key: `entity:${ev.name}:${ev.entityId}` }));
         break;
       }

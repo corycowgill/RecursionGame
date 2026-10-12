@@ -50,7 +50,7 @@ function pushAndPress(times: number): ScriptStep[] {
  */
 export const level07BrokenSequence: LevelDefinition = {
   id: 'L07-broken-sequence',
-  order: 7,
+  order: 10,
   name: 'Broken Sequence',
   subtitle: 'Record what cannot work — yet.',
   story: [

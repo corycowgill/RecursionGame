@@ -58,10 +58,10 @@ const player = (view: SimView) => view.actors[view.actors.length - 1]!;
 /* ------------------------------------------------------------------------------------------------ */
 
 describe('registry', () => {
-  it('registers a behaviour for all 12 entity kinds', () => {
+  it('registers a behaviour for every entity kind (12 core + round-6 expansion)', () => {
     const reg = createDefaultRegistry();
     for (const k of ENTITY_KINDS) expect(reg.has(k), k).toBe(true);
-    expect(reg.kinds().length).toBe(12);
+    expect(reg.kinds().length).toBe(ENTITY_KINDS.length);
   });
 });
 

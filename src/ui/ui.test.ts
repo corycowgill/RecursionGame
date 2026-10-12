@@ -81,6 +81,20 @@ describe('createUI', () => {
     expect(ui.screen).toBeNull();
   });
 
+  it('level select (round 6): 18 chambers; a pre-expansion save keeps its clears and opens the inserted chambers', () => {
+    const rec = { completions: 1, bestTicks: 900, bestEchoes: 1, bestStars: 3 as const };
+    const oldIds = CAMPAIGN_LEVELS.filter((l) => /^L(0[1-9]|10)-/.test(l.id)).map((l) => l.id);
+    expect(oldIds.length).toBe(10);
+    const entries = buildLevelEntries(CAMPAIGN_LEVELS, { version: 1, records: Object.fromEntries(oldIds.map((id) => [id, rec])) });
+    expect(entries.length).toBe(18);
+    expect(entries.filter((e) => e.status === 'completed').map((e) => e.id)).toEqual(oldIds);
+    expect(entries.filter((e) => e.status === 'locked')).toEqual([]);
+    expect(entries.find((e) => e.isNext)?.id).toBe('L11-the-sump');
+    expect(entries.map((e) => e.order)).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
+    ui.showMainMenu({ continueLevel: null, levels: entries, totalStars: 30, maxStars: 54 });
+    expect(root.textContent).toContain('10 / 18');
+  });
+
   it('main menu: continue, level select (locked/unlocked/completed), back', () => {
     let progress = emptyProgress();
     progress = recordCompletion(progress, evaluateCompletion(L1, 600, 1));

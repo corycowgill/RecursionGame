@@ -1,3 +1,4 @@
+import { validateMechanics } from './mechanics';
 import {
   ENTITY_KINDS,
   TILE_LEGEND,
@@ -44,7 +45,8 @@ export function validateLevel(level: LevelDefinition): LevelIssue[] {
     ids.add(e.id);
     if (!(ENTITY_KINDS as readonly string[]).includes(e.kind)) err(`entity '${e.id}' has unknown kind '${e.kind}'`);
     if (e.col < 0 || e.row < 0 || e.col >= width || e.row >= height) err(`entity '${e.id}' out of bounds`);
-    if (e.kind !== 'elevator' && e.kind !== 'movingPlatform' && !walkable(e.col, e.row))
+    // (round 6) a chrono relay is a non-solid conduit node and may be anchored on a wall / railing cell
+    if (e.kind !== 'elevator' && e.kind !== 'movingPlatform' && e.kind !== 'chronoRelay' && !walkable(e.col, e.row))
       warn(`entity '${e.id}' sits on a non-walkable tile '${tileAt(e.col, e.row)}'`);
   }
   for (const w of level.wires) {
@@ -60,6 +62,7 @@ export function validateLevel(level: LevelDefinition): LevelIssue[] {
   if (level.solution.length === 0) err('solution is empty');
   if (level.solution.length - 1 > level.maxEchoes) err('solution uses more echoes than maxEchoes');
   validateComponents(level, err, warn, walkable);
+  validateMechanics(level, err, warn);
   if (level.order > 0) {
     if (!level.subtitle) warn('campaign level has no subtitle');
     if (!level.story || level.story.length === 0) warn('campaign level has no story text');

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { Dir4, EntityDefinition, EntityView, SimView } from '../../engine/contracts';
+import type { Dir4, EntityDefinition, EntityView, LevelDefinition, SimEvent, SimView } from '../../engine/contracts';
 import type { MaterialLibrary } from '../materials/library';
 import type { RenderGrid } from '../environment/grid';
 
@@ -17,6 +17,8 @@ export interface EntityVisualContext {
   grid: RenderGrid;
   vfx: VfxSink;
   quality: { particles: number; lights: boolean };
+  /** (round 6, optional) The whole level, for visuals that draw towards wired targets (chrono relay conduit). */
+  level?: LevelDefinition;
 }
 
 export interface EntityFrame<E extends EntityView = EntityView> {
@@ -36,6 +38,8 @@ export interface EntityVisual {
   /** Optional point light owned by the visual (counted against the light budget). */
   readonly light?: THREE.PointLight;
   update(f: EntityFrame): void;
+  /** (round 6, optional) One-shot feedback for events naming this entity (valvePass, shatter, relayEmit ...). */
+  onEvent?(ev: SimEvent, state: SimView): void;
   dispose(): void;
 }
 

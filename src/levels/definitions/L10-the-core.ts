@@ -43,7 +43,7 @@ import type { LevelDefinition } from '../../engine/contracts';
  */
 export const level10TheCore: LevelDefinition = {
   id: 'L10-the-core',
-  order: 10,
+  order: 18,
   name: 'The Core',
   subtitle: 'Everything you have been, at once.',
   story: [

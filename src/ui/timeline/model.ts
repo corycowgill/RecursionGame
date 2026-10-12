@@ -133,6 +133,8 @@ export interface MarkerModel {
 export interface DivergenceModel {
   tick: number;
   title: string;
+  /** (round 6) Recorded reason 'attuned': an intended Echo Console fail -> use, drawn violet, not a paradox. */
+  intended?: boolean;
 }
 
 export interface TrackModel {
@@ -217,31 +219,43 @@ export function buildTrackModels(timeline: Timeline, opts: BuildTracksOptions = 
     const isPlayer = tr.kind === 'player';
     const style = isPlayer ? playerStyle(palette) : echoStyle(tr.echoIndex, palette);
     const who = isPlayer ? 'You' : style.label;
-    const divTicks = new Set(tr.divergences.map((d) => d.tick));
+    const divTicks = new Set(tr.divergences.filter((d) => d.expected.reason !== 'attuned').map((d) => d.tick));
     const source = isPlayer ? tr.actual : tr.planned;
     const markers: MarkerModel[] = [];
     for (const m of source) {
       if (m.kind === 'none') continue;
+      // Round 6: a recorded 'attuned' refusal (an Echo Console refused the live player) is the intended fail -> use:
+      // the echo replaying it is answered. Draw it as the echo's upcoming / done press, not as a coral failure.
+      const echoAnswers = !isPlayer && !m.success && m.reason === 'attuned';
       // A marker at tick t has been simulated once the pass has advanced past t (state.tick = ticks simulated).
       let state: MarkerState;
       if (divTicks.has(m.tick)) state = 'diverged';
-      else if (!m.success) state = 'failed';
+      else if (!m.success && !echoAnswers) state = 'failed';
       else state = isPlayer || m.tick < now ? 'done' : 'pending';
       markers.push({
         tick: m.tick,
-        kind: m.kind,
+        kind: echoAnswers ? 'use' : m.kind,
         verb: m.verb,
         entityKind: m.entityKind,
         entityId: m.entityId,
         state,
-        title: markerTitle(who, m),
+        title: echoAnswers ? `${markerTitle(who, { ...m, kind: 'use' })} (it refused you live; it answers echoes)` : markerTitle(who, m),
       });
     }
     markers.sort((a, b) => a.tick - b.tick);
-    const divergences = tr.divergences.map((d) => ({
-      tick: d.tick,
-      title: `Paradox: ${style.label} expected to ${VERB_TEXT[d.expected.kind]} ${d.expected.entityId ?? 'nothing'} but ${VERB_TEXT[d.actual.kind]} ${d.actual.entityId ?? 'nothing'} at ${formatTicks(d.tick)}`,
-    }));
+    const divergences: DivergenceModel[] = tr.divergences.map((d) =>
+      d.expected.reason === 'attuned'
+        ? {
+            tick: d.tick,
+            intended: true,
+            title: `Intended: ${style.label}'s press on ${d.expected.entityId ?? 'the console'} only works for an echo; it failed live and succeeds now at ${formatTicks(d.tick)}`,
+          }
+        : {
+            tick: d.tick,
+            title: `Paradox: ${style.label} expected to ${VERB_TEXT[d.expected.kind]} ${d.expected.entityId ?? 'nothing'} but ${VERB_TEXT[d.actual.kind]} ${d.actual.entityId ?? 'nothing'} at ${formatTicks(d.tick)}`,
+          },
+    );
+    const paradoxes = divergences.filter((d) => !d.intended);
     const model: TrackModel = {
       key: tr.actorId,
       kind: tr.kind,
@@ -253,7 +267,8 @@ export function buildTrackModels(timeline: Timeline, opts: BuildTracksOptions = 
       finishedAtTick: tr.finishedAtTick,
       markers,
       divergences,
-      divergedAt: divergences.length ? Math.min(...divergences.map((d) => d.tick)) : null,
+      // intended (attuned) divergences do not hatch the lane coral
+      divergedAt: paradoxes.length ? Math.min(...paradoxes.map((d) => d.tick)) : null,
       visible: isPlayer || tr.loopId === null || !hidden.has(tr.loopId),
       selected: !isPlayer && opts.selectedEcho === tr.echoIndex && tr.recursion === undefined,
       recursion: tr.recursion ?? 0,
@@ -279,7 +294,7 @@ export function tracksSignature(tracks: readonly TrackModel[], zoom: number, pal
           // The live player's duration grows every tick; its span is updated in place, not rebuilt.
           `${t.key}:${t.kind === 'player' ? 'live' : t.durationTicks}:${t.visible ? 1 : 0}${t.selected ? 's' : ''}:${t.finishedAtTick ?? '-'}:` +
           t.markers.map((m) => `${m.tick}${m.state[0]}`).join(',') +
-          `:${t.divergences.length}`,
+          `:${t.divergences.length}${t.divergences.some((d) => d.intended) ? 'i' : ''}`,
       )
       .join(';')
   );

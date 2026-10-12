@@ -21,6 +21,15 @@
    "commits": 3
   },
   {
+   "levelId": "qa-expansion-gauntlet",
+   "levelFingerprint": 1010476283,
+   "seed": 7,
+   "ticks": 3000,
+   "digest": 1094380520,
+   "passes": 4,
+   "commits": 1
+  },
+  {
    "levelId": "L01-first-echo",
    "levelFingerprint": 3076028444,
    "seed": 7,
@@ -57,8 +66,17 @@
    "commits": 2
   },
   {
+   "levelId": "L11-the-sump",
+   "levelFingerprint": 1371892890,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 3104787301,
+   "passes": 6,
+   "commits": 2
+  },
+  {
    "levelId": "L05-perfect-timing",
-   "levelFingerprint": 3198396733,
+   "levelFingerprint": 1021577828,
    "seed": 7,
    "ticks": 2000,
    "digest": 274311095,
@@ -67,7 +85,7 @@
   },
   {
    "levelId": "L06-chain-reaction",
-   "levelFingerprint": 3460517012,
+   "levelFingerprint": 1737950483,
    "seed": 7,
    "ticks": 2000,
    "digest": 51971361,
@@ -75,8 +93,26 @@
    "commits": 3
   },
   {
+   "levelId": "L12-late-light",
+   "levelFingerprint": 3267961796,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 2872794659,
+   "passes": 9,
+   "commits": 2
+  },
+  {
+   "levelId": "L13-roundabout",
+   "levelFingerprint": 4096957065,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 1799559179,
+   "passes": 6,
+   "commits": 2
+  },
+  {
    "levelId": "L07-broken-sequence",
-   "levelFingerprint": 371506768,
+   "levelFingerprint": 3007872364,
    "seed": 7,
    "ticks": 2000,
    "digest": 3780284316,
@@ -84,8 +120,17 @@
    "commits": 1
   },
   {
+   "levelId": "L14-gold-and-cyan",
+   "levelFingerprint": 2903383672,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 3610904576,
+   "passes": 7,
+   "commits": 2
+  },
+  {
    "levelId": "L08-recursive-machine",
-   "levelFingerprint": 470214518,
+   "levelFingerprint": 3598330501,
    "seed": 7,
    "ticks": 2000,
    "digest": 1086095623,
@@ -93,8 +138,17 @@
    "commits": 1
   },
   {
+   "levelId": "L15-glass-gallery",
+   "levelFingerprint": 1507106676,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 446300809,
+   "passes": 9,
+   "commits": 4
+  },
+  {
    "levelId": "L09-paradox-chamber",
-   "levelFingerprint": 2314485989,
+   "levelFingerprint": 258844525,
    "seed": 7,
    "ticks": 2000,
    "digest": 4255058388,
@@ -102,8 +156,35 @@
    "commits": 3
   },
   {
+   "levelId": "L16-afterimage",
+   "levelFingerprint": 1225731254,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 3701519876,
+   "passes": 4,
+   "commits": 1
+  },
+  {
+   "levelId": "L17-upstream",
+   "levelFingerprint": 3195471597,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 2765965062,
+   "passes": 2,
+   "commits": 1
+  },
+  {
+   "levelId": "L18-hour-of-glass",
+   "levelFingerprint": 877160746,
+   "seed": 7,
+   "ticks": 2000,
+   "digest": 462381808,
+   "passes": 4,
+   "commits": 1
+  },
+  {
    "levelId": "L10-the-core",
-   "levelFingerprint": 879805296,
+   "levelFingerprint": 868221192,
    "seed": 7,
    "ticks": 2000,
    "digest": 1389942704,

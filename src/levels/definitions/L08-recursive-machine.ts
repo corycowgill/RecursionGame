@@ -39,7 +39,7 @@ import type { LevelDefinition } from '../../engine/contracts';
  */
 export const level08RecursiveMachine: LevelDefinition = {
   id: 'L08-recursive-machine',
-  order: 8,
+  order: 12,
   name: 'Recursive Machine',
   subtitle: 'A loop inside the loop.',
   story: [

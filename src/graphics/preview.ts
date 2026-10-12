@@ -13,6 +13,7 @@ import { createGameRenderer, type CameraMode, type QualityLevel } from '../engin
 import { TemporalGame } from '../engine/temporal/TemporalGame';
 import { createDefaultRegistry } from '../gameplay/entities';
 import { CAMPAIGN_LEVELS } from '../levels/definitions';
+import { SANDBOX_LEVELS } from '../levels/definitions/sandbox-levels';
 import { testChamber } from '../levels/definitions/test-chamber';
 import { compileSolution } from '../testing/harness/harness';
 import { ScriptRunner } from '../testing/harness/script';
@@ -22,7 +23,7 @@ import { ScriptRunner } from '../testing/harness/script';
  *
  *  ?scene=chamber   (default) the real Test Chamber driven by the real TemporalGame: Echo 1 holds the plate,
  *                   Echo 2 replays the exit run, the live player follows a scripted path.
- *  ?scene=level&id=<levelId|order>  any campaign level replaying its verified solution (echoes + final run).
+ *  ?scene=level&id=<levelId|order>  any campaign level (or round-6 sandbox, id S01..S03) replaying its verified solution.
  *  ?scene=showcase  render-only fixture of all 12 entity kinds + characters (fake SimView, never a game).
  *  ?t=<tick>        deterministic screenshot mode: fast-forward to <tick>, render settle frames at a fixed
  *                   1/60 s step, then set window.__PREVIEW__.ready = true (Playwright waits on it).
@@ -108,7 +109,12 @@ function chamberDriver(): Driver {
 // ---------------------------------------------------------------- campaign level (real engine, solution replay)
 
 function levelDriver(idOrOrder: string): Driver {
-  const level = CAMPAIGN_LEVELS.find((l) => l.id === idOrOrder || String(l.order) === idOrOrder) ?? CAMPAIGN_LEVELS[0] ?? testChamber;
+  // round 6: the mechanic sandboxes (ids S01..S03) can be previewed too
+  const level =
+    CAMPAIGN_LEVELS.find((l) => l.id === idOrOrder || String(l.order) === idOrOrder) ??
+    SANDBOX_LEVELS.find((l) => l.id === idOrOrder || l.id.startsWith(`${idOrOrder}-`)) ??
+    CAMPAIGN_LEVELS[0] ??
+    testChamber;
   const game = new TemporalGame(createDefaultRegistry());
   game.loadLevel(level);
   const loops = compileSolution(level);

@@ -139,8 +139,16 @@ export class MacroSearch {
     };
     this.graph = new NavGraph(level);
     this.vocab = buildVocabulary(level, this.bounds.vocab);
-    for (const task of [...this.vocab.tasks, ...this.vocab.blindTasks]) for (const w of this.vocab.waits) this.echoOptions.push({ wait: w, task });
-    for (const task of this.vocab.tasks) for (const w of this.vocab.finalWaits) this.finalOptions.push({ wait: w, task });
+    // Round 6: tasks marked only:'final' (Gold Seal plates) are not offered to echo loops, only:'echo' (Echo Plates) not to
+    // the final run.
+    for (const task of [...this.vocab.tasks, ...this.vocab.blindTasks]) {
+      if (task.only === 'final') continue;
+      for (const w of this.vocab.waits) this.echoOptions.push({ wait: w, task });
+    }
+    for (const task of this.vocab.tasks) {
+      if (task.only === 'echo') continue;
+      for (const w of this.vocab.finalWaits) this.finalOptions.push({ wait: w, task });
+    }
     this.exitOptions = (this.bounds.exitWaits ? this.vocab.finalWaits : this.vocab.finalWaits.slice(0, 1)).map((w) => ({ wait: w, task: this.vocab.exit }));
   }
 

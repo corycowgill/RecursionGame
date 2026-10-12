@@ -23,7 +23,20 @@ export const DIAGONAL_TICKS = Math.ceil(1000 / PHYS.ACTOR_SPEED_DIAG);
 /** Entity kinds whose cell is permanently solid for walking (consoles, pedestals, emitters). */
 const STATIC_SOLID_KINDS = new Set(['timedSwitch', 'energySocket', 'laserEmitter', 'laserReceiver']);
 
-type CellRole = 'floor' | 'door' | 'gate' | 'lift' | 'lane';
+type CellRole = 'floor' | 'door' | 'gate' | 'lift' | 'lane' | 'valve';
+
+/**
+ * (round 6) Check valves make the graph DIRECTED: a fixed valve cell is enterable only from its upstream neighbour and
+ * exitable only towards its downstream neighbour. Reversible valves (reverseWhenPowered) are optimistic both ways along
+ * their axis (the live navigator pushes and gives up after blindPatience, as for doors). Every query that walks
+ * "towards a target" (distancesTo, ticksBetween, path) runs over REVERSED edges, so nothing assumes symmetry.
+ */
+interface ValveInfo {
+  /** Allowed travel direction as a cell delta. */
+  dc: number;
+  dr: number;
+  reversible: boolean;
+}
 
 export class NavGraph {
   readonly width: number;
@@ -33,7 +46,8 @@ export class NavGraph {
   private readonly levels: number[][];
   private readonly roles: CellRole[];
   private readonly laneOf: (string | null)[];
-  private readonly distCache = new Map<number, Float64Array>();
+  private readonly valves = new Map<number, ValveInfo>();
+  private readonly distCache = new Map<string, Float64Array>();
 
   constructor(readonly level: LevelDefinition) {
     this.width = level.grid.width;
@@ -62,6 +76,11 @@ export class NavGraph {
     }
     if (e.kind === 'door' && this.levels[i]!.length > 0) this.roles[i] = 'door';
     if (e.kind === 'temporalGate' && this.levels[i]!.length > 0) this.roles[i] = 'gate';
+    if (e.kind === 'checkValve' && this.levels[i]!.length > 0) {
+      const f = e.facing ?? 0;
+      this.roles[i] = 'valve';
+      this.valves.set(i, { dc: f === 1 ? 1 : f === 3 ? -1 : 0, dr: f === 2 ? 1 : f === 0 ? -1 : 0, reversible: e.config.reverseWhenPowered === true });
+    }
     if (e.kind === 'elevator') {
       const cfg = e.config as { levels: number[] };
       this.levels[i] = [...cfg.levels];
@@ -123,7 +142,12 @@ export class NavGraph {
     return this.inBounds(col, row) ? (this.laneOf[this.idx(col, row)] ?? null) : null;
   }
 
-  /** Doors, gates, lifts and deck lanes: never merged away by path smoothing, never cut diagonally. */
+  /** Grid index of a cell (for `avoid` sets). */
+  cellIndex(col: number, row: number): number {
+    return this.idx(col, row);
+  }
+
+  /** Doors, gates, lifts, deck lanes and valves: never merged away by path smoothing, never cut diagonally. */
   isConnector(col: number, row: number): boolean {
     return this.role(col, row) !== 'floor';
   }
@@ -134,9 +158,32 @@ export class NavGraph {
     return la.some((x) => lb.includes(x));
   }
 
-  private neighbours(c: NavCell): { cell: NavCell; cost: number }[] {
+  /** The valve at a cell, if any (fixed or reversible). */
+  valveAt(col: number, row: number): { dc: number; dr: number; reversible: boolean } | null {
+    return this.inBounds(col, row) ? (this.valves.get(this.idx(col, row)) ?? null) : null;
+  }
+
+  /** Directed straight-edge rule for check valves (all other edges are symmetric). */
+  private valveAllows(a: NavCell, b: NavCell): boolean {
+    const dc = b.col - a.col;
+    const dr = b.row - a.row;
+    const vb = this.valves.get(this.idx(b.col, b.row));
+    if (vb && !vb.reversible && (dc !== vb.dc || dr !== vb.dr)) return false; // enter only moving downstream
+    const va = this.valves.get(this.idx(a.col, a.row));
+    if (va && !va.reversible && (dc !== va.dc || dr !== va.dr)) return false; // leave only downstream
+    if ((vb?.reversible && dc !== vb.dc && dc !== -vb.dc) || (vb?.reversible && dr !== vb.dr && dr !== -vb.dr)) return false;
+    if ((va?.reversible && dc !== va.dc && dc !== -va.dc) || (va?.reversible && dr !== va.dr && dr !== -va.dr)) return false;
+    return true;
+  }
+
+  /**
+   * Edges out of `c` (forward), or edges INTO `c` (reverse = true: the cells n with a forward edge n -> c). `avoid`
+   * cells (by index) are never entered (the endpoints of a query are exempted by the caller).
+   */
+  private neighbours(c: NavCell, reverse = false, avoid?: ReadonlySet<number>): { cell: NavCell; cost: number }[] {
     const out: { cell: NavCell; cost: number }[] = [];
     if (!this.passable(c.col, c.row)) return out;
+    const hasValves = this.valves.size > 0;
     for (const [dc, dr] of [
       [0, -1],
       [1, 0],
@@ -144,7 +191,10 @@ export class NavGraph {
       [-1, 0],
     ] as const) {
       const n = { col: c.col + dc, row: c.row + dr };
-      if (this.passable(n.col, n.row) && this.compatible(c, n)) out.push({ cell: n, cost: STRAIGHT_TICKS });
+      if (!this.passable(n.col, n.row) || !this.compatible(c, n)) continue;
+      if (avoid?.has(this.idx(n.col, n.row))) continue;
+      if (hasValves && !(reverse ? this.valveAllows(n, c) : this.valveAllows(c, n))) continue;
+      out.push({ cell: n, cost: STRAIGHT_TICKS });
     }
     if (this.isConnector(c.col, c.row)) return out;
     for (const [dc, dr] of [
@@ -161,13 +211,16 @@ export class NavGraph {
         this.compatible(c, n) &&
         this.compatible(c, s1) &&
         this.compatible(c, s2);
-      if (ok) out.push({ cell: n, cost: DIAGONAL_TICKS });
+      if (ok && !avoid?.has(this.idx(n.col, n.row))) out.push({ cell: n, cost: DIAGONAL_TICKS });
     }
     return out;
   }
 
-  /** Dijkstra distances (ticks) from `from` to every reachable cell. */
-  distances(from: NavCell): Float64Array {
+  /**
+   * Dijkstra distances (ticks) from `from` to every reachable cell (forward edges), or, with `reverse`, from every
+   * cell TO `from`. `avoid` cells are never entered.
+   */
+  distances(from: NavCell, reverse = false, avoid?: ReadonlySet<number>): Float64Array {
     const n = this.width * this.height;
     const dist = new Float64Array(n).fill(Infinity);
     const start = this.idx(from.col, from.row);
@@ -182,7 +235,7 @@ export class NavGraph {
       if (best < 0) break;
       done[best] = 1;
       const c = { col: best % this.width, row: Math.floor(best / this.width) };
-      for (const { cell, cost } of this.neighbours(c)) {
+      for (const { cell, cost } of this.neighbours(c, reverse, avoid)) {
         const j = this.idx(cell.col, cell.row);
         if (bd + cost < dist[j]!) dist[j] = bd + cost;
       }
@@ -190,13 +243,22 @@ export class NavGraph {
     return dist;
   }
 
-  /** Cached distances to a target cell (the graph is static and symmetric). */
-  distancesTo(to: NavCell): Float64Array {
+  /**
+   * Cached distances (ticks) from every cell TO a target cell: Dijkstra over reversed edges (the graph is static but
+   * directed when the level has check valves). `avoid`: cells the route may not enter (the target itself is exempt).
+   */
+  distancesTo(to: NavCell, avoid?: ReadonlySet<number>): Float64Array {
     const k = this.idx(to.col, to.row);
-    let d = this.distCache.get(k);
+    const key = avoid && avoid.size > 0 ? `${k}|${[...avoid].filter((x) => x !== k).sort((a, b) => a - b).join(',')}` : `${k}`;
+    let d = this.distCache.get(key);
     if (!d) {
-      d = this.distances(to);
-      this.distCache.set(k, d);
+      let av: Set<number> | undefined;
+      if (avoid && avoid.size > 0) {
+        av = new Set(avoid);
+        av.delete(k);
+      }
+      d = this.distances(to, true, av);
+      this.distCache.set(key, d);
     }
     return d;
   }
@@ -207,10 +269,18 @@ export class NavGraph {
     return this.distancesTo(b)[this.idx(a.col, a.row)]!;
   }
 
-  /** Shortest cell path (inclusive) from `from` to `to`, or null when unreachable even optimistically. */
-  path(from: NavCell, to: NavCell): NavCell[] | null {
+  /**
+   * Shortest cell path (inclusive) from `from` to `to`, or null when unreachable even optimistically. `avoid`: cells the
+   * path may not enter (endpoints exempt), e.g. Paradox Glass plates.
+   */
+  path(from: NavCell, to: NavCell, avoid?: ReadonlySet<number>): NavCell[] | null {
     if (!this.inBounds(from.col, from.row) || !this.inBounds(to.col, to.row)) return null;
-    const distTo = this.distancesTo(to); // graph is symmetric: walk downhill from `from` towards `to`
+    let av = avoid;
+    if (av && av.has(this.idx(from.col, from.row))) {
+      av = new Set(av);
+      (av as Set<number>).delete(this.idx(from.col, from.row));
+    }
+    const distTo = this.distancesTo(to, av); // reversed-edge distances: walk downhill from `from` towards `to`
     if (!Number.isFinite(distTo[this.idx(from.col, from.row)]!)) return null;
     const out: NavCell[] = [from];
     let cur = from;
@@ -220,7 +290,7 @@ export class NavGraph {
       let best: NavCell | null = null;
       let bd = Infinity;
       const here = distTo[this.idx(cur.col, cur.row)]!;
-      for (const { cell, cost } of this.neighbours(cur)) {
+      for (const { cell, cost } of this.neighbours(cur, false, av && av.size > 0 ? withoutIdx(av, this.idx(to.col, to.row)) : undefined)) {
         const dn = distTo[this.idx(cell.col, cell.row)]!;
         if (dn < here && dn + cost < bd) {
           best = cell;
@@ -250,14 +320,14 @@ export class NavGraph {
    * then straight — the moveTo controller) keeps the whole body footprint on passable, same-level, non-connector
    * cells. Connector cells (doors, gates, lifts, lanes) always stay waypoints.
    */
-  waypoints(path: readonly NavCell[]): NavCell[] {
+  waypoints(path: readonly NavCell[], avoid?: ReadonlySet<number>): NavCell[] {
     if (path.length <= 2) return [...path];
     const out: NavCell[] = [path[0]!];
     let i = 0;
     while (i < path.length - 1) {
       let j = i + 1;
       for (let k = path.length - 1; k > i + 1; k--) {
-        if (this.segmentClear(path, i, k)) {
+        if (this.segmentClear(path, i, k, avoid)) {
           j = k;
           break;
         }
@@ -268,7 +338,7 @@ export class NavGraph {
     return out;
   }
 
-  private segmentClear(path: readonly NavCell[], i: number, k: number): boolean {
+  private segmentClear(path: readonly NavCell[], i: number, k: number, avoid?: ReadonlySet<number>): boolean {
     for (let m = i + 1; m < k; m++) if (this.isConnector(path[m]!.col, path[m]!.row)) return false;
     const a = path[i]!;
     const b = path[k]!;
@@ -289,6 +359,7 @@ export class NavGraph {
         const c = Math.floor((x + ox) / 1000);
         const r = Math.floor((z + oz) / 1000);
         if (!this.passable(c, r) || this.isConnector(c, r)) return false;
+        if (avoid && avoid.has(this.idx(c, r))) return false;
         if (!this.levelsAt(c, r).some((l) => lv.includes(l))) return false;
       }
       if (x === tx && z === tz) return true;
@@ -316,4 +387,11 @@ export class NavGraph {
     }
     return out;
   }
+}
+
+function withoutIdx(s: ReadonlySet<number>, k: number): ReadonlySet<number> {
+  if (!s.has(k)) return s;
+  const out = new Set(s);
+  out.delete(k);
+  return out;
 }

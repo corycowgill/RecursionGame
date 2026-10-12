@@ -3,7 +3,9 @@ import { defaultPadBindings, type PadBindings } from '../engine/input/gamepadBin
 import type { PadEvent } from '../engine/input/GamepadInput';
 import { defaultKeybinds, type KeyBindings } from '../persistence/keybinds';
 import { defaultSettings, type QualityPreset, type Settings } from '../persistence/settings';
-import { actionTextHTML } from './actionText';
+import { actionTextHTML, actionTextPlain } from './actionText';
+import { ATTUNED_TEXT, defaultMechanicLabel } from '../gameplay/puzzles/mechanicText';
+import { relayRows } from './timeline/devices';
 import { focusFirst, h } from './dom';
 import { KEYBOARD, TOUCH, sameDevice, type GlyphContext, type InputDevice } from './glyphs';
 import { activate, injectPadStyles, navigate } from './padNav';
@@ -452,7 +454,7 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
       if (hudLayer.hidden) return;
       lastFrame = frame;
       const paused = !!frame.paused;
-      timeline.update(frame.timeline, { paused, previewTick: frame.previewTick ?? null });
+      timeline.update(frame.timeline, { paused, previewTick: frame.previewTick ?? null, ...(level && level.entities.some((d) => d.kind === 'chronoRelay') ? { relays: relayRows(level, frame.state) } : {}) });
       // Timeline inspect / temporal preview: tutorial + hint cards step aside so the whole chamber reads.
       hudLayer.classList.toggle('rx-inspecting', timeline.expanded || frame.previewTick != null);
       hud.update(frame, keybinds, settings.echoPalette, timeline.height);
@@ -480,6 +482,11 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
     },
 
     onEvents(events) {
+      // round 6: Paradox Glass shatter markers on the breaking actor's timeline track
+      timeline.noteEvents(events, (id) => {
+        const d = level?.entities.find((x) => x.id === id);
+        return d?.label ?? (d ? defaultMechanicLabel(d) : null) ?? id;
+      });
       for (let i = 0; i < events.length; i++) {
         const e = events[i] as SimEvent;
         tracker?.signal({ type: 'event', event: e });
@@ -498,8 +505,24 @@ export function createUI(root: HTMLElement, callbacks: UICallbacks = {}, opts: C
             announce('Echo limit reached. Delete a loop or restart the chamber.');
             break;
           case 'divergence':
+            if (e.expected.reason === 'attuned') {
+              // round 6: the intended Echo Console divergence (failed live, works for the echo) is not a paradox
+              toasts.show(`${ATTUNED_TEXT.intended} (Echo ${e.echoIndex + 1})`, 'success', 2600);
+              break;
+            }
             toasts.show(`Paradox · Echo ${e.echoIndex + 1} diverged`, 'warn', 3400);
             announce(`Paradox: echo ${e.echoIndex + 1} could not repeat its action.`);
+            break;
+          case 'interactFailed':
+            // round 6: attuned / glass refusals of the live player get a contextual toast (action tokens)
+            if (e.actorId === 'player' && e.reason === 'attuned') {
+              const d = level?.entities.find((x) => x.id === e.entityId);
+              const echoOnly = d?.kind === 'timedSwitch' && d.config.accepts === 'echoes';
+              toasts.show(actionTextPlain(echoOnly ? ATTUNED_TEXT.echoOnly : ATTUNED_TEXT.playerOnly, glyphs()), 'info', 3200);
+            }
+            break;
+          case 'entity':
+            if (e.name === 'shatter') toasts.show(ATTUNED_TEXT.shattered, 'warn', 3000);
             break;
           case 'loopTimeUp':
             toasts.show('Loop time exhausted', 'gold', 2600, 'clock');

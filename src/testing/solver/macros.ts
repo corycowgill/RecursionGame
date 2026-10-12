@@ -29,13 +29,26 @@ import { makeInput, type SolverWorld } from './world';
 
 export type TaskKind = 'go' | 'press' | 'pick' | 'drop' | 'hold' | 'exit';
 
+/**
+ * Optional task fields (round 6):
+ *   avoid  grid indices (NavGraph.cellIndex) the route may not enter: Paradox Glass plates. Glass levels offer every
+ *          walking task twice, shortest route and glass-avoiding route (the avoiding one is the intended play; the
+ *          shortest one is what a cheese hunt looks for).
+ *   only   'echo' | 'final': vocabulary pruning for attuned plates (stand on an Echo Plate only in echo loops, on a
+ *          Gold Seal only in the final run). A documented bound, like every vocabulary choice.
+ */
+interface TaskExtras {
+  avoid?: ReadonlySet<number>;
+  only?: 'echo' | 'final';
+}
+
 export type Task =
-  | { kind: 'go'; cell: NavCell; tag: string; blind?: boolean }
-  | { kind: 'press'; entity: string; tag: string; blind?: boolean }
-  | { kind: 'pick'; entity: string; tag: string; blind?: boolean }
-  | { kind: 'drop'; cell: NavCell; tag: string; blind?: boolean }
-  | { kind: 'hold'; tag: string; blind?: boolean }
-  | { kind: 'exit'; cell: NavCell; tag: string };
+  | ({ kind: 'go'; cell: NavCell; tag: string; blind?: boolean } & TaskExtras)
+  | ({ kind: 'press'; entity: string; tag: string; blind?: boolean } & TaskExtras)
+  | ({ kind: 'pick'; entity: string; tag: string; blind?: boolean } & TaskExtras)
+  | ({ kind: 'drop'; cell: NavCell; tag: string; blind?: boolean } & TaskExtras)
+  | ({ kind: 'hold'; tag: string; blind?: boolean } & TaskExtras)
+  | { kind: 'exit'; cell: NavCell; tag: string; avoid?: ReadonlySet<number>; only?: undefined };
 
 export type Wait = { kind: 'none' } | { kind: 'ticks'; n: number } | { kind: 'signal'; id: string; value: boolean };
 
@@ -151,10 +164,10 @@ interface Route {
   nominal: number;
 }
 
-function route(g: NavGraph, from: NavCell, to: NavCell): Route | null {
-  const path = g.path(from, to);
+function route(g: NavGraph, from: NavCell, to: NavCell, avoid?: ReadonlySet<number>): Route | null {
+  const path = g.path(from, to, avoid);
   if (!path) return null;
-  const wps = g.waypoints(path);
+  const wps = g.waypoints(path, avoid);
   const wpIdx: number[] = [];
   let k = 0;
   for (const w of wps) {
@@ -171,9 +184,9 @@ type NavStatus = 'arrived' | 'aborted' | 'invalid' | 'complete' | 'timeUp';
  * active input + finalGrace, or until the world is still while we are blocked). `mash` presses {interact} once a
  * second while blocked.
  */
-function navigateLive(ctx: StepContext, st: SimState, out: PlayerInput[], goal: NavCell, final: boolean, mash: boolean): NavStatus {
+function navigateLive(ctx: StepContext, st: SimState, out: PlayerInput[], goal: NavCell, final: boolean, mash: boolean, avoid?: ReadonlySet<number>): NavStatus {
   const me0 = ctx.world.player(st);
-  const r = route(ctx.graph, cellOfPos(me0.x, me0.z), goal);
+  const r = route(ctx.graph, cellOfPos(me0.x, me0.z), goal, avoid);
   if (!r) return 'invalid';
   const { path, wps, wpIdx } = r;
   const start = st.tick;
@@ -220,8 +233,8 @@ function navigateLive(ctx: StepContext, st: SimState, out: PlayerInput[], goal: 
 }
 
 /** Blind (dead-reckoned) walk of the ghost to the centre of `goal`; the real actor gets the same inputs. */
-function navigateBlind(ctx: StepContext, st: SimState, out: PlayerInput[], ghost: { x: number; z: number }, goal: NavCell): NavStatus {
-  const r = route(ctx.graph, cellOfPos(ghost.x, ghost.z), goal);
+function navigateBlind(ctx: StepContext, st: SimState, out: PlayerInput[], ghost: { x: number; z: number }, goal: NavCell, avoid?: ReadonlySet<number>): NavStatus {
+  const r = route(ctx.graph, cellOfPos(ghost.x, ghost.z), goal, avoid);
   if (!r) return 'invalid';
   let wi = r.wps.length > 1 ? 1 : 0;
   for (let guard = 0; guard < 10_000; guard++) {
@@ -277,7 +290,7 @@ export function runStep(ctx: StepContext, st: SimState, out: PlayerInput[], step
 
   if (t.kind === 'go' || t.kind === 'exit') {
     if (t.kind === 'go' && here.col === t.cell.col && here.row === t.cell.row) return res('invalid'); // already there
-    const r = ghost ? navigateBlind(ctx, st, out, ghost, t.cell) : navigateLive(ctx, st, out, t.cell, t.kind === 'exit', false);
+    const r = ghost ? navigateBlind(ctx, st, out, ghost, t.cell, t.avoid) : navigateLive(ctx, st, out, t.cell, t.kind === 'exit', false, t.avoid);
     if (r === 'arrived') return res(st.status === 'complete' ? 'complete' : 'done', ghost);
     return res(r, ghost);
   }
@@ -295,7 +308,7 @@ export function runStep(ctx: StepContext, st: SimState, out: PlayerInput[], step
   let best: { cell: NavCell; facing: 0 | 1 | 2 | 3 } | null = null;
   let bestT = Infinity;
   for (const a of ctx.graph.approachCells(target)) {
-    const d = ctx.graph.ticksBetween(here, a.cell);
+    const d = t.avoid ? (ctx.graph.distancesTo(a.cell, t.avoid)[ctx.graph.cellIndex(here.col, here.row)] ?? Infinity) : ctx.graph.ticksBetween(here, a.cell);
     if (d < bestT) {
       bestT = d;
       best = a;
@@ -306,7 +319,7 @@ export function runStep(ctx: StepContext, st: SimState, out: PlayerInput[], step
   const cz = best.cell.row * 1000 + 500;
   const atApproach = Math.abs(pos.x - cx) <= MOVE_TO_TOLERANCE && Math.abs(pos.z - cz) <= MOVE_TO_TOLERANCE;
   if (!atApproach) {
-    const r = ghost ? navigateBlind(ctx, st, out, ghost, best.cell) : navigateLive(ctx, st, out, best.cell, false, true);
+    const r = ghost ? navigateBlind(ctx, st, out, ghost, best.cell, t.avoid) : navigateLive(ctx, st, out, best.cell, false, true, t.avoid);
     if (r !== 'arrived') return res(r, ghost);
   }
   const end1 = ended(st);
@@ -354,13 +367,51 @@ export interface VocabularyOptions {
   hold?: boolean;
   /** Offer blind variants of these task tags to echoes ('all' = every go/press/pick/drop). default 'all' */
   blind?: 'all' | 'none' | string[];
+  /**
+   * (round 6) Add the fixed waits {delayTicks} and {delayTicks - 60} of every chrono relay in the level to the fixed
+   * waits (deduped). default true
+   */
+  relayWaits?: boolean;
+  /** (round 6) Offer glass-avoiding route variants of walking tasks in levels with Paradox Glass plates. default true */
+  glassRoutes?: boolean;
 }
 
 /**
  * Signals worth waiting for by default: things a player watches (doors, gates, switches, receivers, decks, lifts,
  * sockets). Plates are left out: a plate wired to a door is visible as that door opening one tick later.
  */
-const AUTO_SIGNAL_KINDS = new Set(['door', 'timedSwitch', 'laserReceiver', 'movingPlatform', 'elevator', 'temporalGate', 'energySocket']);
+const AUTO_SIGNAL_KINDS = new Set(['door', 'timedSwitch', 'laserReceiver', 'movingPlatform', 'elevator', 'temporalGate', 'energySocket', 'chronoRelay']);
+
+/** (round 6) Fixed waits derived from the level's chrono relays: {delayTicks} and {delayTicks - 60} per relay. */
+export function relayWaitTicks(level: LevelDefinition): number[] {
+  const out: number[] = [];
+  for (const e of level.entities)
+    if (e.kind === 'chronoRelay') {
+      const d = Math.floor(e.config.delayTicks);
+      out.push(d);
+      if (d - 60 > 0) out.push(d - 60);
+    }
+  return out;
+}
+
+/** (round 6) Grid indices of Paradox Glass plates (pressure plates with shatterOn), for glass-avoiding routes. */
+export function glassCells(level: LevelDefinition, graph: { cellIndex(col: number, row: number): number }): Set<number> {
+  const out = new Set<number>();
+  for (const e of level.entities) if (e.kind === 'pressurePlate' && e.config.shatterOn !== undefined) out.add(graph.cellIndex(e.col, e.row));
+  return out;
+}
+
+/**
+ * Default signal-wait list: every entity of an AUTO_SIGNAL_KINDS kind, plus (round 6) the input sources of every
+ * reversible check valve (so "wait until the valve has flipped" is expressible), deduped, in level order.
+ */
+export function autoSignals(level: LevelDefinition): string[] {
+  const out: string[] = level.entities.filter((e) => AUTO_SIGNAL_KINDS.has(e.kind)).map((e) => e.id);
+  for (const e of level.entities)
+    if (e.kind === 'checkValve' && e.config.reverseWhenPowered === true)
+      for (const w of level.wires) if (w.to === e.id && !out.includes(w.from)) out.push(w.from);
+  return out;
+}
 
 /** Builds the macro vocabulary for a level: the "documented bounds" of every search. */
 export function buildVocabulary(level: LevelDefinition, opts: VocabularyOptions = {}): Vocabulary {
@@ -369,9 +420,13 @@ export function buildVocabulary(level: LevelDefinition, opts: VocabularyOptions 
   for (const e of level.entities) {
     const c = { col: e.col, row: e.row };
     switch (e.kind) {
-      case 'pressurePlate':
-        tasks.push({ kind: 'go', cell: c, tag: `stand ${e.id}` });
+      case 'pressurePlate': {
+        // Round 6 attuned plates: an Echo Plate only matters to echo loops, a Gold Seal only to the final run.
+        const acc = e.config.accepts;
+        const only = acc === 'echoes' ? 'echo' : acc === 'player' ? 'final' : undefined;
+        tasks.push(only ? { kind: 'go', cell: c, tag: `stand ${e.id}`, only } : { kind: 'go', cell: c, tag: `stand ${e.id}` });
         break;
+      }
       case 'door':
       case 'temporalGate':
         tasks.push({ kind: 'go', cell: c, tag: `stand-in ${e.id}` });
@@ -402,6 +457,15 @@ export function buildVocabulary(level: LevelDefinition, opts: VocabularyOptions 
   for (const c of opts.extraCells ?? []) tasks.push({ kind: 'go', cell: c, tag: `go ${cellTag(c)}` });
   for (const c of opts.extraDrops ?? []) tasks.push({ kind: 'drop', cell: c, tag: `drop-at ${cellTag(c)}` });
 
+  // Round 6 Paradox Glass: every walking task also comes in a glass-avoiding variant (tag suffix ' ~glass').
+  if (opts.glassRoutes !== false && level.entities.some((e) => e.kind === 'pressurePlate' && e.config.shatterOn !== undefined)) {
+    const g = new NavGraph(level);
+    const avoid = glassCells(level, g);
+    const variants: Task[] = [];
+    for (const t of tasks) if (t.kind !== 'hold') variants.push({ ...t, avoid, tag: `${t.tag} ~glass` } as Task);
+    tasks.push(...variants);
+  }
+
   let filtered = tasks;
   if (opts.onlyTasks) filtered = filtered.filter((t) => opts.onlyTasks!.includes(t.tag));
   if (opts.withoutTasks) filtered = filtered.filter((t) => !opts.withoutTasks!.includes(t.tag));
@@ -411,12 +475,14 @@ export function buildVocabulary(level: LevelDefinition, opts: VocabularyOptions 
     blindSel === 'none'
       ? []
       : filtered
-          .filter((t) => t.kind !== 'hold' && (blindSel === 'all' || blindSel.includes(t.tag)))
+          .filter((t) => t.kind !== 'hold' && t.only !== 'final' && (blindSel === 'all' || blindSel.includes(t.tag)))
           .map((t) => ({ ...t, blind: true, tag: `blind ${t.tag}` }) as Task);
 
-  const signals = opts.signals ?? level.entities.filter((e) => AUTO_SIGNAL_KINDS.has(e.kind)).map((e) => e.id);
+  const signals = opts.signals ?? autoSignals(level);
   const waits: Wait[] = [{ kind: 'none' }];
-  for (const n of opts.fixedWaits ?? [60, 180]) waits.push({ kind: 'ticks', n });
+  const fixed = [...(opts.fixedWaits ?? [60, 180])];
+  if (opts.relayWaits !== false) for (const n of relayWaitTicks(level)) if (!fixed.includes(n)) fixed.push(n);
+  for (const n of fixed) waits.push({ kind: 'ticks', n });
   const fixedOnly = [...waits];
   for (const id of signals) {
     waits.push({ kind: 'signal', id, value: true });

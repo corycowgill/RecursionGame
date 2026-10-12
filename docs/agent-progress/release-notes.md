@@ -1,4 +1,121 @@
-# RECURSION — Release Notes (v0.5, round 5: story and ending, chamber moods, solver-checked difficulty)
+# RECURSION — Release Notes (v0.6, round 6: the expansion, 18 chambers and four new mechanics)
+
+Date: 2026-10-12 (v0.5 and earlier: below) · Build: `npm run build` → static `dist/` + `dist/sw.js` · Reviewer: Game Director
+
+Same honesty rule: "verified" means checked by a test that was run for this release. **Every browser check ran in
+Chromium only** (SwiftShader software WebGL). **Nobody has playtested the new chambers or the new mechanics.** Every
+playtime, par time and hint delay below comes from the difficulty model. Nothing in this round has been committed.
+
+## v0.6 summary
+
+- **Eight new chambers, 18 in all.** They are interleaved into the campaign rather than appended. The Core stays the
+  finale (chamber 18), and its model score of 15.2 is still the campaign maximum (the highest new chamber is L18 at 11.1).
+  Play order: L01, L02, L03, L04, **L11 The Sump**, L05, L06, **L12 Late Light**, **L13 Roundabout**, L07, **L14 Gold
+  and Cyan**, L08, **L15 Glass Gallery**, L09, **L16 Afterimage**, **L17 Upstream**, **L18 Hour of Glass**, L10.
+  Level ids never change (they are the save keys); only the chamber number (`order`) follows the play position.
+- **New mechanics.** All go through the entity registry and the central interaction rules, with no change to the tick
+  order or the temporal engine:
+  - **Check valve:** a one-way doorway. Passing it is permanent; some valves reverse while powered.
+  - **Chrono relay:** delivers its input signal a fixed delay later.
+  - **Attuned devices:** gold plates count only the live player; cyan consoles answer only echoes. A recording made
+    live therefore fails at a cyan console, and the echo replaying it succeeds: an intended fail -> use, drawn violet
+    on the timeline.
+  - **Paradox glass:** a gold seal that shatters for the rest of the pass if an echo steps on it.
+
+  Each is taught alone first: valve L11, relay L12, keys L14, glass L15, reversible valve L17. Inverted wires are
+  still first taught in L09.
+- **Every new chamber meets the L01–L10 bar:**
+  - validates with 0 errors and 0 warnings;
+  - has an authored closed-loop solution with a golden replay;
+  - the final run alone fails, and so does each loop played solo;
+  - zero divergences in the winning pass, except the intended attuned ones in L14 and L18, which are asserted exactly;
+  - a minimum-echo argument plus solver searches;
+  - a mechanic teaching check;
+  - cheese hunts;
+  - every timing window at least 2.5 s (tightest new one: L17, 2.87 s);
+  - par and hints taken from the model;
+  - a three-line story whose log numbers rise in play order (036 → 098, then the Core's 000).
+- **Old saves keep working.** Saves are keyed by level id, so every chamber you completed stays completed.
+  - A level is now also unlocked if it, or any later level, has been completed. A save that had finished the old
+    campaign opens every chamber; Continue goes to the first new one (Chamber 05 The Sump).
+  - A save that stopped after old L06 keeps L01–L06 and the inserted L11 open, and L12 is next.
+  - Covered by `campaign.test.ts` and `ui.test.ts`. The e2e ending test still uses a 10-id save and passes.
+- **Level select** is a 6 × 3 grid. The menu shows "Chambers restored n / 18" and "Stars n / 54". The ending and
+  credits still follow The Core, which is the last campaign level.
+- **Readability fixes from the screenshots:**
+  - In L15 and L18, one row of interior wall became railings. Railings block movement exactly like walls, so per-tick
+    hashes and fuzz digests are unchanged. The glass galleries and the Sump can now be seen from the hall instead of
+    hiding behind tall walls.
+  - On echo tracks, the timeline draws a recorded 'attuned' refusal as the echo's coming press, not as a coral failure.
+  - L13's lighting mood no longer flares on the ring floor.
+- New lighting moods for L11–L18 (variants of their wing). Main-menu footer `v0.6`.
+
+## Estimated playtime and levels to playtest
+
+From the difficulty model, **not** from players: **61–268 min for the campaign, median ≈ 122 min** (v0.5: 31–134,
+median ≈ 61). That is the middle of the 60–120 min target band. The eight new chambers add ≈ 61 min of model median,
+inside the planned +55–75 min: L11 2.9, L12 5.2, L13 10.3, L14 5.4, L15 7.0, L16 7.7, L17 9.5 and L18 13.1 min. All 18
+par times and hint delays equal the model's output (`npm run solve -- all --difficulty`, re-run on the integrated
+campaign; table in `docs/game-design/difficulty-report.md` §5).
+
+Flagged for the first playtest, in addition to the v0.5 list:
+
+| Level | Why |
+|---|---|
+| **L05** Perfect Timing | Still solvable with one echo. **Product-owner decision still needed** (difficulty report §3.1). L05's puzzle is untouched; only its chamber number changed (5 → 6). |
+| L11 The Sump | Scores 3.7 in the model, below its 4.5 slot (valve introduction). |
+| L13 Roundabout | Scores 9.2, above its 6.5 slot. Includes a forced lap after entering the ring. |
+| L16 Afterimage | The player must ring the Hall Plate a second time to leave. |
+| L17 Upstream | 2.87 s brake window; the idea is "one recording ends on both sides of the valve". |
+| L18 Hour of Glass | 1 constrained window instead of the planned ~3: the designer kept the model score at 11.1, below the Core. |
+
+Solver evidence: some fewer-echo searches are exhaustive only at the smaller bounds. The rest are budget-limited, found
+nothing, and are backed by hand body-count arguments, as for L10:
+- L13 and L16: 1 echo at deep(3) / wide(2).
+- L15 and L17: 1 echo at wide(2).
+- L18: 1 and 2 echoes.
+
+Details: `docs/game-design/difficulty-report.md` §2, `levels-round6-A.md`, `levels-round6-B.md`.
+
+## v0.6 director checks
+
+| Check | Result |
+|---|---|
+| `npm run verify` | **Pass**: typecheck clean, Vitest 59 files / 976 tests, none skipped (no `.skip` / `.only` / `.todo`), build OK. Run after the final source change. |
+| Golden replays | **Pass, with justified diffs.** L05–L10: only the `levelFingerprint` line changed (new `order` values). Every per-tick hash, checkpoint and completion tick is identical. L01–L04 are unchanged. The eight new goldens moved up from the designers' sub-folders; L15 and L18 were re-blessed for the railing rows (fingerprint line only). Fuzz golden: fingerprint lines, plus appended entries for the new levels and the mechanics gauntlet; existing digests unchanged. |
+| Full e2e suite (`CI=1 E2E_PORT=4401 npx playwright test`) | **21 passed, 1 failed** in 38.3 min (v0.5: 30.1 min). The all-levels sweep now covers 18 chambers and passed (11.1 min). The ending test, which uses a pre-expansion 10-id save, passed. The one failure was the `ui-level-select` visual baseline (4 % of pixels: the new 6 × 3 grid with 18 cards). After a side-by-side review, that single baseline was re-blessed and the test re-run: **pass** (`CI=1 E2E_PORT=4402`, 2.1 min). All other visual baselines matched, and none was re-blessed. |
+| Test updates for 18 levels | `campaign.test.ts` (18-level order, intended divergences for L14 and L18, old-save unlock test); `ui.test.ts` (18-card level select, 10 / 18 with an old save); `narrative.test.ts` (logs rise in play order, Core = 000); `actionText.test.ts` (hints checked by id, not order); `tests/e2e/mobile.spec.ts` (L05 by id, not order 5). The inert round6-a/b replay sub-suites were removed. |
+| Solver | `npm run solve -- all --difficulty` re-run on the integrated campaign: all 18 par / hint rows match the level files. L11 and L15 were re-found to replace stale best times (10.60 s and 12.50 s). |
+| Screenshots (scratchpad `dir6/shots/`, high quality, 1280×720, 0 page errors) | `final-new-05-the-sump.png`, `final-new-08-late-light.png`, `final-new-09-roundabout.png`, `final-new-11-gold-and-cyan.png`, `final-new-13-glass-gallery.png`, `final-new-15-afterimage.png`, `final-new-16-upstream.png`, `final-new-17-hour-of-glass.png`; plus `r6-levelselect-oldsave.png`, `r6-menu-oldsave.png` and overview shots. Kept out of `docs/` per the round rule; nothing existing was overwritten. |
+
+## v0.6 known issues
+
+- **L05's one-echo route** is still open, awaiting the owner's decision.
+- **Follow-camera framing at mid-solve:**
+  - L11's valve is often off-screen.
+  - L17's elevated gallery and chute sit behind the hall's back wall.
+  - Echoes in side corridors are often out of frame.
+
+  The overview and intro fly-through show them.
+- **The relay conduit** can run behind railings in tight rooms. Relay tubes routed through wall cells (L12, L13) can be
+  partly hidden.
+- **Level-select keyboard navigation** steps 6 cards per row. Under 1100 px wide the grid has 3 columns, so Up/Down
+  jumps two rows there. The same mismatch existed before (5 vs 3).
+- **`graphics-preview.html?t=`** hangs if `t` is past the level's completion tick. This is a pre-existing preview
+  limitation.
+- **The difficulty model** has not been calibrated by any playtest.
+
+## v0.6 tests run (director)
+
+`npm run verify` (three times; the last after the final source change), `npx vitest run` on the level, replay, UI
+and graphics subsets during the work, `UPDATE_GOLDEN=1 vitest run src/testing/replays` with the diffs reviewed, a
+throwaway fuzz-equivalence test for the railing swap (seeds 3/7/11 × 3000 ticks, deleted after it passed),
+`npm run solve -- all --difficulty=<merged find>` (twice), `npm run solve -- L11 L15 --kinds=find --budget=300`, the
+full e2e suite once, and the level-select visual test once more after the re-bless.
+
+---
+
+# v0.5 (round 5: story and ending, chamber moods, solver-checked difficulty)
 
 Date: 2026-10-12 (v0.4 and earlier: below) · Build: `npm run build` → static `dist/` + `dist/sw.js` · Reviewer: Game Director
 

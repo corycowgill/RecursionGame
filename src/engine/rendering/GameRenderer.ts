@@ -320,7 +320,7 @@ class GameRendererImpl implements GameRenderer {
 
     // entity visuals
     for (const def of level.entities) {
-      const v = createEntityVisual({ lib: this.lib, def, grid: kit.grid, vfx: this.vfx, quality: { particles: this.q.particles, lights: this.q.pointLights > 0 } });
+      const v = createEntityVisual({ lib: this.lib, def, grid: kit.grid, vfx: this.vfx, quality: { particles: this.q.particles, lights: this.q.pointLights > 0 }, level });
       if (!v) continue;
       this.entityVisuals.set(def.id, v);
       this.levelRoot.add(v.root);
@@ -586,7 +586,11 @@ class GameRendererImpl implements GameRenderer {
     this.time += dt;
     const a = Math.min(1, Math.max(0, alpha));
 
-    if (events.length) this.vfx.handle(events, state);
+    if (events.length) {
+      this.vfx.handle(events, state);
+      // round 6: one-shot feedback routed to the entity visual the event names (valve fins, relay chime, ...)
+      for (const ev of events) if ('entityId' in ev && typeof ev.entityId === 'string') this.entityVisuals.get(ev.entityId)?.onEvent?.(ev, state);
+    }
     this.syncActors(state, prevState, a, dt);
     this.syncEntities(state, prevState, a, dt);
     this.updateContactShadows(state);

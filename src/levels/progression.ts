@@ -4,7 +4,9 @@ import type { CompletionResult } from '../gameplay/puzzles/completion';
 /**
  * LEVEL PROGRESSION — pure, immutable campaign bookkeeping (no storage here: persistence serializes
  * CampaignProgress as plain JSON). Rule: the first level is always unlocked; each further level unlocks when the
- * previous one has been completed at least once.
+ * previous one has been completed at least once. Round 6 inserted chambers mid-campaign, so a level also stays
+ * unlocked once it (or any later level) has been completed: old saves keep every chamber they had reached, and the
+ * new chambers before a save's furthest clear are open too.
  */
 
 export interface LevelRecord {
@@ -40,6 +42,23 @@ export function isCompleted(progress: CampaignProgress, levelId: string): boolea
   return (progress.records[levelId]?.completions ?? 0) > 0;
 }
 
+/**
+ * Shared unlock rule (Campaign.isUnlocked and the level-select entries): the first level; any level whose previous
+ * level is completed; any level that is itself completed or lies before a completed level (saves made before
+ * chambers were inserted mid-campaign keep their reach).
+ */
+export function levelUnlocked(levels: readonly LevelDefinition[], progress: CampaignProgress, index: number): boolean {
+  if (index < 0 || index >= levels.length) return false;
+  if (index === 0) return true;
+  const prev = levels[index - 1];
+  if (prev !== undefined && isCompleted(progress, prev.id)) return true;
+  for (let j = index; j < levels.length; j++) {
+    const l = levels[j];
+    if (l !== undefined && isCompleted(progress, l.id)) return true;
+  }
+  return false;
+}
+
 export class Campaign {
   constructor(readonly levels: readonly LevelDefinition[]) {
     const seen = new Set<string>();
@@ -70,9 +89,7 @@ export class Campaign {
   isUnlocked(progress: CampaignProgress, levelId: string): boolean {
     const i = this.indexOf(levelId);
     if (i < 0) return false;
-    if (i === 0) return true;
-    const prev = this.levels[i - 1];
-    return prev !== undefined && isCompleted(progress, prev.id);
+    return levelUnlocked(this.levels, progress, i);
   }
 
   unlocked(progress: CampaignProgress): LevelDefinition[] {

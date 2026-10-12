@@ -210,7 +210,7 @@ export function bootstrap(appRoot: HTMLElement, uiRoot: HTMLElement): AppHandle 
       levels: buildLevelEntries(LEVELS, progress),
       totalStars: CAMPAIGN.totalStars(progress),
       maxStars: LEVELS.length * 3,
-      version: 'v0.5',
+      version: 'v0.6',
       persistent: save.persistent,
     };
   }

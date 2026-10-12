@@ -8,8 +8,11 @@ import type { Cell, Dir4 } from './numeric';
  */
 export type EntityId = string;
 
-/** All puzzle component kinds (the 12 components from the brief). */
-export const ENTITY_KINDS = [
+/**
+ * The 12 core puzzle component kinds from the brief (frozen; the order is part of the contract). L10 "The Core" uses
+ * every one of them.
+ */
+export const CORE_ENTITY_KINDS = Object.freeze([
   'pressurePlate',
   'door',
   'timedSwitch',
@@ -22,7 +25,14 @@ export const ENTITY_KINDS = [
   'temporalGate',
   'movingPlatform',
   'exitPortal',
-] as const;
+] as const);
+export type CoreEntityKind = (typeof CORE_ENTITY_KINDS)[number];
+
+/**
+ * All puzzle component kinds: the core 12, then round-6 expansion kinds APPENDED in order (never reorder, never
+ * insert): checkValve (one-way ratchet doorway), chronoRelay (delayed signal line).
+ */
+export const ENTITY_KINDS = [...CORE_ENTITY_KINDS, 'checkValve', 'chronoRelay'] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
 export function isEntityKind(v: unknown): v is EntityKind {
@@ -31,6 +41,12 @@ export function isEntityKind(v: unknown): v is EntityKind {
 
 /** How a consumer combines multiple wired inputs. */
 export type SignalLogic = 'and' | 'or';
+
+/**
+ * (round 6, Attuned Devices) Which actors a device answers to. 'player' = the live actor (actor.kind === 'player'),
+ * 'echoes' = every echo including nested-loop copies (actor.kind === 'echo'), 'all' = anyone (default).
+ */
+export type ActorClass = 'all' | 'echoes' | 'player';
 
 /* ------------------------------------------------------------------------------------------------
  * Per-kind CONFIG (static, authored in level data, never mutated) and STATE (dynamic, lives in SimState,
@@ -45,6 +61,17 @@ export interface PressurePlateConfig {
   threshold?: number;
   /** Once pressed, stays pressed for the rest of the pass. default false */
   latch?: boolean;
+  /**
+   * (round 6, Attuned Devices) Gold seal ('player') / echo plate ('echoes'). When set to anything but 'all', only
+   * matching actors count as occupants (others are ignored completely) and crates/cells NEVER count (acceptsCrates
+   * is ignored); `threshold` counts matching bodies. default 'all' (unchanged behaviour).
+   */
+  accepts?: ActorClass;
+  /**
+   * (round 6, Paradox Glass) The first time an actor of this class stands on the plate it shatters for the rest of
+   * the pass: output false, latch ignored. Must differ from `accepts`.
+   */
+  shatterOn?: Exclude<ActorClass, 'all'>;
 }
 export interface PressurePlateState {
   pressed: boolean;
@@ -52,6 +79,8 @@ export interface PressurePlateState {
   occupants: number;
   /** Consecutive ticks pressed (0 when up). */
   pressedTicks: number;
+  /** (round 6, Paradox Glass) Present only when config.shatterOn is set: shattered this pass. */
+  broken?: boolean;
 }
 
 export interface DoorConfig {
@@ -79,6 +108,16 @@ export interface TimedSwitchConfig {
    * 'cooldown' meanwhile, so a switch can never be held on continuously by repeated presses. default 0
    */
   cooldownTicks?: number;
+  /**
+   * (round 6, Attuned Devices) Gold console ('player') / Echo Console ('echoes'). A press by a non-matching actor
+   * fails with reason 'attuned' and changes nothing. default 'all'.
+   */
+  accepts?: ActorClass;
+  /**
+   * (round 6, Paradox Glass) A press by an actor of this class fails with reason 'shattered' and breaks the console
+   * for the rest of the pass (every later press fails 'shattered'). Must differ from `accepts`.
+   */
+  shatterOn?: Exclude<ActorClass, 'all'>;
 }
 export interface TimedSwitchState {
   on: boolean;
@@ -86,6 +125,8 @@ export interface TimedSwitchState {
   activatedBy: ActorId | null;
   /** (level-design addition) Remaining cooldown ticks after switching off (only present with cooldownTicks). */
   cooldown?: number;
+  /** (round 6, Paradox Glass) Present only when config.shatterOn is set: shattered this pass. */
+  broken?: boolean;
 }
 
 export type CrateConfig = Record<string, never>;
@@ -223,6 +264,40 @@ export interface ExitPortalState {
   activeTicks: number;
 }
 
+/**
+ * (round 6) CHECK VALVE — a one-way ratchet doorway across one corridor cell. `def.facing` is the direction of travel
+ * that may pass. Solidity per actor: see gameplay/entities/checkValve.ts and contracts.md §5 "Check valve".
+ */
+export interface CheckValveConfig {
+  /** With wired inputs: the allowed direction reverses while the combined input is powered (1 tick latency). */
+  reverseWhenPowered?: boolean;
+}
+export interface CheckValveState {
+  /** Allowed direction of travel right now. */
+  dir: Dir4;
+  /** Ticks since the last direction change (renderer sweep), saturating at 600. */
+  phaseTicks: number;
+}
+
+/**
+ * (round 6) CHRONO RELAY — a delayed signal line ("Echo Line"). Replays its combined input waveform exactly
+ * `delayTicks` later (plus the usual 1-tick hop). See contracts.md §9 "Chrono relay".
+ */
+export interface ChronoRelayConfig {
+  /** Delay in ticks, integer in [30, 900]. */
+  delayTicks: number;
+  /** Output (and assumed input history) at tick 0. default false */
+  initialOn?: boolean;
+}
+export interface ChronoRelayState {
+  /** Current output. */
+  out: boolean;
+  /** Last input value seen (edge detector). */
+  last: boolean;
+  /** Countdown (ticks) of each in-flight edge, strictly ascending; each one toggles `out` when it reaches 0. */
+  pending: number[];
+}
+
 export interface EntityConfigMap {
   pressurePlate: PressurePlateConfig;
   door: DoorConfig;
@@ -236,6 +311,8 @@ export interface EntityConfigMap {
   temporalGate: TemporalGateConfig;
   movingPlatform: MovingPlatformConfig;
   exitPortal: ExitPortalConfig;
+  checkValve: CheckValveConfig;
+  chronoRelay: ChronoRelayConfig;
 }
 
 export interface EntityStateMap {
@@ -251,6 +328,8 @@ export interface EntityStateMap {
   temporalGate: TemporalGateState;
   movingPlatform: MovingPlatformState;
   exitPortal: ExitPortalState;
+  checkValve: CheckValveState;
+  chronoRelay: ChronoRelayState;
 }
 
 /**
@@ -290,3 +369,8 @@ export type EntityDefinition = { [K in EntityKind]: EntityDefinitionOf<K> }[Enti
 /* Shared tuning constants for entity behaviours (sim-side, integers). */
 export const DOOR_PASSABLE_PROGRESS = 800;
 export const DOOR_DEFAULT_OPEN_TICKS = 18;
+/** (round 6) Chrono relay delay bounds (ticks). */
+export const CHRONO_RELAY_MIN_DELAY = 30;
+export const CHRONO_RELAY_MAX_DELAY = 900;
+/** (round 6) Check valve phase counter cap. */
+export const CHECK_VALVE_PHASE_CAP = 600;

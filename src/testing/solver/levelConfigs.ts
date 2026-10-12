@@ -1,6 +1,9 @@
 import type { LevelDefinition, SimView } from '../../engine/contracts';
 import type { SearchBounds } from './search';
 import type { VerifiedSolution } from './verify';
+import { attunedDivergences, endsDownstream, noShatter, relayBypassed, relayUsed } from './teaching';
+import { ROUND6_B_ANALYSIS } from './levelConfigs-round6-b';
+import { ROUND6_A_ANALYSIS } from './levelConfigs-round6-a';
 
 /**
  * PER-LEVEL ANALYSIS CONFIGURATION — the documented bounds of every search the solver runs, and the teaching goal of
@@ -149,8 +152,60 @@ export const LEVEL_ANALYSIS: Record<string, LevelAnalysisConfig> = {
   },
 };
 
+/* ---- round 6: teaching checks for the new mechanics (compose them in a level's `teaching`) ---------------------- */
+
+/** The relay's delayed signal outlived its cause in the winning pass, and the delay was not bypassed by brute holding. */
+export function teachesRelay(relayId: string): (v: VerifiedSolution, level: LevelDefinition) => string | null {
+  return (v, level) => {
+    if (!relayUsed(level, v, relayId)) return `the ${relayId} output was never on while its input was off (the delay did not matter)`;
+    const held = relayBypassed(level, v, relayId);
+    return held === null ? null : `relay-bypass: ${relayId} input held continuously from tick ${held} to the win`;
+  };
+}
+
+/** At the win at least one echo stands downstream of the valve (it went through the one-way door). */
+export function teachesValve(valveId: string, who: 'echo' | 'player' | 'any' = 'echo'): (v: VerifiedSolution, level: LevelDefinition) => string | null {
+  const filter = (a: { kind: string }) => who === 'any' || a.kind === who;
+  return (v, level) => (endsDownstream(level, v, valveId, filter) ? null : `no ${who} ends downstream of ${valveId}`);
+}
+
+/** Exactly `n` intended attuned divergences (Echo Console fail -> use) and, optionally, no shattered glass. */
+export function teachesAttuned(n: number, glass = false): (v: VerifiedSolution) => string | null {
+  return (v) => {
+    const d = attunedDivergences(v);
+    if (d !== n) return `${d} attuned divergence(s), expected ${n}`;
+    return glass && !noShatter(v) ? 'a Paradox Glass device shattered' : null;
+  };
+}
+
+/** Round-6 mechanic sandboxes (src/levels/definitions/sandbox-*.ts): not campaign content, solver smoke tests. */
+export const SANDBOX_ANALYSIS: Record<string, LevelAnalysisConfig> = {
+  'S01-sandbox-relay': {
+    intended: 0,
+    proof: [],
+    find: { echoSteps: 0, finalSteps: 2, vocab: { fixedWaits: [180] } },
+    teaching: teachesRelay('relay'),
+    notes: 'Zero-echo showcase of the delayed signal; the relay waits (360 / 300 ticks) are derived automatically.',
+  },
+  'S02-sandbox-valve': {
+    intended: 1,
+    proof: [{ echoSteps: 0, finalSteps: 3 }],
+    find: { echoSteps: 1, finalSteps: 0 },
+    teaching: teachesValve('valve'),
+  },
+  'S03-sandbox-attuned': {
+    intended: 1,
+    proof: [{ echoSteps: 0, finalSteps: 3 }],
+    find: { echoSteps: 1, finalSteps: 1, vocab: { blind: 'none', signals: [] } },
+    teaching: teachesAttuned(1, true),
+    cheese: [{ echoes: 1, echoSteps: 1, finalSteps: 1, vocab: { blind: 'none', signals: [] } }],
+  },
+};
+
 export function analysisFor(level: LevelDefinition): LevelAnalysisConfig {
-  const c = LEVEL_ANALYSIS[level.id];
+  const sb = SANDBOX_ANALYSIS[level.id];
+  if (sb) return sb;
+  const c = LEVEL_ANALYSIS[level.id] ?? ROUND6_A_ANALYSIS[level.id] ?? ROUND6_B_ANALYSIS[level.id]; // round 6: designers A and B (own files)
   if (!c) throw new Error(`no solver analysis config for ${level.id}`);
   return c;
 }

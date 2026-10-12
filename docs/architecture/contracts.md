@@ -11,7 +11,7 @@ existing recording and solution, so treat those changes as versioned.
 | `numeric.ts` | Fixed-point units, axes, `Dir4`/`Dir8`, `idiv`, `cellOf`, `unitsToWorld` |
 | `input.ts` | `PlayerInput`, `IDLE_INPUT`, `sanitizeInput`, `GameCommand` |
 | `temporal.ts` | `ActorId`, `TemporalLoop`, `RecordedInteraction`, `InteractionKind`, `DivergenceRecord` |
-| `entities.ts` | `EntityId`, `ENTITY_KINDS` (12), per-kind `*Config` / `*State`, `SimEntity`, `EntityDefinition` |
+| `entities.ts` | `EntityId`, `CORE_ENTITY_KINDS` (12, frozen), `ENTITY_KINDS` (core + round-6 `checkValve`, `chronoRelay`), per-kind `*Config` / `*State`, `SimEntity`, `EntityDefinition` |
 | `geometry.ts` | `TileKind`, `Tile`, `TILE_LEGEND`, `DecorDefinition` |
 | `signals.ts` | `Wire`, `SignalId`, double-buffer semantics |
 | `events.ts` | `SimEvent` union, `TIMELINE_EVENT_TYPES` |
@@ -69,8 +69,10 @@ existing recording and solution, so treat those changes as versioned.
 
 ## 5. Entities
 
-`ENTITY_KINDS`: pressurePlate, door, timedSwitch, crate, energyCell, energySocket, elevator, laserEmitter,
-laserReceiver, temporalGate, movingPlatform, exitPortal. Each kind has a typed `Config` (authored, static)
+`CORE_ENTITY_KINDS` (frozen, the brief's 12): pressurePlate, door, timedSwitch, crate, energyCell, energySocket,
+elevator, laserEmitter, laserReceiver, temporalGate, movingPlatform, exitPortal. `ENTITY_KINDS` = the core 12 followed by
+the round-6 expansion kinds **appended** in order: `checkValve`, `chronoRelay` (never reorder or insert: append only).
+L10 uses every core kind (campaign.test checks `CORE_ENTITY_KINDS`). Each kind has a typed `Config` (authored, static)
 and a typed `State` (dynamic) in `entities.ts`. `SimEntity<K> { id, kind, x, y, z, carriedBy, state }`.
 
 Static geometry uses `Tile { kind: floor|wall|pillar|railing|ramp|void, h, dir? }`, authored as strings with
@@ -120,6 +122,57 @@ Nothing that moves or closes may leave an actor floating over a pit or inside a 
   never sinks a rider more than `STEP_TOLERANCE` below a neighbouring surface its footprint overhangs. When the
   clamp stops it the lift waits in place (`state.held = true`) and resumes as soon as the actor clears the edge or
   boards fully. Riders follow the platform height in the same tick (§6 step 4b).
+
+### Round-6 expansion mechanics (no engine change; registry + existing hooks only)
+
+All three go through the entity registry, the central interaction/ownership rules and the existing hooks; no tick-order,
+`PHYS` or temporal-engine change. Their events are feedback only (never hashed, never read by the simulation). Their
+state resets every pass like all state. The 10 original campaign goldens are byte-identical with the extended registry
+(per-tick hashes; the integration later changed only their `levelFingerprint` lines, for the new `order` values).
+
+**Check valve** (`checkValve`, `src/gameplay/entities/checkValve.ts`): a one-way ratchet doorway across one corridor
+cell. `def.facing` = the direction of travel that may pass (downstream). `CheckValveConfig { reverseWhenPowered? }`:
+with wired inputs the direction is reversed while the combined input is powered (previous buffer, 1 tick latency);
+unwired or without the flag it never changes. `CheckValveState { dir: Dir4; phaseTicks /* saturates at 600 */ }`.
+Output: always false (wires FROM a valve are a validation error).
+* Solidity uses the existing `isSolidFor(entity, def, actor)` hook only. With (cx,cz) the cell centre, (ax,az) the actor
+  centre and (ux,uz) the unit vector of `state.dir`: `along = (ax-cx)·ux + (az-cz)·uz`,
+  `lateral = |(ax-cx)·uz - (az-cz)·ux|`; the valve is solid for the actor iff `along >= HALF_TILE` or
+  `lateral >= HALF_TILE`. Because collision ignores blockers an actor already overlaps before a move (§ collision
+  model), anyone whose footprint still touches the cell can move either way; a body commits only once its footprint
+  fully leaves the downstream side. A flip mid-crossing therefore never traps or crushes anyone (no "held" exception
+  needed), and carry moves (decks, lifts) use the same predicate, so nobody is ferried upstream.
+* `isSolid` = true (item drops, resting crates, non-actor default): nothing can be dropped into the cell; carried items
+  pass with their carrier. `blocksLaser` = false (grille). Not carriable, no interact/action/acceptItem. Players,
+  echoes and nested-loop copies are treated identically (orthogonal to temporal gates); an echo replaying into the
+  closed face just pushes and stays put (positional, never a divergence).
+* Events: `entity {name:'valvePass', entityId, actorId}` when an actor's centre crosses the cell centre downstream;
+  `entity {name:'valveDenied', entityId, actorId}` once per contact (an actor arriving flush against the closed face,
+  derived from position and this tick's displacement, nothing stored); `entity {name:'valveFlip', entityId}`.
+* QA: the 'solid' invariant skips valve boxes (an overlapping actor is always one the valve admitted); the stateful
+  `InvariantChecker.checkValveCrossings()` (run every tick by the fuzzer) flags any actor that goes from not overlapping
+  the cell, with its centre downstream or beside it, to overlapping it.
+
+**Attuned devices / Paradox Glass** (optional config on `pressurePlate` and `timedSwitch`; absent fields keep the
+original code path and the serialized state byte-identical). Actor classes: `'player'` = `actor.kind === 'player'`,
+`'echoes'` = `actor.kind === 'echo'` (nested-loop copies included).
+* `PressurePlateConfig.accepts?: 'all' | 'echoes' | 'player'` (default `'all'`): when not `'all'`, occupants = the
+  matching actors on the cell only (others are ignored completely), crates/cells never count (`acceptsCrates` ignored),
+  `threshold` counts matching bodies, `latch` works as before.
+* `TimedSwitchConfig.accepts?`: a press by a non-matching actor returns `fail` with reason `'attuned'` before the
+  cooldown / busy checks, with no state change. A live press on an Echo Console fails while recording and the same input
+  succeeds on replay: the deterministic `fail -> use` divergence (recorded reason `'attuned'`), drawn violet on the
+  timeline ("intended"). A recording that presses a Gold Console live fails on replay (`use -> fail`).
+* `shatterOn?: 'echoes' | 'player'` on both kinds (must differ from `accepts`). State gains `broken: boolean` ONLY when
+  `shatterOn` is configured (same optional-field pattern as `cooldown`). Plate: the first tick an actor of that class
+  stands on it (`actorsOnCell`) it breaks: one `entity {name:'shatter', entityId, actorId}` naming the first such actor in
+  actor-array order, then `pressed = false, occupants = 0, pressedTicks = 0`, output false for the rest of the pass
+  (latch ignored). Switch: a press by that class returns `fail 'shattered'` and breaks it (`on = false,
+  remainingTicks = 0`, shatter event); every later press fails `'shattered'`. Check order in a press: broken ->
+  shatterOn -> accepts -> busy / cooldown. Breaking happens inside the device's own update / interact (own-entity rule).
+* `'attuned'` and `'shattered'` are plain fail reasons; TemporalGame records and compares them like `'cooldown'`.
+
+**Chrono relay**: see §9 "Chrono relay". Validation rules for all three: `src/levels/validators/mechanics.ts`.
 
 Register a behaviour with `registry.register(behaviour)` (see `src/gameplay/entities/index.ts`).
 `loadLevel` throws if a level uses a kind with no registered behaviour. Behaviours may **read** anything
@@ -213,6 +266,29 @@ reads during tick t see the values written during t−1, so each hop adds 1 tick
 order-independent and safe with cycles. Unwired defaults: doors keep their `startsOpen` state, and exit
 portals are active.
 
+### Chrono relay (`chronoRelay`, round 6): a delayed signal ("Echo Line")
+
+`ChronoRelayConfig { delayTicks /* integer, 30..900 */; initialOn? /* default false */ }`. Inputs are ordinary wires
+into it, combined with `def.logic` (default `'and'`), per-wire `invert` as everywhere; its output may itself be wired
+(inverted or not) to any consumer. `ChronoRelayState { out; last; pending: number[] /* countdowns, strictly ascending */ }`.
+`reset` = `{ out: initialOn, last: initialOn, pending: [] }`, `initialOutput` = `initialOn`. `update`, in this order:
+1. every countdown `-= 1`; then while `pending[0] === 0`: shift it and toggle `out`;
+2. `c = inputsPowered(id) ?? false` (previous-tick buffer); if `c !== last`: push `delayTicks`, `last = c`;
+3. `setOutput(out)`.
+
+**Latency contract:** a source that changes on tick s is read by the relay on s+1, the relay toggles on s+1+delayTicks,
+and its consumer reacts on s+2+delayTicks: exactly `delayTicks + 1` ticks more than through a direct wire. The whole
+waveform is replayed (a 2 s press arrives as a 2 s pulse). `pending.length <= delayTicks` by construction (at most one
+push per tick, each lives delayTicks ticks). Countdowns (not absolute ticks) make the state change every tick while a
+pulse is in flight, so the solver's quiescence fingerprint stays correct. Integers and booleans only; `serialize` = state.
+With `initialOn` and a source that is off at tick 0 the relay pushes on tick 0 and falls on tick `delayTicks`.
+Body: not solid, no laser block, not carriable, no interaction; its anchor may be a wall/railing cell (exempt from the
+"non-walkable tile" warning) or floor. Events (feedback only): `entity {name:'relayArm'}` on each push,
+`entity {name:'relayEmit', value: 1|0}` on each output toggle. Validation: delay integer in [30, 900], at least one
+input, warning when `delayTicks >= loopDurationTicks - 120`, error when the relay is wired (directly or through doors /
+gates) back into its own input. The relay's state is also its input's recent history, which the timeline uses to draw
+the input waveform, its delayed ghost and the planned arrival markers (`src/ui/timeline/devices.ts`).
+
 ### Component additions made for level design
 
 * `TimedSwitchConfig.cooldownTicks?` (default 0): after a switch runs out it is locked for that many ticks
@@ -231,6 +307,9 @@ not hashed, and are suppressed during snapshot re-simulation. Every event has a 
   open (QA-2; mirrors `doorBlocked`); `elevatorHeld` fires once when a lift starts waiting in place (`state.held`
   false → true). The gate's edge detection uses the optional `TemporalGateState.held`, which
   `temporalGate.serialize` strips from the hash, so hashes and golden replays are unchanged.
+* Round 6 (generic `entity` events, feedback only): `valvePass`, `valveDenied`, `valveFlip` (check valve), `relayArm`,
+  `relayEmit` (chrono relay, `value` 1/0), `shatter` (Paradox Glass, `actorId` = the breaking actor). Optional visual
+  hook: `EntityVisual.onEvent(ev, state)` receives every event naming that entity (routed by the renderer).
 * Chamber/temporal (emitted by TemporalGame): `levelLoaded`, `recordStart`, `rewind`, `echoSpawned`,
   `echoLimitReached`, `loopDeleted`, `chamberRestart`, `loopTimeUp`, `levelComplete`
 

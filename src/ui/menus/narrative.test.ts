@@ -30,6 +30,13 @@ describe('story lines', () => {
     }
   });
 
+  it('log numbers rise in campaign order and the finale (The Core) is LOG 000 (round 6: 18 chambers)', () => {
+    const ids = CAMPAIGN_LEVELS.map((l) => Number(parseLogLine((l.story ?? []).find((s) => parseLogLine(s)) ?? '')?.id));
+    const last = ids.pop();
+    expect(last).toBe(0);
+    for (let i = 1; i < ids.length; i++) expect(ids[i]!, CAMPAIGN_LEVELS[i]!.id).toBeGreaterThan(ids[i - 1]!);
+  });
+
   it('formats LOG lines apart from narration (escaped)', () => {
     expect(parseLogLine('LOG 001 · Hello')).toEqual({ id: '001', text: 'Hello' });
     expect(parseLogLine('Just narration.')).toBeNull();

@@ -43,7 +43,7 @@ import type { LevelDefinition } from '../../engine/contracts';
  */
 export const level09ParadoxChamber: LevelDefinition = {
   id: 'L09-paradox-chamber',
-  order: 9,
+  order: 14,
   name: 'The Paradox Chamber',
   subtitle: 'Your first echo is in the way of your last.',
   story: [

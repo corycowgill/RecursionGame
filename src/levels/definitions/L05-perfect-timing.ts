@@ -32,7 +32,7 @@ import type { LevelDefinition } from '../../engine/contracts';
  */
 export const level05PerfectTiming: LevelDefinition = {
   id: 'L05-perfect-timing',
-  order: 5,
+  order: 6,
   name: 'Perfect Timing',
   subtitle: 'Two moments, one crossing.',
   story: [

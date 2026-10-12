@@ -1,0 +1,108 @@
+{
+ "schema": 1,
+ "levelId": "L14-gold-and-cyan",
+ "levelFingerprint": 2903383672,
+ "maxEchoes": 2,
+ "loopDurationTicks": 3600,
+ "completedAtTick": 409,
+ "loops": [
+  {
+   "v": 1,
+   "id": 1,
+   "durationTicks": 321,
+   "runs": [
+    162,
+    0,
+    62,
+    4,
+    76,
+    1,
+    1,
+    53,
+    20,
+    5
+   ],
+   "outcomes": [
+    {
+     "tick": 300,
+     "verb": "interact",
+     "kind": "fail",
+     "entityId": "console-echo",
+     "reason": "attuned"
+    }
+   ]
+  },
+  {
+   "v": 1,
+   "id": 0,
+   "durationTicks": 410,
+   "runs": [
+    162,
+    0,
+    62,
+    4,
+    16,
+    5,
+    107,
+    10,
+    63,
+    9
+   ],
+   "outcomes": []
+  }
+ ],
+ "passes": [
+  {
+   "ticks": 321,
+   "finalHash": 3373570673,
+   "digest": 289518241,
+   "checkpoints": {
+    "60": 1854932141,
+    "120": 3955478818,
+    "180": 1758781299,
+    "240": 1306657196,
+    "300": 2634173904,
+    "321": 3373570673
+   },
+   "completedAtTick": null,
+   "events": {
+    "doorBlocked": 1,
+    "doorClose": 1,
+    "doorOpen": 1,
+    "footstep": 28,
+    "interactFailed": 1,
+    "plateDown": 1,
+    "plateUp": 1
+   }
+  },
+  {
+   "ticks": 410,
+   "finalHash": 3031311746,
+   "digest": 3474706874,
+   "checkpoints": {
+    "60": 323045506,
+    "120": 1484032272,
+    "180": 4206424062,
+    "240": 373802128,
+    "300": 4012104016,
+    "360": 3103341918,
+    "410": 3031311746
+   },
+   "completedAtTick": 409,
+   "events": {
+    "divergence": 1,
+    "doorBlocked": 1,
+    "doorClose": 1,
+    "doorOpen": 2,
+    "echoFinished": 1,
+    "footstep": 68,
+    "interact": 1,
+    "levelComplete": 1,
+    "plateDown": 1,
+    "plateUp": 1,
+    "switchOn": 1,
+    "switchTick": 1
+   }
+  }
+ ]
+}

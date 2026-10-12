@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ENTITY_KINDS, type InputScript, type LevelDefinition, type SimEvent } from '../engine/contracts';
+import { CORE_ENTITY_KINDS, type InputScript, type LevelDefinition, type SimEvent } from '../engine/contracts';
 import { completionFromEvents, evaluateCompletion } from '../gameplay/puzzles/completion';
 import { getObjectiveStatus } from '../gameplay/puzzles/objectives';
 import { createGame, firstHashMismatch, playScript, replayLoops, runScripts, runSolution } from '../testing/harness/harness';
 import { S, inputs } from '../testing/harness/script';
-import { CAMPAIGN, LEVELS, VERTICAL_SLICE_LEVEL, emptyProgress, recordCompletion, validateLevel } from './index';
+import { CAMPAIGN, LEVELS, VERTICAL_SLICE_LEVEL, emptyProgress, recordCompletion, validateLevel, type CampaignProgress } from './index';
 import { level01FirstEcho } from './definitions/L01-first-echo';
 import { level02TwoPlaces } from './definitions/L02-two-places';
 import { level03TheRelay } from './definitions/L03-the-relay';
@@ -25,6 +25,9 @@ const finalScript = (l: LevelDefinition): InputScript => l.solution[l.solution.l
 const INTENDED_DIVERGENCES: Record<string, { actorId: string; expected: string; actual: string; entityId: string }[]> = {
   'L07-broken-sequence': [{ actorId: 'echo:1', expected: 'none', actual: 'use', entityId: 'switch-archive' }],
   'L10-the-core': [{ actorId: 'echo:1', expected: 'fail', actual: 'insert', entityId: 'socket-reliquary' }],
+  // Round 6: the cyan Echo Console refuses the recording player ('attuned'), then answers the replaying echo.
+  'L14-gold-and-cyan': [{ actorId: 'echo:1', expected: 'fail', actual: 'use', entityId: 'console-echo' }],
+  'L18-hour-of-glass': [{ actorId: 'echo:1', expected: 'fail', actual: 'use', entityId: 'console-echo' }],
 };
 
 const has = (ev: readonly SimEvent[], type: string, id?: string): boolean =>
@@ -37,22 +40,32 @@ describe('campaign list', () => {
       'L02-two-places',
       'L03-the-relay',
       'L04-the-lift',
+      'L11-the-sump',
       'L05-perfect-timing',
       'L06-chain-reaction',
+      'L12-late-light',
+      'L13-roundabout',
       'L07-broken-sequence',
+      'L14-gold-and-cyan',
       'L08-recursive-machine',
+      'L15-glass-gallery',
       'L09-paradox-chamber',
+      'L16-afterimage',
+      'L17-upstream',
+      'L18-hour-of-glass',
       'L10-the-core',
     ]);
-    expect(LEVELS.map((l) => l.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(LEVELS.map((l) => l.order)).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
     expect(VERTICAL_SLICE_LEVEL.id).toBe('L03-the-relay');
   });
 
-  it('the campaign uses all 12 component kinds, and the finale uses every one of them', () => {
-    const used = new Set(LEVELS.flatMap((l) => l.entities.map((e) => e.kind)));
-    expect([...used].sort()).toEqual([...ENTITY_KINDS].sort());
-    const core = LEVELS[LEVELS.length - 1]!;
-    expect(new Set(core.entities.map((e) => e.kind)).size).toBe(ENTITY_KINDS.length);
+  it('the campaign uses all 12 core component kinds, and the finale (L10) uses every one of them', () => {
+    // Round 6: CORE_ENTITY_KINDS = the original 12; the expansion kinds (checkValve, chronoRelay) are not required in L10.
+    const used = new Set<string>(LEVELS.flatMap((l) => l.entities.map((e) => e.kind)));
+    for (const k of CORE_ENTITY_KINDS) expect(used.has(k), k).toBe(true);
+    const core = LEVELS.find((l) => l.id === 'L10-the-core')!;
+    const coreKinds = new Set<string>(core.entities.map((e) => e.kind));
+    for (const k of CORE_ENTITY_KINDS) expect(coreKinds.has(k), k).toBe(true);
   });
 
   it('every level has a story, 3+ progressive hints, a par within the echo limit and teaching tags', () => {
@@ -500,5 +513,22 @@ describe('progression', () => {
     expect(p2.records['L01-first-echo']).toEqual({ completions: 2, bestTicks: 300, bestEchoes: 1, bestStars: 3 });
     expect(CAMPAIGN.totalStars(p2)).toBe(3);
     expect(JSON.parse(JSON.stringify(p2))).toEqual(p2);
+  });
+
+  it('round 6: a pre-expansion save (L01..L10 by id) keeps every chamber it reached; the new chambers unlock', () => {
+    const old10 = ['L01-first-echo', 'L02-two-places', 'L03-the-relay', 'L04-the-lift', 'L05-perfect-timing', 'L06-chain-reaction', 'L07-broken-sequence', 'L08-recursive-machine', 'L09-paradox-chamber', 'L10-the-core'];
+    const rec = { completions: 1, bestTicks: 900, bestEchoes: 2, bestStars: 3 as const };
+    const full: CampaignProgress = { version: 1, records: Object.fromEntries(old10.map((id) => [id, rec])) };
+    // Every level, old and new, is open once the old finale was cleared; the old finale still counts as finished.
+    for (const l of LEVELS) expect(CAMPAIGN.isUnlocked(full, l.id), l.id).toBe(true);
+    expect(CAMPAIGN.continueLevel(full)?.id).toBe('L11-the-sump');
+    expect(CAMPAIGN.totalStars(full)).toBe(30);
+    // A save that stopped after old L06: everything up to L06 (by id) stays open, including the inserted L11, and the
+    // next chamber after L06 (L12 Late Light) is the new frontier. Nothing beyond it is open.
+    const mid: CampaignProgress = { version: 1, records: Object.fromEntries(old10.slice(0, 6).map((id) => [id, rec])) };
+    const open = LEVELS.filter((l) => CAMPAIGN.isUnlocked(mid, l.id)).map((l) => l.id);
+    expect(open).toEqual(['L01-first-echo', 'L02-two-places', 'L03-the-relay', 'L04-the-lift', 'L11-the-sump', 'L05-perfect-timing', 'L06-chain-reaction', 'L12-late-light']);
+    expect(CAMPAIGN.continueLevel(mid)?.id).toBe('L11-the-sump');
+    expect(CAMPAIGN.next('L18-hour-of-glass')?.id).toBe('L10-the-core');
   });
 });

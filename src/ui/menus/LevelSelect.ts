@@ -1,5 +1,5 @@
 import type { LevelDefinition } from '../../engine/contracts';
-import type { CampaignProgress } from '../../levels/progression';
+import { levelUnlocked, type CampaignProgress } from '../../levels/progression';
 import { arrowNav, esc, h } from '../dom';
 import { icon } from '../icons';
 import { formatTicks } from '../timeline/model';
@@ -7,15 +7,15 @@ import type { LevelEntry } from '../types';
 import type { Screen } from './MainMenu';
 
 /**
- * Builds level-select entries from campaign levels + saved progress. Mirrors Campaign.isUnlocked (first level
- * always unlocked; each next level unlocks once the previous one is completed).
+ * Builds level-select entries from campaign levels + saved progress. Uses the same rule as Campaign.isUnlocked
+ * (levelUnlocked: first level always unlocked; each next level unlocks once the previous one is completed; a level
+ * at or before a completed one stays unlocked, so pre-round-6 saves keep their reach).
  */
 export function buildLevelEntries(levels: readonly LevelDefinition[], progress: CampaignProgress): LevelEntry[] {
   let nextMarked = false;
   return levels.map((l, i) => {
     const rec = progress.records[l.id];
-    const prev = levels[i - 1];
-    const unlocked = i === 0 || (prev !== undefined && (progress.records[prev.id]?.completions ?? 0) > 0);
+    const unlocked = levelUnlocked(levels, progress, i);
     const completed = (rec?.completions ?? 0) > 0;
     const status = completed ? 'completed' : unlocked ? 'unlocked' : 'locked';
     const isNext = !nextMarked && status === 'unlocked';
@@ -34,6 +34,9 @@ export function buildLevelEntries(levels: readonly LevelDefinition[], progress: 
     return entry;
   });
 }
+
+/** Level-select grid width on wide screens: 18 chambers = 3 rows of 6 (must match .rx-levels in styles.ts). */
+export const LEVEL_GRID_COLUMNS = 6;
 
 export interface LevelSelectActions {
   onPick(id: string): void;
@@ -118,6 +121,6 @@ export function createLevelSelect(entries: LevelEntry[], act: LevelSelectActions
     grid,
   );
   const el = h('div', { class: 'rx-screen rx-backdrop rx-center', role: 'dialog', 'aria-label': 'Level select', 'data-testid': 'level-select' }, panel);
-  const off = arrowNav(grid, '.rx-level', 5);
+  const off = arrowNav(grid, '.rx-level', LEVEL_GRID_COLUMNS);
   return { el, dispose: off };
 }

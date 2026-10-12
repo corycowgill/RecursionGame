@@ -1,6 +1,9 @@
-# RECURSION: Campaign Level Design (L01–L10)
+# RECURSION: Campaign Level Design (18 chambers)
 
-Owner: Level Designer (Agent 6). Source of truth: `src/levels/definitions/L*.ts`, where every level carries an ASCII
+Owner: Level Designer (Agent 6); round-6 chambers by level designers A and B, merged by the director. Per-level
+walkthroughs of the round-6 chambers (L11–L18) are in [`levels-round6-A.md`](./levels-round6-A.md) (L11, L12, L13, L16)
+and [`levels-round6-B.md`](./levels-round6-B.md) (L14, L15, L17, L18); this file keeps L01–L10's and the merged
+campaign table. Level ids are stable save keys: only `order` follows the play position. Source of truth: `src/levels/definitions/L*.ts`, where every level carries an ASCII
 map in its header comment. Machine verification: `src/levels/campaign.test.ts`, `src/levels/levels.test.ts`, the
 golden replays in `src/testing/replays` and the QA fuzz/softlock suites in `src/testing/qa`.
 
@@ -25,28 +28,42 @@ golden replays in `src/testing/replays` and the QA fuzz/softlock suites in `src/
 
 ## Difficulty curve
 
-| # | Chamber | New idea | Echoes: min / limit / par | Par time (verified best) | Difficulty (1–10) |
-|---|---|---|---|---|---|
-| 1 | First Echo | record → rewind → echo holds a plate | 1 / 2 / 1 | 9 s (4.8 s) | 1 |
-| 2 | Two Places at Once | echoes act simultaneously; chained doors | 2 / 3 / 2 | 14 s (8.1 s) | 2 |
-| 3 | The Relay | carrying crates; timed switch; three loops | 2 / 2 / 2 | 14 s (8.6 s) | 3.5 |
-| 4 | The Lift | elevators; vertical separation; boarding before the call | 2 / 3 / 2 | 20 s (12.9 s) | 4 |
-| 5 | Perfect Timing | moving platform; switch windows + cooldown; scheduling two echoes against a ride | 2 / 3 / 2 | 15 s (9.4 s) | 5 |
-| 6 | Chain Reaction | lasers & receivers; signal chains; 3-echo dependency chain | 3 / 3 / 3 | 19 s (12.3 s) | 6 |
-| 7 | Broken Sequence | echoes replay inputs, not results; intentional "broken" recording; divergence as a tool | 2 / 2 / 2 | 17 s (10.9 s) | 7 |
-| 8 | Recursive Machine | nested loop: one recording, two bodies 5 s apart | 1 / 1 / 1 | 21 s (14.3 s) | 7.5 |
-| 9 | The Paradox Chamber | mutual dependency; delete and re-record an earlier loop; inverted wire | 2 / 2 / 2 | 19 s (12.3 s) | 8.5 |
-| 10 | The Core | everything: echo-only gate, socket, laser, lift, ferry, crate, twin timers | 3 / 3 / 3 | 26 s (17.7 s) | 9.5 |
+`#` is the campaign order (round 6). Par times and best verified completions come from the difficulty model run of
+round 6 ([`difficulty-report.md`](./difficulty-report.md) §5); every par equals the model.
+
+| # | Id | Chamber | New idea | Echoes: min / limit / par | Par time (verified best) | Difficulty (1–10) |
+|---|---|---|---|---|---|---|
+| 1 | L01 | First Echo | record → rewind → echo holds a plate | 1 / 2 / 1 | 9 s (4.8 s) | 1 |
+| 2 | L02 | Two Places at Once | echoes act simultaneously; chained doors | 2 / 3 / 2 | 14 s (8.1 s) | 2 |
+| 3 | L03 | The Relay | carrying crates; timed switch; three loops | 2 / 2 / 2 | 14 s (8.6 s) | 3.5 |
+| 4 | L04 | The Lift | elevators; vertical separation; boarding before the call | 2 / 3 / 2 | 20 s (12.9 s) | 4 |
+| 5 | **L11** | The Sump | **check valve**: passing is permanent, so plan who commits (and give it its other job first) | 1 / 2 / 1 | 17 s (10.6 s) | 4.5 |
+| 6 | L05 | Perfect Timing | moving platform; switch windows + cooldown; scheduling two echoes against a ride | 2 / 3 / 2 | 15 s (9.4 s) | 5 |
+| 7 | L06 | Chain Reaction | lasers & receivers; signal chains; 3-echo dependency chain | 3 / 3 / 3 | 19 s (12.3 s) | 6 |
+| 8 | **L12** | Late Light | **chrono relay**: your past opens doors for your future; act before you need it | 1 / 1 / 1 | 27 s (19.0 s) | 5.5 |
+| 9 | **L13** | Roundabout | relay + one-way ring of valves: two timer hands 5 s apart, timed to your lap | 2 / 3 / 2 | 33 s (23.7 s) | 6.5 |
+| 10 | L07 | Broken Sequence | echoes replay inputs, not results; intentional "broken" recording; divergence as a tool | 2 / 2 / 2 | 17 s (10.9 s) | 7 |
+| 11 | **L14** | Gold and Cyan | **attuned keys**: gold counts only you, cyan answers only echoes; intended fail → use | 1 / 2 / 1 | 11 s (6.3 s) | 6.5 |
+| 12 | L08 | Recursive Machine | nested loop: one recording, two bodies 5 s apart | 1 / 1 / 1 | 21 s (14.3 s) | 7.5 |
+| 13 | **L15** | Glass Gallery | **paradox glass**: route your past selves around the gold glass seal, not just their timing | 2 / 2 / 2 | 19 s (12.5 s) | 7.5 |
+| 14 | L09 | The Paradox Chamber | mutual dependency; delete and re-record an earlier loop; inverted wire | 2 / 2 / 2 | 19 s (12.3 s) | 8.5 |
+| 15 | **L16** | Afterimage | relay + inverted wire + valve: "held 6 s ago AND empty now" | 2 / 2 / 2 | 26 s (17.9 s) | 8.5 |
+| 16 | **L17** | Upstream | **reversible valve** + cyan brake + lift + nested loop: one recording ends on both sides of the valve | 2 / 2 / 2 | 24 s (16.8 s) | 9 |
+| 17 | **L18** | Hour of Glass | exam: relay (8 s) + valve + keys + glass with crate, laser and timer | 3 / 3 / 3 | 38 s (27.2 s) | 9.3 |
+| 18 | L10 | The Core | everything: echo-only gate, socket, laser, lift, ferry, crate, twin timers | 3 / 3 / 3 | 26 s (17.7 s) | 9.5 |
 
 L01–L03 were authored by the gameplay engineer and kept as they are. They already ramp from 1 to 3.5, and L04 starts
 just above L03 by reusing its "be in the right place before the moment" timing in a new, vertical space. No retune
 was needed. Round 5's playtime model (solution complexity, not playtest data) estimates about 2.5–5 min per early
-chamber and 4.5–17 min per late chamber: 31–134 min for the campaign, median about 61 min. Details and assumptions
-are in [`difficulty-report.md`](./difficulty-report.md).
+chamber and 4.5–17 min per late chamber: 31–134 min for the 10-chamber campaign, median about 61 min. Round 6's
+eight chambers bring the estimate to **61–268 min, median about 122 min**. Details and assumptions are in
+[`difficulty-report.md`](./difficulty-report.md).
 
 Component introduction order: plate, door and exit (L01) → crate, timed switch (L03) → elevator (L04) → moving
 platform, cooldown (L05) → laser emitter and receiver (L06) → inverted wires (L09) → energy cell, socket and temporal
-gate (L10). The finale uses all 12 kinds, and a test asserts that.
+gate (L10). The finale uses all 12 original kinds, and a test asserts that. Round 6 interleaves: check valve (L11) →
+chrono relay (L12) → attuned gold / cyan keys (L14) → paradox glass (L15) → reversible valve (L17). No chamber before
+L09 (campaign order 14) uses an inverted wire; L16 is the first new chamber that does.
 
 ---
 
@@ -220,7 +237,8 @@ gate (L10). The finale uses all 12 kinds, and a test asserts that.
 * The known solution completes within the echo limit and earns 3 stars with its par.
 * Per-tick hashes are identical across runs and in pure re-simulation, and match the golden replay file.
 * The final run alone fails, and so does every single loop of the solution played solo.
-* The winning pass has zero divergences, except the intended ones in L07 and L10, which are asserted exactly.
+* The winning pass has zero divergences, except the intended ones in L07, L10, L14 and L18 (the cyan Echo Console's
+  fail → use), which are asserted exactly (`INTENDED_DIVERGENCES` in `campaign.test.ts`).
 * The level-specific minimum-echo and mechanic tests listed above.
 * QA fuzz (random inputs, rewinds, deletes, save/load, scrubs) holds every invariant, softlock checks pass.
 

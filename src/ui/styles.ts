@@ -141,8 +141,8 @@ export const UI_CSS = /* css */ `
 .rx-dialog-foot { display: flex; justify-content: flex-end; gap: .7em; margin-top: 1.3em; }
 
 /* ---------- level select ---------- */
-.rx-levels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .8em; }
-.rx-level { position: relative; display: flex; flex-direction: column; align-items: stretch; text-align: left; gap: .3em; min-height: 11.2em; padding: .9em .95em .8em; cursor: pointer;
+.rx-levels { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .7em; }
+.rx-level { position: relative; display: flex; flex-direction: column; align-items: stretch; text-align: left; gap: .3em; min-height: 10.2em; padding: .85em .85em .75em; cursor: pointer;
   background: linear-gradient(180deg, rgba(14,28,50,.78), rgba(6,12,24,.86)); border: 1px solid var(--rx-line); border-radius: 2px; transition: border-color .2s, transform .2s, box-shadow .2s; overflow: hidden; }
 .rx-level:hover, .rx-level:focus-visible { border-color: var(--rx-cyan-dim); transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,.4), 0 0 24px rgba(63,217,255,.12); }
 .rx-level .no { font-family: var(--rx-display); font-size: 1.9em; font-weight: 500; letter-spacing: .08em; color: rgba(220,233,246,.92); line-height: 1; }

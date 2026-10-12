@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { LevelDefinition } from '../../engine/contracts';
 import { LEVELS, TEST_LEVELS } from '../../levels';
-import { componentGauntlet } from '../qa/fixtures';
+import { componentGauntlet, expansionGauntlet } from '../qa/fixtures';
 import {
   FUZZER_VERSION,
   GOLDEN_SCHEMA,
@@ -31,6 +31,8 @@ const FUZZ_FILE = join(DIR, 'fuzz-fingerprints.golden.json');
 const FUZZ_RUNS: [LevelDefinition, number, number][] = [
   [componentGauntlet(), 7, 3000],
   [componentGauntlet(), 8, 3000],
+  // round 6: the expansion mechanics (valves, relay, attuned / glass devices), appended
+  [expansionGauntlet(), 7, 3000],
   ...LEVELS.map((l): [LevelDefinition, number, number] => [l, 7, 2000]),
 ];
 

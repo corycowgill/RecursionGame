@@ -166,9 +166,37 @@ export class VfxSystem implements VfxSink {
           }
           break;
         case 'interactFailed':
+          if (ev.reason === 'attuned' && ev.entityId && this.entityPos(state, ev.entityId, p)) {
+            // round 6: "ghost hand" flicker in the DEVICE's colour (a refused player means an echo-only cyan device,
+            // a refused echo means a gold player-only one), softer than a real failure
+            const actor = state.actors.find((a) => a.id === ev.actorId);
+            const col = actor?.kind === 'player' ? PALETTE.cyan : PALETTE.gold;
+            p.y += 1.35;
+            this.ring(p.clone(), col, 0.45, { life: 0.5, width: 0.1 });
+            this.sparks(p, col, 10, { speed: 0.8, up: 0.6, size: 0.06, life: 0.45, spread: 0.25 });
+            break;
+          }
           if (this.actorPos(state, ev.actorId, p)) {
             p.y += 1.1;
             this.sparks(p, PALETTE.coral, 14, { speed: 1.5, up: 1.5, size: 0.07, life: 0.5 });
+          }
+          break;
+        // round 6 mechanics (generic entity events; feedback only)
+        case 'entity':
+          if (!this.entityPos(state, ev.entityId, p)) break;
+          if (ev.name === 'shatter') {
+            this.onShake?.(0.15);
+            this.ring(p.clone().setY(p.y + 0.15), PALETTE.coral, 1.1, { life: 0.7, width: 0.06 });
+            this.sparks(p.clone().setY(p.y + 0.4), PALETTE.coral, 26, { speed: 2.4, up: 1.6, size: 0.06, life: 0.7, spread: 0.6 });
+            this.sparks(p.clone().setY(p.y + 0.3), PALETTE.white, 14, { speed: 1.8, up: 1.2, size: 0.05, life: 0.5, spread: 0.5 });
+          } else if (ev.name === 'valveDenied') {
+            this.sparks(p.clone().setY(p.y + 1.0), PALETTE.coral, 8, { speed: 1.0, up: 0.5, size: 0.05, life: 0.4 });
+          } else if (ev.name === 'valvePass') {
+            this.sparks(p.clone().setY(p.y + 0.95), PALETTE.goldHot, 6, { speed: 0.9, up: 0.6, size: 0.05, life: 0.4 });
+          } else if (ev.name === 'valveFlip') {
+            this.ring(p.clone().setY(p.y + 0.05), PALETTE.violet, 1.2, { life: 0.6, width: 0.07 });
+          } else if (ev.name === 'relayEmit' && ev.value === 1) {
+            this.sparks(p.clone().setY(p.y + 0.7), PALETTE.teal, 8, { speed: 1.0, up: 1.0, size: 0.05, life: 0.4 });
           }
           break;
         case 'divergence':
